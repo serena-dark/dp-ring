@@ -7,7 +7,7 @@
 | 编号 | 概念             | 简述                                                                                         | 参考与引用                                                                                                                                                                                                           |
 | ---- | ---------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1    | 拼图环节（循环） | 将原始表达变为可门控的里程碑与先决条件，判断可否进入交付；可异步推进，**不与执行任务对齐**。 | [VALUE.md](../VALUE.md)；[prototype/Adaptive-Flywheel.md](../prototype/Adaptive-Flywheel.md)；[step1-implementation-plan.md](./product/step1-implementation-plan.md)；[repository-layout.md](./repository-layout.md) |
-| 2    | 执行环节（循环） | 门控就绪后，经准备、任务与工作流、交付流水线，产出可验收结果；内含子概念 **`session_id`**。  | 同上；**`session_id`** 见 [sessions.md](./sessions/sessions.md)、[documentation-standards.md](./documentation-standards.md) 规则 3.1、[cli-tool/README.md](../cli-tool/README.md)                                    |
+| 2    | 执行环节（循环） | 门控就绪后，经准备、任务与工作流、交付流水线，产出可验收结果；内含子概念 **`session_id`**。  | 同上；**`session_id`** 见 [sessions.md](./sessions/sessions.md)；非 session 基名见 [documentation-standards.md](./documentation-standards.md) **文档 · 文档与路径命名规范**；[cli-tool/README.md](../cli-tool/README.md)                                    |
 | 3    | 迭代环节（切面） | 横切拼图与执行：失败审计与反馈、成功资产与排行榜；**无论成败**做知识蒸馏。                   | [VALUE.md](../VALUE.md)；[step1-implementation-plan.md](./product/step1-implementation-plan.md)；[backend-modules.md](./product/backend-modules.md)                                                                  |
 
 **文字箭头在哪：** 全文书内搜索 **`文字箭头`** 共 **4** 处——在 **架构总览** 段末，以及三个 **`### 流程图`** 小节（拼图 / 执行 / 迭代）各自标题下方；均无 Mermaid，仅为缩进代码块中的 `──▶` / `→` 示意。
@@ -116,7 +116,7 @@
 
 ### `session_id`（执行环节 · 子概念）
 
-进入执行环节后，需将**同一轮**从「开工」到「结案」之间的任务、工作流状态、产物与记录**串成可证明的线索**。因此在本环节引入 **`session_id`**：**在门控已通过、本轮执行被承认时**建立（或选定）**唯一**主键，写入任务/工作流元数据、文首字段及与本轮绑定的路径或日志。**拼图既不分配也不消费 `session_id`**。权威定义、按时间顺序的环节表与字面值规范见 [sessions.md](./sessions/sessions.md)、[documentation-standards.md](./documentation-standards.md) 规则 3.1。
+进入执行环节后，需将**同一轮**从「开工」到「结案」之间的任务、工作流状态、产物与记录**串成可证明的线索**。因此在本环节引入 **`session_id`**：**在门控已通过、本轮执行被承认时**建立（或选定）**唯一**主键，写入任务/工作流元数据、文首字段及与本轮绑定的路径或日志。**拼图既不分配也不消费 `session_id`**。权威定义、环节表、文中标注与字面值规范见 [sessions.md](./sessions/sessions.md)。
 
 ### 本项目的核心执行逻辑
 

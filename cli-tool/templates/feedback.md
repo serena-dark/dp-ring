@@ -10,4 +10,4 @@
 
 ## 关联 Session
 
-若有可溯源执行轮次，文首填写 **`session_id`**；定义见 `docs/sessions/sessions.md`，格式与规则见 `docs/documentation-standards.md`。
+若有可溯源执行轮次，文首填写 **`session_id`**；见 `docs/sessions/sessions.md`（定义、标注格式、字面值）；其它文档基名见 `docs/documentation-standards.md`（**文档 · 文档与路径命名规范**）。

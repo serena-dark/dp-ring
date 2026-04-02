@@ -1,5 +1,5 @@
 /**
- * `session_id` 推荐字面值生成（可编程复用）：语义与适用环节见 docs/sessions/sessions.md；三段式 basename 与 documentation-standards 规则 3.1 一致。
+ * `session_id` 推荐字面值生成（可编程复用）：语义与形态见 docs/sessions/sessions.md「推荐字面值三段式与归档」。
  * CLI generate-session-id 与本仓库其它脚本须由此模块推导字面值，禁止复制随机/日期逻辑。
  */
 import { join } from "node:path";

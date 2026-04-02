@@ -20,7 +20,7 @@ npm run dev
 | `npm run preview` | 预览构建产物 |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run generate-session-id -- --help` | 生成 **`session_id` 推荐字面值**（三段式；含义见 `docs/sessions/sessions.md`；形态见 `docs/documentation-standards.md`、`cli-tool/README.md`） |
+| `npm run generate-session-id -- --help` | 生成 **`session_id` 推荐字面值**（三段式；见 `docs/sessions/sessions.md`、`cli-tool/README.md`） |
 | `npm run generate-doc-basename -- --help` | 其它文档/目录 `{前缀}-{name}`（无随机与日期，同上） |
 | `npm run generate-markdown -- --help` | 自模板生成 requirement 等 Markdown（命名走 lib/doc-basename） |
 

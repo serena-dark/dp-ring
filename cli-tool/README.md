@@ -46,6 +46,9 @@
 ```bash
 npm run generate-session-id -- --name "archive handoff" --mkdir
 npm run generate-doc-basename -- --kind task --name "my task"
+npm run generate-doc-basename -- --kind workflow --task 1 --name "release train"
+# step：须先有与 --task/--workflow 匹配的 t{T}w{W}-* 工作流目录；stdout 为 *.md 基名，stderr 为完整路径建议
+npm run generate-doc-basename -- --kind step --task 1 --workflow 1 --name "first step"
 npm run generate-doc-basename -- --kind milestone --name "gate one" --requirement-package r1-prototype-baseline
 npm run generate-markdown -- --type requirement --name "next product slice"
 npm run generate-markdown -- --type prerequisites --requirement-package r1-prototype-baseline --force
@@ -54,4 +57,4 @@ npm run generate-markdown -- --type workflow --task 1 --name "release train" --d
 
 模板占位符：`{{TITLE}}`、`{{BASE_NAME}}`、`{{NAME_SLUG}}`、`{{DATE_ISO}}`、`{{REQUIREMENT_PACKAGE}}`、`{{TASK_NUM}}`、`{{WORKFLOW_NUM}}`。
 
-规范细节见 [documentation-standards.md 规则 3](../docs/documentation-standards.md)。
+命名细则：`session_id` 见 [sessions.md](../docs/sessions/sessions.md)；其它基名见 [documentation-standards.md](../docs/documentation-standards.md) **文档 · 文档与路径命名规范**。

@@ -4,7 +4,7 @@
 | --- | --- |
 | **简介** | 本仓库内「创建文档/目录」时 CLI 与 `import` 的**固定先后顺序**及工具索引。 |
 | **读者** | 实现/评审脚手架的人机与 Agent。 |
-| **约定** | `session_id` 定义与环节见 [sessions.md](../../../sessions/sessions.md)；字面值形态与何时在文中标注见 [documentation-standards.md](../../../documentation-standards.md)。 |
+| **约定** | `session_id` 全文见 [sessions.md](../../../sessions/sessions.md)；非 session 基名见 [documentation-standards.md](../../../documentation-standards.md) **文档 · 文档与路径命名规范**。 |
 
 ## 决策表（先选场景）
 

@@ -6,9 +6,9 @@
 
 | 术语 | 含义 |
 | --- | --- |
-| **`session_id`** | **定义、涉及环节、与拼图解耦**以 [docs/sessions/sessions.md](./docs/sessions/sessions.md) 为**唯一权威**；拼图与执行轮次边界见 [docs/core-logic.md](./docs/core-logic.md)。**不是**「仅归档用」。推荐字面值形态与工具见 [documentation-standards.md](./docs/documentation-standards.md) 规则 3.1。 |
+| **`session_id`** | **定义、环节、文中标注、三段式字面值与工具**以 [docs/sessions/sessions.md](./docs/sessions/sessions.md) 为**唯一权威**；拼图与执行轮次边界见 [docs/core-logic.md](./docs/core-logic.md)。**不是**「仅归档用」。非 session 路径基名见 [documentation-standards.md](./docs/documentation-standards.md) **文档 · 文档与路径命名规范**。 |
 | **标准归档目录** | `docs/sessions/archive/<session_id 字面值>/` 为其中一种落点；详见 sessions.md。 |
-| **何处不写 Session ID 栏** | 恒久规范、纯工具索引等，见 [documentation-standards.md](./docs/documentation-standards.md) 规则 2。 |
+| **何处不写 Session ID 栏** | 恒久规范、纯工具索引等：**不宜**标 Session ID 的说明见 [sessions.md](./docs/sessions/sessions.md)「在文档中标出」一节；与 [documentation-standards.md](./docs/documentation-standards.md) 交叉引用。 |
 
 ## 根文档
 
