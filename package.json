@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
+    "test": "node cli-tool/run-tests.mjs",
     "generate-session-id": "node cli-tool/generate-session-id.mjs",
     "generate-doc-basename": "node cli-tool/generate-doc-basename.mjs",
     "generate-markdown": "node cli-tool/generate-markdown.mjs"

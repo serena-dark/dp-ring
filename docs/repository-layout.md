@@ -7,9 +7,10 @@
 | 根目录 `package.json`、`vite.config.ts`、`tsconfig*`、`index.html` | Vite + React + TypeScript |
 | `src/` | 应用入口与源码（`main.tsx`、`App.tsx` 等） |
 | `public/` | 静态资源 |
-| `tests/` | 按模块划分的测试用例（占位见 `tests/example/`） |
+| `tests/` | 按模块划分的测试用例（如 `tests/cli-tool/*.test.mjs`；占位见 `tests/example/`）；默认用 **`npm test`**（[cli-tool/run-tests.mjs](../cli-tool/run-tests.mjs)）在仓库根执行 |
 | `cli-tool/` | 独立 CLI；见 [cli-tool/README.md](../cli-tool/README.md)；含 `lib/`（可编程复用）、`templates/`（Markdown 初稿模板） |
 | `docs/` | Adaptive Flywheel 文档树与产品说明 |
+| `docs/assets/formalized_workflow/` | 已「正式化」的工作流记录（按轮次/主题分子目录）；例：[文档 CLI 链](./assets/formalized_workflow/doc-cli-scaffold-chain-20260402/doc-cli-scaffold-chain-20260402.md)、[CLI 变更须配套测试与复跑](./assets/formalized_workflow/cli-tool-change-requires-tests-20260402/cli-tool-change-requires-tests-20260402.md) |
 | `prototype/` | 设计原稿（`.md`、`.drawio`）；Step 1 不改 drawio |
 | `Dockerfile`、`nginx.conf`、`.dockerignore` | 多阶段构建与 SPA 静态服务 |
 

@@ -46,7 +46,7 @@
 | 工作流（范例） | [docs/tasks/workflows/t1w1-baseline-delivery/t1w1-baseline-delivery.md](./docs/tasks/workflows/t1w1-baseline-delivery/t1w1-baseline-delivery.md) |
 | 会话 | [docs/sessions/sessions.md](./docs/sessions/sessions.md) |
 | 反馈 | [docs/feedbacks/Feedback.md](./docs/feedbacks/Feedback.md) |
-| 程序 / 资产 / 输出 | `docs/procedure/`、`docs/assets/`（如 [正式化工作流 · 文档 CLI 链](./docs/assets/formalized_workflow/doc-cli-scaffold-chain-20260402/doc-cli-scaffold-chain-20260402.md)）、`docs/output/` |
+| 程序 / 资产 / 输出 | `docs/procedure/`、`docs/assets/`（正式化工作流例：[文档 CLI 链](./docs/assets/formalized_workflow/doc-cli-scaffold-chain-20260402/doc-cli-scaffold-chain-20260402.md)、[CLI 变更须测试](./docs/assets/formalized_workflow/cli-tool-change-requires-tests-20260402/cli-tool-change-requires-tests-20260402.md)）、`docs/output/` |
 
 ## 产品与技术产品说明 `docs/product/`
 

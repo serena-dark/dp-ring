@@ -7,12 +7,13 @@ import { constants } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeDocBasename } from "./lib/doc-basename.mjs";
-import { takeUpToFiveWords } from "./lib/naming-shared.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TEMPLATES_DIR = join(__dirname, "templates");
 
 const DOC_TYPES = ["requirement", "milestone", "prerequisites", "task", "workflow", "feedback"];
+
+/** @typedef {{ type: string | null, name: string | null, displayTitle: string | null, requirementPackage: string | null, task: number | null, root: string, dryRun: boolean, force: boolean, help: boolean }} CliArgs */
 
 function usage() {
   console.log(`用法: node cli-tool/generate-markdown.mjs --type <${DOC_TYPES.join("|")}> --name "概括短语" [选项]
@@ -31,7 +32,9 @@ function usage() {
 `);
 }
 
+/** @param {string[]} argv */
 function parseArgs(argv) {
+  /** @type {CliArgs} */
   const out = {
     type: null,
     name: null,
@@ -43,18 +46,68 @@ function parseArgs(argv) {
     force: false,
     help: false,
   };
+
+  /** @type {Record<string, (i: number) => number>} */
+  const withValue = {
+    "--type": (i) => {
+      out.type = argv[i + 1];
+      return 2;
+    },
+    "--name": (i) => {
+      out.name = argv[i + 1];
+      return 2;
+    },
+    "--title": (i) => {
+      out.name = argv[i + 1];
+      return 2;
+    },
+    "--display-title": (i) => {
+      out.displayTitle = argv[i + 1];
+      return 2;
+    },
+    "--root": (i) => {
+      out.root = resolve(argv[i + 1]);
+      return 2;
+    },
+    "--requirement-package": (i) => {
+      out.requirementPackage = argv[i + 1];
+      return 2;
+    },
+    "--task": (i) => {
+      out.task = Number.parseInt(argv[i + 1], 10);
+      return 2;
+    },
+  };
+
+  /** @type {Record<string, () => void>} */
+  const flags = {
+    "--help": () => {
+      out.help = true;
+    },
+    "-h": () => {
+      out.help = true;
+    },
+    "--dry-run": () => {
+      out.dryRun = true;
+    },
+    "--force": () => {
+      out.force = true;
+    },
+  };
+
   for (let i = 2; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--help" || a === "-h") out.help = true;
-    else if (a === "--dry-run") out.dryRun = true;
-    else if (a === "--force") out.force = true;
-    else if (a === "--type") out.type = argv[++i];
-    else if (a === "--name" || a === "--title") out.name = argv[++i];
-    else if (a === "--display-title") out.displayTitle = argv[++i];
-    else if (a === "--root") out.root = resolve(argv[++i]);
-    else if (a === "--requirement-package") out.requirementPackage = argv[++i];
-    else if (a === "--task") out.task = Number.parseInt(argv[++i], 10);
-    else if (!a.startsWith("-") && out.name === null) out.name = a;
+    const consume = withValue[a];
+    if (consume) {
+      i += consume(i) - 1;
+      continue;
+    }
+    const run = flags[a];
+    if (run) {
+      run();
+      continue;
+    }
+    if (!a.startsWith("-") && out.name === null) out.name = a;
   }
   return out;
 }
@@ -82,95 +135,135 @@ function buildTitle(nameInput, displayTitle) {
   return String(nameInput).trim();
 }
 
-async function main() {
-  const args = parseArgs(process.argv);
-  if (args.help) {
-    usage();
-    process.exit(0);
-  }
-  if (!args.type || !DOC_TYPES.includes(args.type)) {
-    console.error(`错误: 请指定 --type ${DOC_TYPES.join(", ")}`);
-    process.exit(1);
-  }
+function exitError(msg) {
+  console.error(`错误: ${msg}`);
+  process.exit(1);
+}
 
-  if (args.type === "prerequisites") {
-    if (!args.requirementPackage) {
-      console.error("错误: prerequisites 须 --requirement-package");
-      process.exit(1);
-    }
-    const absPath = join(
-      args.root,
-      "docs/requirements",
-      args.requirementPackage,
-      "milestones",
-      "prerequisites.md"
-    );
-    if ((await fileExists(absPath)) && !args.force) {
-      console.error(`错误: 已存在 ${absPath}，加 --force 覆盖`);
-      process.exit(1);
-    }
-    const tpl = await loadTemplate("prerequisites");
-    const ctx = {
-      REQUIREMENT_PACKAGE: args.requirementPackage,
-      DATE_ISO: new Date().toISOString().slice(0, 10),
-      TITLE: "先决条件",
-      BASE_NAME: "prerequisites",
-      NAME_SLUG: "prerequisites",
-    };
-    const body = renderTemplate(tpl, ctx);
-    if (args.dryRun) {
-      console.log(`[dry-run] 将写入: ${absPath}`);
-      console.log(body.slice(0, 400));
-      return;
-    }
-    await mkdir(dirname(absPath), { recursive: true });
-    await writeFile(absPath, body, "utf8");
-    console.error(`已写入: ${absPath}`);
+/** @type {Record<string, (a: CliArgs) => void>} */
+const ARG_VALIDATORS = {
+  milestone: (a) => {
+    if (!a.requirementPackage) exitError("milestone 须 --requirement-package");
+  },
+  workflow: (a) => {
+    if (a.task == null || Number.isNaN(a.task) || a.task < 1) exitError("workflow 须 --task <T>");
+  },
+};
+
+/** doc-basename kind，与 --type 一一对应（不含 prerequisites） */
+const TYPE_TO_KIND = {
+  requirement: "requirement",
+  milestone: "milestone",
+  task: "task",
+  workflow: "workflow",
+  feedback: "feedback",
+};
+
+/**
+ * @param {string} type
+ * @param {Awaited<ReturnType<typeof computeDocBasename>>} meta
+ * @param {string} body
+ */
+function writePlanFor(type, meta, body) {
+  /** @type {Record<string, () => { mkdirs: string[]; files: { path: string; content: string }[]; previewPath: string }>} */
+  const plans = {
+    milestone: () => {
+      const file = meta.fileAbs;
+      return {
+        mkdirs: [dirname(file)],
+        files: [{ path: file, content: body }],
+        previewPath: file,
+      };
+    },
+    requirement: () => {
+      const dir = meta.dirAbs;
+      const mainFile = join(dir, `${meta.basename}.md`);
+      return {
+        mkdirs: [dir, join(dir, "references"), join(dir, "milestones")],
+        files: [{ path: mainFile, content: body }],
+        previewPath: mainFile,
+      };
+    },
+    task: () => {
+      const dir = meta.dirAbs;
+      const mainFile = join(dir, `${meta.basename}.md`);
+      return {
+        mkdirs: [dir, join(dir, "references")],
+        files: [{ path: mainFile, content: body }],
+        previewPath: mainFile,
+      };
+    },
+    workflow: () => {
+      const dir = meta.dirAbs;
+      const mainFile = join(dir, `${meta.basename}.md`);
+      return {
+        mkdirs: [dir, join(dir, "logs")],
+        files: [
+          { path: join(dir, "logs", ".gitkeep"), content: "" },
+          { path: mainFile, content: body },
+        ],
+        previewPath: mainFile,
+      };
+    },
+    feedback: () => {
+      const dir = meta.dirAbs;
+      const inner = join(dir, `${meta.nameSeg}.md`);
+      return {
+        mkdirs: [dir],
+        files: [{ path: inner, content: body }],
+        previewPath: inner,
+      };
+    },
+  };
+  const build = plans[type];
+  if (!build) exitError(`内部错误: 无 ${type} 的落盘计划`);
+  return build();
+}
+
+/** @param {CliArgs} args */
+async function runPrerequisites(args) {
+  if (!args.requirementPackage) exitError("prerequisites 须 --requirement-package");
+  const absPath = join(args.root, "docs/requirements", args.requirementPackage, "milestones", "prerequisites.md");
+  if ((await fileExists(absPath)) && !args.force) {
+    exitError(`已存在 ${absPath}，加 --force 覆盖`);
+  }
+  const tpl = await loadTemplate("prerequisites");
+  const ctx = {
+    REQUIREMENT_PACKAGE: args.requirementPackage,
+    DATE_ISO: new Date().toISOString().slice(0, 10),
+    TITLE: "先决条件",
+    BASE_NAME: "prerequisites",
+    NAME_SLUG: "prerequisites",
+  };
+  const body = renderTemplate(tpl, ctx);
+  if (args.dryRun) {
+    console.log(`[dry-run] 将写入: ${absPath}`);
+    console.log(body.slice(0, 400));
     return;
   }
+  await mkdir(dirname(absPath), { recursive: true });
+  await writeFile(absPath, body, "utf8");
+  console.error(`已写入: ${absPath}`);
+}
 
-  if (args.type === "milestone" && !args.requirementPackage) {
-    console.error("错误: milestone 须 --requirement-package");
-    process.exit(1);
-  }
-  if (args.type === "workflow" && (args.task == null || Number.isNaN(args.task) || args.task < 1)) {
-    console.error("错误: workflow 须 --task <T>");
-    process.exit(1);
-  }
+/** @param {CliArgs} args */
+async function runDocBasenameBacked(args) {
+  const kind = TYPE_TO_KIND[args.type];
+  if (!kind) exitError("内部类型映射失败");
 
-  if (!args.name || !String(args.name).trim()) {
-    console.error('错误: 请提供 --name "..."');
-    process.exit(1);
-  }
+  ARG_VALIDATORS[args.type]?.(args);
 
-  const kind =
-    args.type === "requirement"
-      ? "requirement"
-      : args.type === "milestone"
-        ? "milestone"
-        : args.type === "task"
-          ? "task"
-          : args.type === "workflow"
-            ? "workflow"
-            : args.type === "feedback"
-              ? "feedback"
-              : null;
-
-  if (!kind) {
-    console.error("错误: 内部类型映射失败");
-    process.exit(1);
-  }
+  if (!args.name || !String(args.name).trim()) exitError('请提供 --name "..."');
 
   const meta = await computeDocBasename({
     repoRoot: args.root,
     kind,
     nameInput: args.name,
     task: args.task,
-    workflow: args.workflow,
+    workflow: undefined,
     requirementPackage: args.requirementPackage,
   });
 
-  const words = takeUpToFiveWords(String(args.name));
   const ctx = {
     BASE_NAME: meta.basename,
     NAME_SLUG: meta.nameSeg,
@@ -183,66 +276,34 @@ async function main() {
 
   const tpl = await loadTemplate(args.type);
   const body = renderTemplate(tpl, ctx);
+  const plan = writePlanFor(args.type, meta, body);
 
-  if (args.type === "milestone") {
-    if (args.dryRun) {
-      console.log(`[dry-run] ${meta.fileAbs}`);
-      console.log(body.slice(0, 400));
-      return;
-    }
-    await mkdir(dirname(meta.fileAbs), { recursive: true });
-    await writeFile(meta.fileAbs, body, "utf8");
-    console.error(`已写入: ${meta.fileAbs}`);
+  if (args.dryRun) {
+    console.log(`[dry-run] ${plan.previewPath}`);
+    console.log(body.slice(0, 400));
     return;
   }
+  for (const d of plan.mkdirs) await mkdir(d, { recursive: true });
+  for (const { path, content } of plan.files) await writeFile(path, content, "utf8");
+  console.error(`已写入: ${plan.previewPath}`);
+}
 
-  if (args.type === "requirement" || args.type === "task") {
-    const dir = meta.dirAbs;
-    const mainFile = join(dir, `${meta.basename}.md`);
-    if (args.dryRun) {
-      console.log(`[dry-run] ${mainFile}`);
-      console.log(body.slice(0, 400));
-      return;
-    }
-    await mkdir(dir, { recursive: true });
-    await mkdir(join(dir, "references"), { recursive: true });
-    if (args.type === "requirement") {
-      await mkdir(join(dir, "milestones"), { recursive: true });
-    }
-    await writeFile(mainFile, body, "utf8");
-    console.error(`已写入: ${mainFile}`);
-    return;
+async function main() {
+  const args = parseArgs(process.argv);
+  if (args.help) {
+    usage();
+    process.exit(0);
+  }
+  if (!args.type || !DOC_TYPES.includes(args.type)) {
+    exitError(`请指定 --type ${DOC_TYPES.join(", ")}`);
   }
 
-  if (args.type === "workflow") {
-    const dir = meta.dirAbs;
-    const mainFile = join(dir, `${meta.basename}.md`);
-    if (args.dryRun) {
-      console.log(`[dry-run] ${mainFile}`);
-      console.log(body.slice(0, 400));
-      return;
-    }
-    await mkdir(dir, { recursive: true });
-    await mkdir(join(dir, "logs"), { recursive: true });
-    await writeFile(join(dir, "logs", ".gitkeep"), "", "utf8");
-    await writeFile(mainFile, body, "utf8");
-    console.error(`已写入: ${mainFile}`);
-    return;
-  }
+  const runners = {
+    prerequisites: () => runPrerequisites(args),
+    default: () => runDocBasenameBacked(args),
+  };
 
-  if (args.type === "feedback") {
-    const dir = meta.dirAbs;
-    const inner = join(dir, `${meta.nameSeg}.md`);
-    if (args.dryRun) {
-      console.log(`[dry-run] ${inner}`);
-      console.log(body.slice(0, 400));
-      return;
-    }
-    await mkdir(dir, { recursive: true });
-    await writeFile(inner, body, "utf8");
-    console.error(`已写入: ${inner}`);
-    return;
-  }
+  await (runners[args.type] ?? runners.default)();
 }
 
 main().catch((e) => {

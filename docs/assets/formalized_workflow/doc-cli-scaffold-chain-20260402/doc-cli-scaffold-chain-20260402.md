@@ -11,7 +11,8 @@
 | 场景 | 第一步 | 第二步（若有） |
 | --- | --- | --- |
 | 需要**新的 `session_id` 字面值**（归档目录、文首引用、任务衔接等统一用同串） | `npm run generate-session-id -- --name "…"` 或 `buildSessionArchiveBasename(...)` | 把返回的 `basename` 写入正文/元数据；可选 `--mkdir` 建 `docs/sessions/archive/…` |
-| 需要**模板化 Markdown**（requirement / milestone / prerequisites / task / workflow / feedback） | 上表已取得 `session_id` 后（若本轮需要写入文档） | `npm run generate-markdown -- --type … --name "…"`（内部已 `computeDocBasename`，勿先跑 doc-basename 只为取名） |
+| 需要**模板化 Markdown**（requirement / milestone / prerequisites / task / workflow / feedback） | 若本轮文档要标 `session_id`，**先**完成上表一行 | `npm run generate-markdown -- --type … --name "…"`（内部已 `computeDocBasename`，勿先跑 doc-basename 只为取名）。**不含 `step`。** |
+| 需要 **workflow 步骤** 的规范 `.md` **文件名**（无 CLI 模板；须已有 `docs/tasks/workflows` 下 `t{T}w{W}-*` 目录） | `npm run generate-doc-basename -- --kind step --task <T> --workflow <W> --name "…"`（stdout 基名，stderr 建议完整路径） | 在建议路径**自建**正文或拷贝模板 |
 | **仅要路径基名**、不落模板 | `npm run generate-doc-basename` 或 `computeDocBasename(...)` | — |
 
 ## 命令字典
@@ -46,3 +47,4 @@
 - [documentation-standards.md](../../../documentation-standards.md)
 - [repository-layout.md](../../../repository-layout.md)
 - [prototype/Adaptive-Flywheel.md](../../../../prototype/Adaptive-Flywheel.md)
+- CLI 回归：`npm test`（[run-tests.mjs](../../../../cli-tool/run-tests.mjs)，默认 `tests/**/*.test.mjs`）；**改 CLI 须补测并复跑**见 [CLI 变更与测试门禁](../cli-tool-change-requires-tests-20260402/cli-tool-change-requires-tests-20260402.md)

@@ -147,3 +147,4 @@
 | **`npm run generate-markdown`** | 自模板创建 Markdown |
 | **`npm run generate-doc-basename`** | 打印规范化基名 |
 | **`npm run generate-session-id`** | 生成 `session_id` 推荐字面值（详见 sessions） |
+| **`npm test` / `run-tests.mjs`** | 汇总运行 `tests/**/*.test.mjs`；见 [cli-tool/run-tests.mjs](../cli-tool/run-tests.mjs) |
