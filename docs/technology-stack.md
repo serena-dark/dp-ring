@@ -1,13 +1,50 @@
-# 技术栈
+# Technology Stack
 
-前端：**TypeScript + React（Vite）**；包管理与锁文件：**npm** + `package-lock.json`。根目录 [`.npmrc`](../.npmrc) 启用 `legacy-peer-deps=true`，以在锁定 ESLint 10 的同时安装 `eslint-plugin-react-hooks@7.0.1`（其 peer 范围尚未声明 ESLint 10）。具体依赖版本以根目录 `package.json` 与 lockfile 为准；Step 1 基准见 [product/step1-implementation-plan.md](./product/step1-implementation-plan.md) 中「依赖与镜像版本锁定」。
+## Frontend (`ring-gui/`)
 
-| 用途 | 选型 |
-| --- | --- |
-| 运行时 | React 19.x |
-| 构建 | Vite 8.x |
-| 类型 | TypeScript 5.8.x（strict） |
-| 容器构建 | `node:22.22.2-alpine` |
-| 容器运行 | `nginx:1.28.2-alpine`（SPA `try_files`） |
+| Purpose | Selection |
+|---|---|
+| Framework | React 19.x |
+| Build | Vite 8.x |
+| Language | TypeScript 5.8.x (strict) |
+| Styling | TBD (CSS modules, Tailwind, or shadcn/ui — frontend agent's choice) |
+| Routing | TBD (react-router-dom recommended) |
+| State management | React state + context (add Zustand if needed) |
 
-> 待完善：CI、预览环境与安全升级策略。
+## Backend (`ring/`)
+
+| Purpose | Selection |
+|---|---|
+| Runtime | Node.js >=22.19.0 |
+| Language | JavaScript (ESM `.mjs`) |
+| Schema validation | Ajv 8.17.1 + ajv-formats 3.0.1 |
+| HTTP server | Node `node:http` (stdlib, no framework) |
+| Data storage | JSON files in `.ring/` (git-tracked) |
+
+## Container
+
+| Purpose | Image |
+|---|---|
+| Build stage | `node:22.22.2-alpine` |
+| Runtime | `nginx:1.28.2-alpine` (SPA `try_files`) |
+
+## Package Management
+
+- **npm** with `package-lock.json`
+- Exact versions (no `^` / `~` for production dependencies)
+- `.npmrc`: `legacy-peer-deps=true`
+
+## Development Tools
+
+| Tool | Version |
+|---|---|
+| ESLint | 10.1.0 |
+| typescript-eslint | 8.58.0 |
+| eslint-plugin-react-hooks | 7.0.1 |
+| eslint-plugin-react-refresh | 0.5.2 |
+
+## Testing
+
+- `node:test` (Node.js built-in test runner)
+- Test files: `tests/**/*.test.mjs`
+- Run: `npm test`

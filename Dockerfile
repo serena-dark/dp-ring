@@ -1,4 +1,4 @@
-﻿# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1
 # Multi-stage: build static assets with Vite, serve with nginx (SPA-friendly).
 
 FROM node:22.22.2-alpine AS build

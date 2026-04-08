@@ -1,4 +1,4 @@
-﻿{
+{
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -13,7 +13,11 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@ring-gui/*": ["ring-gui/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["ring-gui"]
 }

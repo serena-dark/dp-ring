@@ -1,41 +1,53 @@
 # dp-ring
 
-TypeScript + React（Vite）前端基线，文档与流程约定见 [INDEX.md](./INDEX.md) 与 [prototype/Adaptive-Flywheel.md](./prototype/Adaptive-Flywheel.md)。
+Adaptive Flywheel for agent development workflows. Each session's output is measured, ranked, and distilled so the next session performs better.
 
-## 本地开发
+## Architecture
+
+```
+.ring/          Machine-readable state (JSON, schemas, config, leaderboard)
+ring/           Protocol library + CLI + REST API server (Node.js)
+ring-gui/       Dashboard frontend (React + TypeScript + Vite)
+docs/           Human-readable documentation
+cli-tool/       Legacy CLI for doc/session naming conventions
+```
+
+## Quick Start
 
 ```bash
 npm ci
-npm run dev
+
+# Start the backend API server
+npm run ring:serve        # http://localhost:3100
+
+# Start the frontend dev server (proxies /api to backend)
+npm run dev               # http://localhost:5173
 ```
 
-- 开发服务器默认：<http://localhost:5173>
+## Scripts
 
-## 脚本
-
-| 命令 | 说明 |
-| --- | --- |
-| `npm run dev` | Vite 开发 |
-| `npm run build` | 生产构建（输出 `dist/`） |
-| `npm run preview` | 预览构建产物 |
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Vite frontend dev server |
+| `npm run build` | Production build (outputs `dist/`) |
+| `npm run ring:serve` | Ring REST API server (port 3100) |
+| `npm run ring -- <cmd>` | Ring CLI (create, read, list, update, validate, gate, rank, new-id, knowledge, context) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm run generate-session-id -- --help` | 生成 **`session_id` 推荐字面值**（三段式；见 `docs/sessions/sessions.md`、`cli-tool/README.md`） |
-| `npm run generate-doc-basename -- --help` | 其它文档/目录 `{前缀}-{name}`（无随机与日期，同上） |
-| `npm run generate-markdown -- --help` | 自模板生成 requirement 等 Markdown（命名走 lib/doc-basename） |
+| `npm test` | Run all tests (`tests/**/*.test.mjs`) |
 
-## 容器（静态站点）
+## Container (static site)
 
 ```bash
 docker build -t dp-ring .
 docker run --rm -p 8080:80 dp-ring
 ```
 
-浏览器访问：<http://localhost:8080>
+## Documentation
 
-## 文档与价值
+- [INDEX.md](./INDEX.md) — Document index
+- [VALUE.md](./VALUE.md) — Core value and goals
+- [ring/API.md](./ring/API.md) — REST API documentation
+- [ring-gui/TODOS.md](./ring-gui/TODOS.md) — Frontend implementation plan
 
-- [INDEX.md](./INDEX.md) — 文档总索引  
-- [VALUE.md](./VALUE.md) — 核心价值与目标  
-
-要求 Node **≥ 22.19.0**（见 `package.json` 的 `engines`）。
+Requires Node **>=22.19.0** (see `package.json` engines).

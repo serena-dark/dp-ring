@@ -25,5 +25,14 @@ export default tseslint.config(
         { allowConstantExport: true },
       ],
     },
+  },
+  {
+    files: ["ring/**/*.mjs", "tests/**/*.mjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": "warn",
+    },
   }
 );

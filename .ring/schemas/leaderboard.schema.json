@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "leaderboard.schema.json",
+  "title": "Leaderboard",
+  "description": "Registry ranking workflow templates by composite score per task type. Drives selection pressure.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "envelope.schema.json" }
+  ],
+  "properties": {
+    "type": { "const": "leaderboard" },
+    "status": {
+      "type": "string",
+      "enum": ["active"],
+      "description": "Leaderboard is always active; it is a singleton."
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "rankings": {
+          "type": "object",
+          "description": "Map from task_type to ordered array of workflow rankings.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ranking_entry"
+            }
+          }
+        },
+        "last_recomputed": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["rankings"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "$defs": {
+    "ranking_entry": {
+      "type": "object",
+      "properties": {
+        "workflow_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "avg_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "usage_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "last_used": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["workflow_id", "avg_score", "usage_count"],
+      "additionalProperties": false
+    }
+  }
+}

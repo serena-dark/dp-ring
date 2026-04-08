@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-run.schema.json",
+  "title": "Workflow Run",
+  "description": "A concrete execution of a workflow template against a specific task within a session.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^run-" },
+    "type":       { "const": "workflow-run" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "running", "paused", "completed", "failed", "aborted"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["workflow_template_id", "workflow_template_version", "task_id", "steps", "current_step_index"],
+      "additionalProperties": false,
+      "properties": {
+        "workflow_template_id":      { "type": "string" },
+        "workflow_template_version": { "type": "integer", "minimum": 1 },
+        "task_id":                   { "type": "string" },
+        "current_step_index":        { "type": "integer", "minimum": 0 },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["step_id", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "step_id":    { "type": "string" },
+              "status":     { "type": "string", "enum": ["pending", "running", "completed", "failed", "skipped"] },
+              "started_at": { "type": ["string", "null"], "format": "date-time" },
+              "ended_at":   { "type": ["string", "null"], "format": "date-time" },
+              "outputs":    { "type": "object", "default": {} },
+              "notes":      { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "pending":   ["running"],
+      "running":   ["paused", "completed", "failed"],
+      "paused":    ["running", "aborted"],
+      "completed": [],
+      "failed":    ["pending"],
+      "aborted":   []
+    }
+  }
+}

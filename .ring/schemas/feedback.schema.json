@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "feedback.schema.json",
+  "title": "Feedback",
+  "description": "Structured feedback with severity triage. Critical items block gate passage.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^fb-" },
+    "type":       { "const": "feedback" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["open", "acknowledged", "in_progress", "resolved", "wont_fix"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["severity", "category", "target", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "source_session_id": { "type": ["string", "null"] },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "major", "minor", "info"],
+          "description": "critical: blocks gate passage. major: must be acknowledged before proceeding. minor/info: advisory."
+        },
+        "category": {
+          "type": "string",
+          "enum": ["requirement_gap", "implementation_bug", "workflow_flaw", "tooling_issue", "process_issue"]
+        },
+        "target": {
+          "type": "object",
+          "required": ["type", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "type":  { "type": "string", "description": "Artifact type the feedback targets (requirement, task, workflow, etc.)" },
+            "id":    { "type": "string" },
+            "field": { "type": ["string", "null"], "description": "Optional: specific field path within the artifact." }
+          }
+        },
+        "description":          { "type": "string", "minLength": 1 },
+        "proposed_action":      { "type": ["string", "null"] },
+        "resolution_session_id": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "open":         ["acknowledged", "resolved", "wont_fix"],
+      "acknowledged": ["in_progress", "resolved", "wont_fix"],
+      "in_progress":  ["resolved", "wont_fix", "open"],
+      "resolved":     ["open"],
+      "wont_fix":     ["open"]
+    }
+  }
+}

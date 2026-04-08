@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "evaluation.schema.json",
+  "title": "Evaluation",
+  "description": "Quality scores for a completed session. Five dimensions, automated + human hybrid evidence.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^eval-" },
+    "type":       { "const": "evaluation" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "final"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["session_id", "outcome", "scores", "composite_score", "score_weights", "evidence", "evaluator"],
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string" },
+        "outcome":    { "type": "string", "enum": ["success", "failure", "partial"] },
+        "scores": {
+          "type": "object",
+          "required": ["correctness", "completeness", "efficiency", "adherence", "reusability"],
+          "additionalProperties": false,
+          "properties": {
+            "correctness":  { "type": "number", "minimum": 0, "maximum": 1 },
+            "completeness": { "type": "number", "minimum": 0, "maximum": 1 },
+            "efficiency":   { "type": "number", "minimum": 0, "maximum": 1 },
+            "adherence":    { "type": "number", "minimum": 0, "maximum": 1 },
+            "reusability":  { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "composite_score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "score_weights": {
+          "type": "object",
+          "required": ["correctness", "completeness", "efficiency", "adherence", "reusability"],
+          "additionalProperties": false,
+          "properties": {
+            "correctness":  { "type": "number", "minimum": 0, "maximum": 1 },
+            "completeness": { "type": "number", "minimum": 0, "maximum": 1 },
+            "efficiency":   { "type": "number", "minimum": 0, "maximum": 1 },
+            "adherence":    { "type": "number", "minimum": 0, "maximum": 1 },
+            "reusability":  { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "properties": {
+            "tests_passed":        { "type": "integer", "minimum": 0 },
+            "tests_failed":        { "type": "integer", "minimum": 0 },
+            "build_status":        { "type": "string", "enum": ["success", "failure", "skipped"] },
+            "lint_errors":         { "type": "integer", "minimum": 0 },
+            "criteria_satisfied":  { "type": "array", "items": { "type": "string" } },
+            "criteria_unsatisfied": { "type": "array", "items": { "type": "string" } },
+            "total_tokens":        { "type": "integer", "minimum": 0 },
+            "wall_clock_seconds":  { "type": "number", "minimum": 0 },
+            "retry_count":         { "type": "integer", "minimum": 0 },
+            "human_interventions": { "type": "integer", "minimum": 0 },
+            "assets_formalized":   { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "evaluator": { "type": "string", "enum": ["automated", "human", "hybrid"] },
+        "notes":     { "type": ["string", "null"] }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "draft": ["final"],
+      "final": []
+    }
+  }
+}

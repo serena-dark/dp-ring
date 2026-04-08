@@ -15,9 +15,13 @@
     "test": "node cli-tool/run-tests.mjs",
     "generate-session-id": "node cli-tool/generate-session-id.mjs",
     "generate-doc-basename": "node cli-tool/generate-doc-basename.mjs",
-    "generate-markdown": "node cli-tool/generate-markdown.mjs"
+    "generate-markdown": "node cli-tool/generate-markdown.mjs",
+    "ring": "node ring/cli.mjs",
+    "ring:serve": "node ring/server.mjs"
   },
   "dependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

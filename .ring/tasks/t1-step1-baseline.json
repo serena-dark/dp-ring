@@ -1,0 +1,26 @@
+{
+  "id": "t1-step1-baseline",
+  "type": "task",
+  "version": 1,
+  "created_at": "2026-04-02T00:00:00Z",
+  "updated_at": "2026-04-02T12:00:00Z",
+  "created_by": "human",
+  "session_id": "s1-step1-baseline",
+  "status": "completed",
+  "data": {
+    "name": "Step 1 Baseline Implementation",
+    "description": "Implement the Step 1 baseline: root docs, full docs/ tree, example requirement-task-workflow chain, test placeholder, docker baseline, and verification scripts.",
+    "task_type": "infrastructure",
+    "requirement_id": "r1-prototype-baseline",
+    "milestone_id": "r1m1-repository-and-docs-baseline",
+    "workflow_template_id": "wf-baseline-delivery",
+    "workflow_run_id": null,
+    "execution_mode": "serial",
+    "acceptance_criteria": [
+      { "id": "ac1", "description": "Root docs created and linked", "satisfied": true },
+      { "id": "ac2", "description": "docs/** tree matches Adaptive-Flywheel.md", "satisfied": true },
+      { "id": "ac3", "description": "npm run build + typecheck + lint pass", "satisfied": true },
+      { "id": "ac4", "description": "Docker build succeeds", "satisfied": true }
+    ]
+  }
+}

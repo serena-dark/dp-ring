@@ -1,29 +1,72 @@
-# 仓库目录结构
+# Repository Directory Structure
 
-本仓库按 [prototype/Adaptive-Flywheel.md](../prototype/Adaptive-Flywheel.md) 与 [product/step1-implementation-plan.md](./product/step1-implementation-plan.md) 组织。
+## Top-Level
 
-| 路径 | 用途 |
-| --- | --- |
-| 根目录 `package.json`、`vite.config.ts`、`tsconfig*`、`index.html` | Vite + React + TypeScript |
-| `src/` | 应用入口与源码（`main.tsx`、`App.tsx` 等） |
-| `public/` | 静态资源 |
-| `tests/` | 按模块划分的测试用例（如 `tests/cli-tool/*.test.mjs`；占位见 `tests/example/`）；默认用 **`npm test`**（[cli-tool/run-tests.mjs](../cli-tool/run-tests.mjs)）在仓库根执行 |
-| `cli-tool/` | 独立 CLI；见 [cli-tool/README.md](../cli-tool/README.md)；含 `lib/`（可编程复用）、`templates/`（Markdown 初稿模板） |
-| `docs/` | Adaptive Flywheel 文档树与产品说明 |
-| `docs/assets/formalized_workflow/` | 已「正式化」的工作流记录（按轮次/主题分子目录）；例：[文档 CLI 链](./assets/formalized_workflow/doc-cli-scaffold-chain-20260402/doc-cli-scaffold-chain-20260402.md)、[CLI 变更须配套测试与复跑](./assets/formalized_workflow/cli-tool-change-requires-tests-20260402/cli-tool-change-requires-tests-20260402.md) |
-| `prototype/` | 设计原稿（`.md`、`.drawio`）；Step 1 不改 drawio |
-| `Dockerfile`、`nginx.conf`、`.dockerignore` | 多阶段构建与 SPA 静态服务 |
+| Path | Purpose |
+|---|---|
+| `.ring/` | Machine-readable state: JSON Schema definitions, artifact records, config, leaderboard. Git-tracked. |
+| `ring/` | Protocol library (Node.js): validator, state machine, store, registry, evaluator, gate, query. Plus CLI (`cli.mjs`), REST API server (`server.mjs`), and API docs (`API.md`). |
+| `ring-gui/` | Frontend SPA (React + TypeScript + Vite): dashboard for visualizing and managing ring artifacts. See `ring-gui/TODOS.md` for implementation plan. |
+| `docs/` | Human-readable documentation (legacy Adaptive Flywheel docs, specs, requirements). |
+| `cli-tool/` | Legacy CLI for document naming conventions and markdown template generation. |
+| `tests/` | All tests: `tests/ring/` for protocol library, `tests/cli-tool/` for legacy CLI. |
+| `prototype/` | Design originals (`.md`, `.drawio`). |
 
-## 扩展性（预留后端与领域边界）
+## `.ring/` (Machine-Readable State)
 
-实现「两个循环、一个切面」架构时，建议在独立路径落地服务端与共享领域逻辑（名称可任选其一，入库后在本表固定）：
+| Path | Contents |
+|---|---|
+| `schemas/` | 10 JSON Schema files defining every artifact type |
+| `config.json` | Score weights, evolution settings, gate control flags, directory mappings |
+| `sessions/` | Session lifecycle records |
+| `requirements/` | Structured requirement records |
+| `milestones/` | Milestone records with machine-evaluable prerequisites |
+| `tasks/` | Task records |
+| `workflows/` | Reusable workflow templates |
+| `workflow-runs/` | Per-task workflow execution instances |
+| `evaluations/` | Quality scoring records |
+| `registry/` | Leaderboard (`leaderboard.json`) |
+| `feedback/` | Structured feedback with severity triage |
+| `distillations/` | Knowledge artifacts (lessons, patterns, anti-patterns) |
 
-| 路径（预留） | 用途 |
-| --- | --- |
-| `server/` 或 `packages/api/` | HTTP/WebSocket 等对外 API，调用领域服务 |
-| `packages/domain/`（可选） | 需求、门控、任务、工作流等**领域模型**与用例，不依赖具体 LLM 厂商 SDK |
-| `packages/adapters/`（可选） | LLM、Git、构建器、消息队列等**适配器** |
+## `ring/` (Protocol Library)
 
-**前端 `src/`**：宜用 `features/` 或按 **拼图 / 执行 / 迭代切面** 分子目录，**仅通过 API 与事件契约**访问后端；具体模块清单见 [product/backend-modules.md](./product/backend-modules.md)。
+| Path | Purpose |
+|---|---|
+| `index.mjs` | Main entry: `createRing()` API |
+| `cli.mjs` | CLI interface (10 commands) |
+| `server.mjs` | HTTP REST API server |
+| `API.md` | API documentation |
+| `lib/validator.mjs` | Ajv-based JSON Schema validation |
+| `lib/state-machine.mjs` | State transition enforcement |
+| `lib/store.mjs` | File-based CRUD with validation |
+| `lib/registry.mjs` | Leaderboard management + explore/exploit selection |
+| `lib/evaluator.mjs` | 5-dimension quality scoring |
+| `lib/gate.mjs` | Programmatic prerequisite evaluation |
+| `lib/query.mjs` | Query/filter utilities, knowledge relevance, feedback triage |
+| `lib/id.mjs` | Artifact ID generation |
 
-> 待完善：选定 `server/` 与 `packages/*` 命名后，更新本段与 `technology-stack.md` 中的启动方式。
+## `ring-gui/` (Frontend)
+
+| Path | Purpose |
+|---|---|
+| `main.tsx` | Entry point |
+| `App.tsx` | Root component (placeholder) |
+| `types/api.ts` | Complete TypeScript type contract |
+| `api/client.ts` | Typed API client (stubs) |
+| `components/` | Shared UI components (empty) |
+| `hooks/` | Custom React hooks (empty) |
+| `pages/` | Page components (empty) |
+| `TODOS.md` | Full implementation plan for frontend agent |
+
+## Build & Deploy
+
+| Path | Purpose |
+|---|---|
+| `index.html` | Vite entry HTML (points to `ring-gui/main.tsx`) |
+| `vite.config.ts` | Vite config with `@ring-gui` alias and API proxy |
+| `tsconfig.json` | TypeScript config (includes `ring-gui/`) |
+| `eslint.config.js` | ESLint (browser globals for `.tsx`, Node globals for `.mjs`) |
+| `Dockerfile` | Multi-stage: Node build + nginx static |
+| `nginx.conf` | SPA-friendly nginx config |
+| `package.json` | Scripts: `dev`, `build`, `ring`, `ring:serve`, `test`, `lint`, `typecheck` |

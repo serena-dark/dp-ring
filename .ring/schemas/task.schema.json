@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "task.schema.json",
+  "title": "Task",
+  "description": "A unit of work derived from a requirement milestone, bound to a workflow template.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^t\\d+-" },
+    "type":       { "const": "task" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "ready", "in_progress", "completed", "failed", "cancelled"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["name", "description", "task_type", "requirement_id", "milestone_id", "acceptance_criteria"],
+      "additionalProperties": false,
+      "properties": {
+        "name":           { "type": "string", "minLength": 1 },
+        "description":    { "type": "string" },
+        "task_type": {
+          "type": "string",
+          "description": "Category used for workflow registry lookup. Examples: feature-implementation, bug-fix, refactoring, documentation, testing, infrastructure."
+        },
+        "requirement_id":        { "type": "string" },
+        "milestone_id":          { "type": "string" },
+        "workflow_template_id":  { "type": ["string", "null"] },
+        "workflow_run_id":       { "type": ["string", "null"] },
+        "execution_mode":        { "type": ["string", "null"], "enum": ["serial", "parallel", null] },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "satisfied"],
+            "additionalProperties": false,
+            "properties": {
+              "id":          { "type": "string" },
+              "description": { "type": "string" },
+              "satisfied":   { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "pending":     ["ready", "cancelled"],
+      "ready":       ["in_progress", "cancelled"],
+      "in_progress": ["completed", "failed"],
+      "completed":   [],
+      "failed":      ["pending"],
+      "cancelled":   []
+    }
+  }
+}

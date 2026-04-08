@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "envelope.schema.json",
+  "title": "Artifact Envelope",
+  "description": "Common envelope shared by every artifact in .ring/. All artifact schemas compose this via allOf.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Relative path to the JSON Schema for this artifact type."
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this artifact."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "requirement",
+        "milestone",
+        "task",
+        "workflow",
+        "workflow-run",
+        "session",
+        "evaluation",
+        "feedback",
+        "distillation",
+        "config",
+        "leaderboard"
+      ],
+      "description": "The artifact type discriminator."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing version; incremented on every mutation."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 creation timestamp."
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 last-update timestamp."
+    },
+    "created_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Agent ID or 'human'."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Session this artifact belongs to; null for puzzle-phase artifacts."
+    },
+    "status": {
+      "type": "string",
+      "description": "Type-specific lifecycle status. Allowed values defined in each artifact schema."
+    }
+  },
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status"]
+}

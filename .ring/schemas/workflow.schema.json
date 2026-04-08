@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow.schema.json",
+  "title": "Workflow Template",
+  "description": "A reusable, parameterized workflow definition. Tasks reference templates; workflow-runs are per-execution instances.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string" },
+    "type":       { "const": "workflow" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["active", "deprecated", "archived"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["name", "description", "applicable_to", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "name":        { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "applicable_to": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Task types this template is suitable for."
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "description"],
+            "additionalProperties": false,
+            "properties": {
+              "id":          { "type": "string" },
+              "name":        { "type": "string" },
+              "description": { "type": "string" },
+              "inputs":      { "type": "array", "items": { "type": "string" }, "default": [] },
+              "outputs":     { "type": "array", "items": { "type": "string" }, "default": [] }
+            }
+          },
+          "minItems": 1
+        },
+        "quality_history": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "usage_count":        { "type": "integer", "minimum": 0 },
+            "avg_composite_score": { "type": ["number", "null"] },
+            "recent_scores": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["session_id", "composite_score"],
+                "additionalProperties": false,
+                "properties": {
+                  "session_id":      { "type": "string" },
+                  "composite_score": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              }
+            }
+          },
+          "default": { "usage_count": 0, "avg_composite_score": null, "recent_scores": [] }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "active":     ["deprecated", "archived"],
+      "deprecated": ["active", "archived"],
+      "archived":   ["active"]
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "r1-prototype-baseline",
+  "type": "requirement",
+  "version": 1,
+  "created_at": "2026-04-02T00:00:00Z",
+  "updated_at": "2026-04-02T12:00:00Z",
+  "created_by": "human",
+  "session_id": null,
+  "status": "completed",
+  "data": {
+    "name": "Prototype and Step 1 Baseline",
+    "description": "Align with prototype/Adaptive-Flywheel.md document tree and step1-implementation-plan.md engineering scope. Establish the repository as the first practice example of the Adaptive Flywheel documentation-driven process.",
+    "acceptance_criteria": [
+      { "id": "ac1", "description": "Root docs README/INDEX/VALUE usable", "satisfied": true },
+      { "id": "ac2", "description": "docs/** has proper placeholders per Adaptive-Flywheel.md", "satisfied": true },
+      { "id": "ac3", "description": "Step 1 checklist items complete (vite baseline, doc tree, test placeholder, docker, verify scripts)", "satisfied": true },
+      { "id": "ac4", "description": "Example requirement-task-workflow chain has cross-links", "satisfied": true }
+    ],
+    "milestone_ids": ["r1m1-repository-and-docs-baseline"],
+    "priority": "high"
+  }
+}
