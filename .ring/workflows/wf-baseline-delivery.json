@@ -1,0 +1,50 @@
+{
+  "id": "wf-baseline-delivery",
+  "type": "workflow",
+  "version": 1,
+  "created_at": "2026-04-02T00:00:00Z",
+  "updated_at": "2026-04-02T12:00:00Z",
+  "created_by": "human",
+  "session_id": null,
+  "status": "active",
+  "data": {
+    "name": "Baseline Delivery",
+    "description": "Workflow for delivering project baselines: scaffold, docs, build verification, docker verification.",
+    "applicable_to": ["infrastructure", "documentation"],
+    "steps": [
+      {
+        "id": "s1",
+        "name": "scaffold",
+        "description": "Create directory structure and configuration files.",
+        "inputs": ["requirement", "implementation-plan"],
+        "outputs": ["directory-tree", "config-files"]
+      },
+      {
+        "id": "s2",
+        "name": "document",
+        "description": "Write or generate documentation files per specification.",
+        "inputs": ["directory-tree", "doc-standards"],
+        "outputs": ["docs-tree"]
+      },
+      {
+        "id": "s3",
+        "name": "verify",
+        "description": "Run build, typecheck, lint, and any automated checks.",
+        "inputs": ["directory-tree", "docs-tree"],
+        "outputs": ["verification-report"]
+      },
+      {
+        "id": "s4",
+        "name": "review",
+        "description": "Human review of outputs against acceptance criteria.",
+        "inputs": ["verification-report", "acceptance-criteria"],
+        "outputs": ["review-verdict"]
+      }
+    ],
+    "quality_history": {
+      "usage_count": 1,
+      "avg_composite_score": null,
+      "recent_scores": []
+    }
+  }
+}

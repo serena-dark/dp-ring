@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config.schema.json",
+  "title": "Ring Configuration",
+  "description": "System-wide configuration for the .ring protocol layer.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "envelope.schema.json" }
+  ],
+  "properties": {
+    "type": { "const": "config" },
+    "status": {
+      "type": "string",
+      "enum": ["active"]
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "score_weights": {
+          "type": "object",
+          "properties": {
+            "correctness": { "type": "number", "minimum": 0, "maximum": 1 },
+            "completeness": { "type": "number", "minimum": 0, "maximum": 1 },
+            "efficiency": { "type": "number", "minimum": 0, "maximum": 1 },
+            "adherence": { "type": "number", "minimum": 0, "maximum": 1 },
+            "reusability": { "type": "number", "minimum": 0, "maximum": 1 }
+          },
+          "required": ["correctness", "completeness", "efficiency", "adherence", "reusability"],
+          "additionalProperties": false,
+          "description": "Weights must sum to 1.0."
+        },
+        "explore_exploit_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Probability of selecting a non-top-ranked workflow for exploration. 0.0 = always exploit, 1.0 = always explore."
+        },
+        "confidence_decay": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "half_life_sessions": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of sessions after which unreinforced confidence halves."
+            }
+          },
+          "required": ["enabled"],
+          "additionalProperties": false
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version of the schema set in use."
+        },
+        "automation_boundary": {
+          "type": "object",
+          "properties": {
+            "correctness": { "type": "string", "enum": ["automated", "hybrid", "human"] },
+            "completeness": { "type": "string", "enum": ["automated", "hybrid", "human"] },
+            "efficiency": { "type": "string", "enum": ["automated", "hybrid", "human"] },
+            "adherence": { "type": "string", "enum": ["automated", "hybrid", "human"] },
+            "reusability": { "type": "string", "enum": ["automated", "hybrid", "human"] }
+          },
+          "required": ["correctness", "completeness", "efficiency", "adherence", "reusability"],
+          "additionalProperties": false,
+          "description": "Per-dimension automation level for evaluation."
+        }
+      },
+      "required": ["score_weights", "explore_exploit_ratio", "confidence_decay", "schema_version", "automation_boundary"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"]
+}

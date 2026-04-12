@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "registry.schema.json",
+  "title": "Registry / Leaderboard",
+  "description": "Ranks workflow templates by composite score per task type. Drives selection pressure for the evolution mechanism.",
+  "type": "object",
+  "required": ["updated_at", "rankings"],
+  "additionalProperties": false,
+  "properties": {
+    "updated_at": { "type": "string", "format": "date-time" },
+    "rankings": {
+      "type": "object",
+      "description": "Keys are task_type strings. Values are arrays of ranked workflow entries, ordered by avg_score descending.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["workflow_id", "avg_score", "usage_count", "last_used"],
+          "additionalProperties": false,
+          "properties": {
+            "workflow_id":  { "type": "string" },
+            "avg_score":    { "type": "number", "minimum": 0, "maximum": 1 },
+            "usage_count":  { "type": "integer", "minimum": 0 },
+            "last_used":    { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  }
+}

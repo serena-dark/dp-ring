@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "score_weights": {
+    "correctness":  0.30,
+    "completeness": 0.25,
+    "efficiency":   0.20,
+    "adherence":    0.15,
+    "reusability":  0.10
+  },
+  "evolution": {
+    "explore_ratio": 0.15,
+    "confidence_decay_per_day": 0.002,
+    "min_confidence_threshold": 0.3,
+    "leaderboard_min_usage": 1
+  },
+  "gate_control": {
+    "block_on_critical_feedback": true,
+    "require_ack_on_major_feedback": true
+  },
+  "artifact_types": [
+    "requirement",
+    "milestone",
+    "task",
+    "workflow",
+    "workflow-run",
+    "session",
+    "evaluation",
+    "feedback",
+    "distillation"
+  ],
+  "artifact_directories": {
+    "requirement":  "requirements",
+    "milestone":    "milestones",
+    "task":         "tasks",
+    "workflow":     "workflows",
+    "workflow-run": "workflow-runs",
+    "session":      "sessions",
+    "evaluation":   "evaluations",
+    "feedback":     "feedback",
+    "distillation": "distillations"
+  }
+}

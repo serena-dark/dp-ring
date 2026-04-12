@@ -1,0 +1,22 @@
+# Dependencies & build
+node_modules
+dist
+
+# Logs & coverage
+*.log
+npm-debug.log*
+coverage
+
+# Environment (secrets must not be committed)
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.idea
+.vscode/*
+!.vscode/extensions.json
+**/.DS_Store
+
+# Cursor / local tooling (optional)
+.cursor

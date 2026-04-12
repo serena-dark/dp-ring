@@ -1,0 +1,17 @@
+node_modules
+dist
+coverage
+.git
+.gitignore
+*.log
+.env
+.env.*
+!.env.example
+.cursor
+**/.DS_Store
+
+# Not needed for frontend build in Docker
+docs
+prototype
+.kilo
+tests

@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "session.schema.json",
+  "title": "Session",
+  "description": "An execution session with a proper lifecycle state machine. Links tasks, workflow runs, evaluations, and distillations.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^s\\d+-" },
+    "type":       { "const": "session" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": {
+      "type": "string",
+      "description": "Self-referencing: equals own id."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["gate_pending", "preparing", "executing", "reviewing", "closing", "closed", "failed"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["requirement_id", "milestone_id", "task_ids", "workflow_run_ids", "execution_log"],
+      "additionalProperties": false,
+      "properties": {
+        "requirement_id":  { "type": "string" },
+        "milestone_id":    { "type": "string" },
+        "milestone_ids":   { "type": "array", "items": { "type": "string" } },
+        "task_ids":        { "type": "array", "items": { "type": "string" } },
+        "workflow_run_ids": { "type": "array", "items": { "type": "string" } },
+        "evaluation_id":   { "type": ["string", "null"] },
+        "distillation_id": { "type": ["string", "null"] },
+        "context_injected": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workflow_template":          { "type": ["string", "null"] },
+            "distillations_applied":      { "type": "array", "items": { "type": "string" }, "default": [] },
+            "registry_rank_at_selection": { "type": ["integer", "null"] }
+          },
+          "default": { "workflow_template": null, "distillations_applied": [], "registry_rank_at_selection": null }
+        },
+        "execution_log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["timestamp", "event"],
+            "properties": {
+              "timestamp": { "type": "string", "format": "date-time" },
+              "event":     { "type": "string" },
+              "from":      { "type": "string" },
+              "to":        { "type": "string" },
+              "actor":     { "type": "string" },
+              "detail":    { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "gate_pending": ["preparing", "failed"],
+      "preparing":    ["executing", "failed"],
+      "executing":    ["reviewing", "failed"],
+      "reviewing":    ["closing", "executing"],
+      "closing":      ["closed"],
+      "closed":       [],
+      "failed":       ["gate_pending"]
+    }
+  }
+}

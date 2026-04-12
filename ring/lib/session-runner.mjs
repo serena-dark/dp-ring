@@ -1,0 +1,1259 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, join, relative } from 'node:path';
+
+const DEFAULT_RUNNER_CONFIG = {
+  report_timeout_ms: 120_000,
+  max_report_retries: 2,
+  retry_backoff_ms: 30_000,
+  signature_ttl_ms: 300_000,
+};
+const RING_REPORT_PROTOCOL = 'ring.workflow-run-report.v1';
+const A2A_REPORT_PROTOCOL = 'a2a.task-status.v1';
+const CALLBACK_TOKEN_BYTES = 16;
+const CALLBACK_SECRET_BYTES = 32;
+
+class WorkflowRunReportError extends Error {
+  constructor(message, statusCode = 400, details = null) {
+    super(message);
+    this.name = 'WorkflowRunReportError';
+    this.statusCode = statusCode;
+    this.details = details;
+  }
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function plusMs(base, amount) {
+  return new Date(Date.parse(base) + amount).toISOString();
+}
+
+function uniqueStrings(values) {
+  return [...new Set((values ?? []).filter((value) => typeof value === 'string' && value.trim()))];
+}
+
+function normalizeRunnerConfig(config = {}) {
+  return {
+    ...DEFAULT_RUNNER_CONFIG,
+    ...(config.session_runner ?? {}),
+  };
+}
+
+function headerValue(headers, name) {
+  const value = headers?.[name];
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+  return typeof value === 'string' ? value : null;
+}
+
+function callbackSignaturePayload(timestamp, payload) {
+  return `${timestamp}.${JSON.stringify(payload ?? {})}`;
+}
+
+function computeCallbackSignature(secret, timestamp, payload) {
+  return createHmac('sha256', secret)
+    .update(callbackSignaturePayload(timestamp, payload))
+    .digest('hex');
+}
+
+function signaturesMatch(expected, actual) {
+  const left = Buffer.from(expected, 'utf-8');
+  const right = Buffer.from(actual, 'utf-8');
+  if (left.length !== right.length) {
+    return false;
+  }
+  return timingSafeEqual(left, right);
+}
+
+function callbackToken() {
+  return randomBytes(CALLBACK_TOKEN_BYTES).toString('hex');
+}
+
+function callbackSecret() {
+  return randomBytes(CALLBACK_SECRET_BYTES).toString('hex');
+}
+
+function activeWorkers(workers = []) {
+  return workers.filter((worker) => (worker?.status ?? 'active') === 'active');
+}
+
+function mapWorkerReportStatus(value) {
+  const lowered = String(value ?? '').trim().toLowerCase();
+  if (['progress', 'running', 'working', 'in_progress', 'in-progress', 'input-required'].includes(lowered)) {
+    return 'progress';
+  }
+  if (['completed', 'complete', 'succeeded', 'success', 'done'].includes(lowered)) {
+    return 'completed';
+  }
+  if (['failed', 'failure', 'error', 'cancelled', 'canceled', 'rejected'].includes(lowered)) {
+    return 'failed';
+  }
+  return null;
+}
+
+function artifactCommitSha(artifact) {
+  if (!artifact || typeof artifact !== 'object') {
+    return null;
+  }
+  if (typeof artifact.commit_sha === 'string' && artifact.commit_sha.trim()) {
+    return artifact.commit_sha.trim();
+  }
+  if (
+    artifact.metadata &&
+    typeof artifact.metadata === 'object' &&
+    typeof artifact.metadata.commit_sha === 'string' &&
+    artifact.metadata.commit_sha.trim()
+  ) {
+    return artifact.metadata.commit_sha.trim();
+  }
+  if (typeof artifact.uri === 'string') {
+    const match = artifact.uri.match(/^git\+commit:\/\/(.+)$/i);
+    if (match?.[1]) {
+      return match[1].trim();
+    }
+  }
+  return null;
+}
+
+function normalizeWorkerReport(payload = {}, meta = {}) {
+  const transportProtocol =
+    typeof payload.protocol === 'string' && payload.protocol.trim()
+      ? payload.protocol.trim()
+      : typeof payload.envelope_protocol === 'string' && payload.envelope_protocol.trim()
+        ? payload.envelope_protocol.trim()
+        : null;
+  const looksA2A =
+    transportProtocol?.startsWith('a2a.') ||
+    (payload.task && typeof payload.task === 'object');
+
+  if (!looksA2A) {
+    return {
+      protocol: RING_REPORT_PROTOCOL,
+      report: {
+        status: mapWorkerReportStatus(payload.status),
+        step_id: payload.step_id ?? null,
+        actor: String(payload.actor ?? payload.worker_id ?? headerValue(meta.headers, 'x-ring-worker-id') ?? 'external-worker'),
+        worker_id: String(
+          payload.worker_id ??
+            headerValue(meta.headers, 'x-ring-worker-id') ??
+            payload.actor ??
+            '',
+        ).trim() || null,
+        note: payload.note ?? null,
+        commit_sha: payload.commit_sha != null ? String(payload.commit_sha).trim() : null,
+        outputs:
+          payload.outputs && typeof payload.outputs === 'object' && !Array.isArray(payload.outputs)
+            ? clone(payload.outputs)
+            : {},
+        judge_agent_id: payload.judge_agent_id ?? null,
+      },
+      envelope: null,
+    };
+  }
+
+  const task = payload.task && typeof payload.task === 'object' ? payload.task : {};
+  const rawStatus = task.status;
+  const mappedStatus =
+    typeof rawStatus === 'string'
+      ? mapWorkerReportStatus(rawStatus)
+      : rawStatus && typeof rawStatus === 'object'
+        ? mapWorkerReportStatus(rawStatus.state ?? rawStatus.status ?? rawStatus.value)
+        : null;
+  const artifacts = Array.isArray(task.artifacts) ? clone(task.artifacts) : [];
+  const metadata = task.metadata && typeof task.metadata === 'object' ? task.metadata : {};
+  const outputs = {
+    ...(metadata.outputs && typeof metadata.outputs === 'object' && !Array.isArray(metadata.outputs)
+      ? clone(metadata.outputs)
+      : {}),
+  };
+  if (artifacts.length > 0) {
+    outputs.artifacts = artifacts;
+  }
+  const commitSha =
+    artifacts.map((artifact) => artifactCommitSha(artifact)).find(Boolean) ??
+    (typeof metadata.commit_sha === 'string' && metadata.commit_sha.trim()
+      ? metadata.commit_sha.trim()
+      : null) ??
+    (payload.commit_sha != null ? String(payload.commit_sha).trim() : null);
+  const workerId =
+    (payload.worker && typeof payload.worker === 'object' && typeof payload.worker.id === 'string'
+      ? payload.worker.id
+      : null) ??
+    (typeof metadata.worker_id === 'string' ? metadata.worker_id : null) ??
+    headerValue(meta.headers, 'x-ring-worker-id') ??
+    (typeof payload.actor === 'string' ? payload.actor : null);
+  return {
+    protocol: transportProtocol ?? A2A_REPORT_PROTOCOL,
+    report: {
+      status: mappedStatus,
+      step_id: metadata.step_id ?? task.step_id ?? payload.step_id ?? null,
+      actor:
+        (payload.worker && typeof payload.worker === 'object' && typeof payload.worker.display_name === 'string'
+          ? payload.worker.display_name
+          : null) ??
+        workerId ??
+        (typeof metadata.actor === 'string' ? metadata.actor : null) ??
+        'external-worker',
+      worker_id: typeof workerId === 'string' && workerId.trim() ? workerId.trim() : null,
+      note:
+        payload.note ??
+        (rawStatus && typeof rawStatus === 'object'
+          ? rawStatus.message ?? rawStatus.detail ?? null
+          : null) ??
+        task.message ??
+        (typeof metadata.note === 'string' ? metadata.note : null) ??
+        null,
+      commit_sha: commitSha,
+      outputs,
+      judge_agent_id: metadata.judge_agent_id ?? payload.judge_agent_id ?? null,
+    },
+    envelope: {
+      task_id: task.id ?? null,
+      task_kind: task.kind ?? null,
+    },
+  };
+}
+
+function taskDocumentPath(taskId) {
+  return join('docs', 'tasks', taskId, `${taskId}.md`);
+}
+
+function appendLog(session, entry) {
+  return {
+    ...session,
+    data: {
+      ...session.data,
+      execution_log: [
+        ...(session.data.execution_log ?? []),
+        entry,
+      ],
+    },
+  };
+}
+
+function emptyCallbackState(config = DEFAULT_RUNNER_CONFIG) {
+  return {
+    auth_scheme: 'bearer',
+    report_url: null,
+    token: null,
+    signing_secret: null,
+    signature_algorithm: 'hmac-sha256',
+    key_version: 1,
+    status: 'pending',
+    issued_at: null,
+    prepared_at: null,
+    last_report_at: null,
+    last_retry_at: null,
+    last_rotated_at: null,
+    next_retry_at: null,
+    report_timeout_ms: config.report_timeout_ms,
+    max_retries: config.max_report_retries,
+    retry_count: 0,
+    retry_backoff_ms: config.retry_backoff_ms,
+    signature_ttl_ms: config.signature_ttl_ms,
+    timeout_at: null,
+    packet_path: null,
+    allowed_worker_ids: [],
+    accepted_protocols: [RING_REPORT_PROTOCOL],
+    last_worker_id: null,
+    last_protocol: null,
+    last_error: null,
+  };
+}
+
+function appendRunReport(run, report) {
+  return {
+    ...run,
+    data: {
+      ...run.data,
+      reports: [
+        ...(run.data.reports ?? []),
+        report,
+      ],
+    },
+  };
+}
+
+export function createSessionRunner(
+  repoRoot,
+  ring,
+  {
+    orchestrator,
+    taskExecution,
+  },
+) {
+  const runnerDir = join(orchestrator.orchestratorDir, 'runner');
+
+  async function writeSession(session, nextStatus = null) {
+    const patch = {
+      data: session.data,
+    };
+    if (nextStatus) {
+      patch.status = nextStatus;
+    }
+    const result = await ring.update('session', session.id, patch);
+    if (!result.ok) {
+      throw new Error(`Session update failed for ${session.id}: ${JSON.stringify(result.errors)}`);
+    }
+    return result.artifact;
+  }
+
+  async function writeWorkflowRun(run, nextStatus = null) {
+    const patch = {
+      data: run.data,
+    };
+    if (nextStatus) {
+      patch.status = nextStatus;
+    }
+    const result = await ring.update('workflow-run', run.id, patch);
+    if (!result.ok) {
+      throw new Error(`Workflow run update failed for ${run.id}: ${JSON.stringify(result.errors)}`);
+    }
+    return result.artifact;
+  }
+
+  async function listBundlesIndexedByTaskId() {
+    const bundles = await orchestrator.listDispatchBundles();
+    const index = new Map();
+    for (const bundle of bundles) {
+      for (const taskId of bundle.planning?.planned_task_ids ?? []) {
+        index.set(taskId, bundle);
+      }
+    }
+    return index;
+  }
+
+  async function buildBundleIndex(bundleIndex = null) {
+    return bundleIndex ?? listBundlesIndexedByTaskId();
+  }
+
+  function createCallbackState(workflowRun, runnerConfig, preparedAt, workers = []) {
+    const active = activeWorkers(workers);
+    const acceptedProtocols = uniqueStrings(
+      active.flatMap((worker) => worker.callback_protocols ?? []),
+    );
+    return {
+      ...emptyCallbackState(runnerConfig),
+      report_url: `/api/workflow-run/${workflowRun.id}/report`,
+      token: callbackToken(),
+      signing_secret: callbackSecret(),
+      status: 'active',
+      issued_at: preparedAt,
+      prepared_at: preparedAt,
+      allowed_worker_ids: active.map((worker) => worker.id),
+      accepted_protocols: acceptedProtocols.length > 0 ? acceptedProtocols : [RING_REPORT_PROTOCOL],
+      timeout_at: plusMs(preparedAt, runnerConfig.report_timeout_ms),
+    };
+  }
+
+  function rotateCallbackState(callback, rotatedAt) {
+    return {
+      ...callback,
+      token: callbackToken(),
+      signing_secret: callbackSecret(),
+      key_version: Math.max(1, Number(callback.key_version ?? 1)) + 1,
+      last_rotated_at: rotatedAt,
+    };
+  }
+
+  function verifyCallbackAuth(workflowRun, payload, meta = {}) {
+    const callback = workflowRun.data.callback ?? emptyCallbackState();
+    if (!callback.token || !callback.signing_secret) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} is not prepared for signed callbacks.`,
+        409,
+      );
+    }
+    const authorization = headerValue(meta.headers, 'authorization');
+    if (authorization !== `Bearer ${callback.token}`) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback token is invalid.`,
+        401,
+      );
+    }
+
+    const timestamp = headerValue(meta.headers, 'x-ring-timestamp');
+    const signatureHeader = headerValue(meta.headers, 'x-ring-signature');
+    if (!timestamp || !signatureHeader) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback is missing signature headers.`,
+        401,
+      );
+    }
+
+    const timestampMs = Date.parse(timestamp);
+    if (!Number.isFinite(timestampMs)) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback timestamp is invalid.`,
+        401,
+      );
+    }
+
+    const signatureAge = Math.abs(Date.now() - timestampMs);
+    if (signatureAge > callback.signature_ttl_ms) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback signature is expired.`,
+        401,
+        { signature_age_ms: signatureAge },
+      );
+    }
+
+    const expected = `sha256=${computeCallbackSignature(
+      callback.signing_secret,
+      timestamp,
+      payload,
+    )}`;
+    if (!signaturesMatch(expected, signatureHeader)) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback signature is invalid.`,
+        401,
+      );
+    }
+
+    const keyVersionHeader = headerValue(meta.headers, 'x-ring-key-version');
+    if (
+      keyVersionHeader &&
+      Number(keyVersionHeader) !== Math.max(1, Number(callback.key_version ?? 1))
+    ) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback key version is invalid.`,
+        401,
+      );
+    }
+
+    return {
+      timestamp,
+      signature: signatureHeader,
+    };
+  }
+
+  function verifyWorkerIdentity(workflowRun, normalizedReport, workers = []) {
+    const callback = workflowRun.data.callback ?? emptyCallbackState();
+    const workerId = normalizedReport.report.worker_id;
+    if (!workerId) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback is missing a worker identity.`,
+        401,
+      );
+    }
+
+    const active = activeWorkers(workers);
+    const worker = active.find((item) => item.id === workerId);
+    if (!worker) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} callback worker "${workerId}" is not registered.`,
+        403,
+      );
+    }
+
+    const acceptedProtocols = uniqueStrings(callback.accepted_protocols ?? []);
+    if (acceptedProtocols.length > 0 && !acceptedProtocols.includes(normalizedReport.protocol)) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${workflowRun.id} does not accept callback protocol "${normalizedReport.protocol}".`,
+        422,
+      );
+    }
+
+    const workerProtocols = uniqueStrings(worker.callback_protocols ?? []);
+    if (workerProtocols.length > 0 && !workerProtocols.includes(normalizedReport.protocol)) {
+      throw new WorkflowRunReportError(
+        `Worker "${workerId}" cannot report protocol "${normalizedReport.protocol}".`,
+        422,
+      );
+    }
+
+    const allowedWorkerIds = uniqueStrings(callback.allowed_worker_ids ?? []);
+    if (allowedWorkerIds.length > 0 && !allowedWorkerIds.includes(workerId)) {
+      throw new WorkflowRunReportError(
+        `Worker "${workerId}" is not allowed to report for workflow run ${workflowRun.id}.`,
+        403,
+      );
+    }
+
+    return worker;
+  }
+
+  async function buildExecutionPacket(session, workflowRun, task, workflow, bundle) {
+    const requirement = await ring.read('requirement', task.data.requirement_id);
+    const milestone = await ring.read('milestone', task.data.milestone_id);
+    const callback = clone(workflowRun.data.callback ?? emptyCallbackState());
+    const packet = {
+      schema_version: 'ring.session-runner.v1',
+      created_at: nowIso(),
+      session_id: session.id,
+      workflow_run_id: workflowRun.id,
+      task_id: task.id,
+      requirement_id: requirement.id,
+      milestone_id: milestone.id,
+      workflow_template_id: workflow.id,
+      repo_root: task.data.scope?.repo_root ?? '.',
+      task_document_path: taskDocumentPath(task.id),
+      scope: clone(task.data.scope ?? {}),
+      goal: {
+        title: task.data.name,
+        description: task.data.description,
+        acceptance_criteria: clone(task.data.acceptance_criteria ?? []),
+      },
+      workflow: {
+        id: workflow.id,
+        name: workflow.data.name,
+        description: workflow.data.description,
+        steps: clone(workflow.data.steps ?? []),
+      },
+      materials: clone(bundle?.staging?.materials ?? []),
+      context: {
+        artifact_refs: clone(bundle?.canonical?.context?.artifact_refs ?? []),
+        prompts: clone(bundle?.canonical?.context?.prompts ?? []),
+        brief_ref: bundle?.canonical?.context?.brief_ref ?? null,
+        bundle_id: bundle?.id ?? null,
+      },
+      callbacks: {
+        workflow_run_report: {
+          url: callback.report_url,
+          accepted_protocols: clone(callback.accepted_protocols ?? [RING_REPORT_PROTOCOL]),
+          auth: {
+            type: callback.auth_scheme,
+            token: callback.token,
+          },
+          signing: {
+            algorithm: callback.signature_algorithm,
+            secret: callback.signing_secret,
+            key_version: Math.max(1, Number(callback.key_version ?? 1)),
+            timestamp_header: 'x-ring-timestamp',
+            signature_header: 'x-ring-signature',
+            key_version_header: 'x-ring-key-version',
+            payload_format: '<timestamp>.<json-body>',
+            ttl_ms: callback.signature_ttl_ms,
+          },
+          worker_identity: {
+            required: true,
+            registry_endpoint: '/api/orchestrator/workers',
+            worker_id_header: 'x-ring-worker-id',
+            allowed_worker_ids: clone(callback.allowed_worker_ids ?? []),
+          },
+          retry_policy: {
+            timeout_ms: callback.report_timeout_ms,
+            max_retries: callback.max_retries,
+            retry_backoff_ms: callback.retry_backoff_ms,
+          },
+        },
+        task_finalize: `/api/task/${task.id}/finalize`,
+        task_judge: `/api/task/${task.id}/judge`,
+      },
+    };
+
+    const packetPath = join(
+      runnerDir,
+      'sessions',
+      session.id,
+      `${workflowRun.id}.json`,
+    );
+    await mkdir(dirname(packetPath), { recursive: true });
+    await writeFile(packetPath, JSON.stringify(packet, null, 2) + '\n', 'utf-8');
+    return {
+      packet,
+      packet_path: relative(repoRoot, packetPath),
+    };
+  }
+
+  async function rewriteExecutionPacket(session, workflowRun, bundleIndex = null) {
+    const bundlesByTaskId = await buildBundleIndex(bundleIndex);
+    const task = await ring.read('task', workflowRun.data.task_id);
+    const workflow = await ring.read('workflow', workflowRun.data.workflow_template_id);
+    const bundle = bundlesByTaskId.get(task.id) ?? null;
+    return buildExecutionPacket(session, workflowRun, task, workflow, bundle);
+  }
+
+  async function prepareSession(session, bundleIndex = null) {
+    if (session.status !== 'preparing') {
+      return session;
+    }
+
+    const runnerConfig = normalizeRunnerConfig(await orchestrator.getConfig());
+    const workers = await orchestrator.getWorkers();
+    const bundlesByTaskId = bundleIndex ?? await listBundlesIndexedByTaskId();
+    const workflowRuns = await Promise.all(
+      (session.data.workflow_run_ids ?? []).map((id) => ring.read('workflow-run', id)),
+    );
+    if (workflowRuns.length === 0) {
+      return session;
+    }
+
+    let preparedCount = 0;
+    const sessionEvents = [];
+
+    for (const run of workflowRuns) {
+      if (run.status !== 'pending') {
+        continue;
+      }
+
+      const task = await ring.read('task', run.data.task_id);
+      const workflow = await ring.read('workflow', run.data.workflow_template_id);
+      const bundle = bundlesByTaskId.get(task.id) ?? null;
+      const preparedAt = nowIso();
+      const callback = createCallbackState(run, runnerConfig, preparedAt, workers);
+      let nextRun = {
+        ...run,
+        data: {
+          ...run.data,
+          callback,
+          reports: clone(run.data.reports ?? []),
+        },
+      };
+      const executionPacket = await buildExecutionPacket(
+        session,
+        nextRun,
+        task,
+        workflow,
+        bundle,
+      );
+      const steps = clone(run.data.steps ?? []);
+      nextRun.data.callback.packet_path = executionPacket.packet_path;
+
+      if (steps.length === 0) {
+        continue;
+      }
+
+      if (steps.length === 1) {
+        steps[0] = {
+          ...steps[0],
+          status: 'running',
+          started_at: steps[0].started_at ?? preparedAt,
+          outputs: {
+            ...(steps[0].outputs ?? {}),
+            execution_packet_path: executionPacket.packet_path,
+            material_count: executionPacket.packet.materials.length,
+          },
+          notes: 'Session runner prepared the workflow execution packet.',
+        };
+      } else {
+        steps[0] = {
+          ...steps[0],
+          status: 'completed',
+          started_at: steps[0].started_at ?? preparedAt,
+          ended_at: preparedAt,
+          outputs: {
+            ...(steps[0].outputs ?? {}),
+            execution_packet_path: executionPacket.packet_path,
+            material_count: executionPacket.packet.materials.length,
+            materials: executionPacket.packet.materials,
+          },
+          notes: 'Session runner injected staged materials and completed the inspect step.',
+        };
+        steps[1] = {
+          ...steps[1],
+          status: 'running',
+          started_at: steps[1].started_at ?? preparedAt,
+          outputs: {
+            ...(steps[1].outputs ?? {}),
+            execution_packet_path: executionPacket.packet_path,
+          },
+          notes: 'Execution is ready for the external worker.',
+        };
+      }
+
+      nextRun = appendRunReport(
+        {
+          ...nextRun,
+          data: {
+            ...nextRun.data,
+            callback: {
+              ...nextRun.data.callback,
+              packet_path: executionPacket.packet_path,
+            },
+          },
+        },
+        {
+          at: preparedAt,
+          status: 'prepared',
+          actor: 'session-runner',
+          step_id: steps[Math.min(1, steps.length - 1)]?.step_id ?? null,
+          note: 'Execution packet prepared and callback credentials issued.',
+          commit_sha: null,
+          worker_id: null,
+          protocol: null,
+          authenticated: true,
+          outputs: {
+            execution_packet_path: executionPacket.packet_path,
+          },
+        },
+      );
+      nextRun = {
+        ...run,
+        data: {
+          ...nextRun.data,
+          current_step_index: steps.length === 1 ? 0 : 1,
+          steps,
+        },
+      };
+      await writeWorkflowRun(nextRun, 'running');
+      preparedCount += 1;
+      sessionEvents.push({
+        timestamp: preparedAt,
+        event: 'workflow_run_prepared',
+        actor: 'session-runner',
+        detail: `Prepared ${run.id} for task ${task.id} using ${executionPacket.packet.materials.length} staged materials.`,
+      });
+    }
+
+    if (preparedCount === 0) {
+      return session;
+    }
+
+    let nextSession = clone(session);
+    nextSession = appendLog(nextSession, {
+      timestamp: nowIso(),
+      event: 'status_transition',
+      from: 'preparing',
+      to: 'executing',
+      actor: 'session-runner',
+      detail: `Prepared ${preparedCount} workflow runs for execution.`,
+    });
+    for (const entry of sessionEvents) {
+      nextSession = appendLog(nextSession, entry);
+    }
+
+    return writeSession(nextSession, 'executing');
+  }
+
+  async function processWorkflowTimeouts(session, bundleIndex = null) {
+    if (session.status !== 'executing') {
+      return session;
+    }
+
+    const runnerConfig = normalizeRunnerConfig(await orchestrator.getConfig());
+    const workflowRuns = await Promise.all(
+      (session.data.workflow_run_ids ?? []).map((id) => ring.read('workflow-run', id)),
+    );
+    let nextSession = clone(session);
+    let changed = false;
+    const now = nowIso();
+
+    for (const run of workflowRuns) {
+      if (run.status !== 'running') {
+        continue;
+      }
+      const callback = {
+        ...emptyCallbackState(runnerConfig),
+        ...(run.data.callback ?? {}),
+      };
+      if (!callback.timeout_at || Date.parse(callback.timeout_at) > Date.now()) {
+        continue;
+      }
+
+      const stepIndex = Math.min(run.data.current_step_index ?? 0, (run.data.steps ?? []).length - 1);
+      const steps = clone(run.data.steps ?? []);
+      const detail =
+        callback.retry_count < callback.max_retries
+          ? `No signed callback report arrived before ${callback.timeout_at}; scheduling retry ${callback.retry_count + 1}/${callback.max_retries}.`
+          : `No signed callback report arrived before ${callback.timeout_at}; retry budget exhausted.`;
+
+      if (callback.retry_count < callback.max_retries) {
+        let nextRun = {
+          ...run,
+          data: {
+            ...run.data,
+            callback: rotateCallbackState(
+              {
+                ...callback,
+                status: 'retry_scheduled',
+                retry_count: callback.retry_count + 1,
+                last_retry_at: now,
+                next_retry_at: plusMs(now, callback.retry_backoff_ms),
+                timeout_at: plusMs(
+                  plusMs(now, callback.retry_backoff_ms),
+                  callback.report_timeout_ms,
+                ),
+                last_error: detail,
+              },
+              now,
+            ),
+            steps: steps.map((step, index) =>
+              index === stepIndex
+                ? {
+                    ...step,
+                    notes: detail,
+                  }
+                : step,
+            ),
+          },
+        };
+        const refreshedPacket = await rewriteExecutionPacket(session, nextRun, bundleIndex);
+        nextRun = appendRunReport(
+          {
+            ...nextRun,
+            data: {
+              ...nextRun.data,
+              callback: {
+                ...nextRun.data.callback,
+                packet_path: refreshedPacket.packet_path,
+              },
+            },
+          },
+          {
+            at: now,
+            status: 'retry_scheduled',
+            actor: 'session-runner',
+            step_id: steps[stepIndex]?.step_id ?? null,
+            note: detail,
+            commit_sha: null,
+            worker_id: null,
+            protocol: null,
+            authenticated: true,
+            outputs: {
+              execution_packet_path: refreshedPacket.packet_path,
+              key_version: nextRun.data.callback.key_version,
+            },
+          },
+        );
+        await writeWorkflowRun(nextRun);
+        nextSession = appendLog(nextSession, {
+          timestamp: now,
+          event: 'workflow_run_retry_scheduled',
+          actor: 'session-runner',
+          detail: `Workflow run ${run.id} missed its callback deadline. Retry ${callback.retry_count + 1}/${callback.max_retries} scheduled and callback credentials rotated to key version ${nextRun.data.callback.key_version}.`,
+        });
+        changed = true;
+        continue;
+      }
+
+      const failedTask = await taskExecution.fail(run.data.task_id, {
+        reason_code: 'workflow_timeout',
+        judge_agent_id: null,
+        note: detail,
+      });
+      const failedRun = appendRunReport(
+        {
+          ...run,
+          data: {
+            ...run.data,
+            callback: {
+              ...callback,
+              status: 'timed_out',
+              last_error: detail,
+              next_retry_at: null,
+              timeout_at: null,
+            },
+            steps: steps.map((step, index) =>
+              index === stepIndex
+                ? {
+                    ...step,
+                    status: 'failed',
+                    ended_at: now,
+                    notes: detail,
+                    outputs: {
+                      ...(step.outputs ?? {}),
+                      timeout_reason: detail,
+                    },
+                  }
+                : step,
+            ),
+          },
+        },
+        {
+          at: now,
+          status: 'timed_out',
+          actor: 'session-runner',
+          step_id: steps[stepIndex]?.step_id ?? null,
+          note: detail,
+          commit_sha: null,
+          worker_id: null,
+          protocol: null,
+          authenticated: true,
+          outputs: {
+            replanning_status: failedTask.data.replanning?.status ?? null,
+          },
+        },
+      );
+      await writeWorkflowRun(failedRun, 'failed');
+      nextSession = appendLog(nextSession, {
+        timestamp: now,
+        event: 'workflow_run_timeout',
+        actor: 'session-runner',
+        detail: `Workflow run ${run.id} timed out and task ${failedTask.id} was routed into replanning.`,
+      });
+      changed = true;
+    }
+
+    return changed ? writeSession(nextSession) : session;
+  }
+
+  async function reconcileSession(session) {
+    const workflowRuns = await Promise.all(
+      (session.data.workflow_run_ids ?? []).map((id) => ring.read('workflow-run', id)),
+    );
+    const tasks = await Promise.all(
+      (session.data.task_ids ?? []).map((id) => ring.read('task', id)),
+    );
+
+    if (session.status === 'executing') {
+      if (workflowRuns.some((run) => run.status === 'failed')) {
+        let failedSession = clone(session);
+        failedSession = appendLog(failedSession, {
+          timestamp: nowIso(),
+          event: 'status_transition',
+          from: 'executing',
+          to: 'failed',
+          actor: 'session-runner',
+          detail: 'At least one workflow run failed during execution.',
+        });
+        return writeSession(failedSession, 'failed');
+      }
+
+      if (workflowRuns.length > 0 && workflowRuns.every((run) => run.status === 'completed')) {
+        let reviewingSession = clone(session);
+        reviewingSession = appendLog(reviewingSession, {
+          timestamp: nowIso(),
+          event: 'status_transition',
+          from: 'executing',
+          to: 'reviewing',
+          actor: 'session-runner',
+          detail: 'All workflow runs completed. Waiting for task judgement outcomes.',
+        });
+        return writeSession(reviewingSession, 'reviewing');
+      }
+    }
+
+    if (session.status === 'reviewing') {
+      if (tasks.some((task) => task.status === 'failed')) {
+        let failedSession = clone(session);
+        failedSession = appendLog(failedSession, {
+          timestamp: nowIso(),
+          event: 'status_transition',
+          from: 'reviewing',
+          to: 'failed',
+          actor: 'session-runner',
+          detail: 'A task failed during review.',
+        });
+        return writeSession(failedSession, 'failed');
+      }
+
+      if (tasks.length > 0 && tasks.every((task) => task.status === 'completed')) {
+        let closingSession = clone(session);
+        closingSession = appendLog(closingSession, {
+          timestamp: nowIso(),
+          event: 'status_transition',
+          from: 'reviewing',
+          to: 'closing',
+          actor: 'session-runner',
+          detail: 'All tasks are complete. Closing the session.',
+        });
+        return writeSession(closingSession, 'closing');
+      }
+    }
+
+    if (session.status === 'closing') {
+      let closedSession = clone(session);
+      closedSession = appendLog(closedSession, {
+        timestamp: nowIso(),
+        event: 'status_transition',
+        from: 'closing',
+        to: 'closed',
+        actor: 'session-runner',
+        detail: 'Session closed after all workflow runs and tasks completed.',
+      });
+      return writeSession(closedSession, 'closed');
+    }
+
+    return session;
+  }
+
+  async function tick() {
+    const sessions = await ring.list('session');
+    const bundleIndex = await listBundlesIndexedByTaskId();
+    const processed = [];
+
+    for (const session of sessions) {
+      if (session.status === 'preparing') {
+        processed.push(await prepareSession(session, bundleIndex));
+        continue;
+      }
+      if (['executing', 'reviewing', 'closing'].includes(session.status)) {
+        const afterTimeouts =
+          session.status === 'executing'
+            ? await processWorkflowTimeouts(session, bundleIndex)
+            : session;
+        processed.push(await reconcileSession(afterTimeouts));
+      }
+    }
+
+    return {
+      ok: true,
+      processed,
+    };
+  }
+
+  async function reportWorkflowRun(runId, payload = {}, meta = {}) {
+    const run = await ring.read('workflow-run', runId);
+    const session = await ring.read('session', run.session_id);
+    const task = await ring.read('task', run.data.task_id);
+    verifyCallbackAuth(run, payload, meta);
+    const normalized = normalizeWorkerReport(payload, meta);
+    const status = normalized.report.status;
+    if (!['progress', 'completed', 'failed'].includes(status)) {
+      throw new WorkflowRunReportError(
+        'workflow-run report status must be one of "progress", "completed", or "failed".',
+        400,
+      );
+    }
+    const worker = verifyWorkerIdentity(run, normalized, await orchestrator.getWorkers());
+    const steps = clone(run.data.steps ?? []);
+    if (steps.length === 0) {
+      throw new WorkflowRunReportError(`Workflow run ${runId} has no steps.`, 409);
+    }
+
+    const stepIndex =
+      normalized.report.step_id != null
+        ? steps.findIndex((step) => step.step_id === normalized.report.step_id)
+        : Math.min(run.data.current_step_index ?? 0, steps.length - 1);
+    if (stepIndex < 0) {
+      throw new WorkflowRunReportError(
+        `Workflow run ${runId} does not contain step ${normalized.report.step_id}.`,
+        400,
+      );
+    }
+
+    const step = steps[stepIndex];
+    const reportedAt = nowIso();
+    const outputs = {
+      ...(step.outputs ?? {}),
+      ...(normalized.report.outputs ?? {}),
+    };
+    if (normalized.report.commit_sha) {
+      outputs.commit_sha = String(normalized.report.commit_sha).trim();
+    }
+
+    let nextRun = clone(run);
+    let nextSession = clone(session);
+    const callback = {
+      ...emptyCallbackState(normalizeRunnerConfig(await orchestrator.getConfig())),
+      ...(run.data.callback ?? {}),
+      status: status === 'failed' ? 'failed' : status === 'completed' ? 'completed' : 'active',
+      last_report_at: reportedAt,
+      last_worker_id: worker.id,
+      last_protocol: normalized.protocol,
+      last_error: null,
+      next_retry_at: null,
+      timeout_at:
+        status === 'completed' || status === 'failed'
+          ? null
+          : plusMs(reportedAt, run.data.callback?.report_timeout_ms ?? DEFAULT_RUNNER_CONFIG.report_timeout_ms),
+    };
+    const reportRecord = {
+      at: reportedAt,
+      status,
+      actor: normalized.report.actor ?? worker.display_name ?? worker.id,
+      step_id: steps[stepIndex]?.step_id ?? null,
+      note: normalized.report.note ?? null,
+      commit_sha:
+        normalized.report.commit_sha != null ? String(normalized.report.commit_sha).trim() : null,
+      worker_id: worker.id,
+      protocol: normalized.protocol,
+      authenticated: true,
+      outputs:
+        Object.keys(normalized.report.outputs ?? {}).length > 0
+          ? normalized.report.outputs
+          : null,
+    };
+
+    if (status === 'progress') {
+      steps[stepIndex] = {
+        ...step,
+        status: step.status === 'pending' ? 'running' : step.status,
+        started_at: step.started_at ?? reportedAt,
+        outputs,
+        notes: normalized.report.note ?? step.notes ?? null,
+      };
+      nextRun = appendRunReport({
+        ...nextRun,
+        data: {
+          ...nextRun.data,
+          callback,
+          current_step_index: stepIndex,
+          steps,
+        },
+      }, reportRecord);
+      nextRun = await writeWorkflowRun(nextRun, 'running');
+      nextSession = appendLog(nextSession, {
+        timestamp: reportedAt,
+        event: 'workflow_run_progress',
+        actor: worker.id,
+        detail: `Workflow run ${run.id} reported progress on step ${steps[stepIndex].step_id}.`,
+      });
+      return {
+        workflow_run: nextRun,
+        session: await writeSession(nextSession),
+        task,
+      };
+    }
+
+    if (status === 'failed') {
+      const failedTask = await taskExecution.fail(task.id, {
+        reason_code: 'workflow_failed',
+        note: normalized.report.note ?? 'Workflow execution failed.',
+      });
+      steps[stepIndex] = {
+        ...step,
+        status: 'failed',
+        started_at: step.started_at ?? reportedAt,
+        ended_at: reportedAt,
+        outputs,
+        notes: normalized.report.note ?? 'Workflow execution failed.',
+      };
+      nextRun = appendRunReport({
+        ...nextRun,
+        data: {
+          ...nextRun.data,
+          callback: {
+            ...callback,
+            last_error: normalized.report.note ?? 'Workflow execution failed.',
+          },
+          current_step_index: stepIndex,
+          steps,
+        },
+      }, {
+        ...reportRecord,
+        outputs: {
+          ...(reportRecord.outputs ?? {}),
+          replanning_status: failedTask.data.replanning?.status ?? null,
+        },
+      });
+      nextRun = await writeWorkflowRun(nextRun, 'failed');
+      nextSession = appendLog(nextSession, {
+        timestamp: reportedAt,
+        event: 'workflow_run_failed',
+        actor: worker.id,
+        detail: `Workflow run ${run.id} failed on step ${steps[stepIndex].step_id}; task ${failedTask.id} entered replanning.`,
+      });
+      const updatedSession = await writeSession(nextSession);
+      return {
+        workflow_run: nextRun,
+        session: await reconcileSession(updatedSession),
+        task: failedTask,
+      };
+    }
+
+    steps[stepIndex] = {
+      ...step,
+      status: 'completed',
+      started_at: step.started_at ?? reportedAt,
+      ended_at: reportedAt,
+      outputs,
+      notes: normalized.report.note ?? step.notes ?? null,
+    };
+
+    if (normalized.report.commit_sha) {
+      const finalizedTask = await taskExecution.finalize(task.id, {
+        commit_sha: String(normalized.report.commit_sha).trim(),
+        judge_agent_id: normalized.report.judge_agent_id,
+        note: normalized.report.note ?? null,
+      });
+      for (let index = stepIndex + 1; index < steps.length; index += 1) {
+        steps[index] = {
+          ...steps[index],
+          status: 'completed',
+          started_at: steps[index].started_at ?? reportedAt,
+          ended_at: reportedAt,
+          outputs: {
+            ...(steps[index].outputs ?? {}),
+            task_summary_path: finalizedTask.data.execution?.summary_path ?? null,
+            review_status: finalizedTask.data.execution?.review_status ?? null,
+          },
+          notes:
+            index === steps.length - 1
+              ? 'Runner finalized the task and handed it to the judge.'
+              : 'Completed by the runner after external execution finished.',
+        };
+      }
+
+      nextRun = appendRunReport({
+        ...nextRun,
+        data: {
+          ...nextRun.data,
+          callback,
+          current_step_index: Math.max(steps.length - 1, 0),
+          steps,
+        },
+      }, {
+        ...reportRecord,
+        outputs: {
+          ...(reportRecord.outputs ?? {}),
+          task_summary_path: finalizedTask.data.execution?.summary_path ?? null,
+          review_status: finalizedTask.data.execution?.review_status ?? null,
+        },
+      });
+      nextRun = await writeWorkflowRun(nextRun, finalizedTask.status === 'failed' ? 'failed' : 'completed');
+      nextSession = appendLog(nextSession, {
+        timestamp: reportedAt,
+        event: finalizedTask.status === 'failed' ? 'workflow_run_failed' : 'workflow_run_completed',
+        actor: worker.id,
+        detail:
+          finalizedTask.status === 'failed'
+            ? `Workflow run ${run.id} finished but task finalization failed for ${task.id}.`
+            : `Workflow run ${run.id} completed and task ${task.id} entered judgement.`,
+      });
+      const updatedSession = await writeSession(nextSession);
+      return {
+        workflow_run: nextRun,
+        session: await reconcileSession(updatedSession),
+        task: finalizedTask,
+      };
+    }
+
+    const nextStepIndex = stepIndex + 1;
+    if (nextStepIndex < steps.length) {
+      steps[nextStepIndex] = {
+        ...steps[nextStepIndex],
+        status: 'running',
+        started_at: steps[nextStepIndex].started_at ?? reportedAt,
+        outputs: {
+          ...(steps[nextStepIndex].outputs ?? {}),
+        },
+        notes: steps[nextStepIndex].notes ?? 'Started after the previous step completed.',
+      };
+      nextRun.data = {
+        ...nextRun.data,
+        callback,
+        current_step_index: nextStepIndex,
+        steps,
+      };
+      nextRun = appendRunReport(nextRun, reportRecord);
+      nextRun = await writeWorkflowRun(nextRun, 'running');
+    } else {
+      nextRun.data = {
+        ...nextRun.data,
+        callback,
+        current_step_index: stepIndex,
+        steps,
+      };
+      nextRun = appendRunReport(nextRun, reportRecord);
+      nextRun = await writeWorkflowRun(nextRun, 'completed');
+    }
+
+    nextSession = appendLog(nextSession, {
+      timestamp: reportedAt,
+      event: 'workflow_run_completed',
+      actor: worker.id,
+      detail: `Workflow run ${run.id} completed step ${steps[stepIndex].step_id}.`,
+    });
+    const updatedSession = await writeSession(nextSession);
+    return {
+      workflow_run: nextRun,
+      session: await reconcileSession(updatedSession),
+      task,
+    };
+  }
+
+  return {
+    tick,
+    reportWorkflowRun,
+    runnerDir,
+  };
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "started_at": "2026-04-12T19:20:46.802Z",
+  "backend_pid": 9187,
+  "frontend_pid": 9290,
+  "backend_url": "http://127.0.0.1:3100/api/orchestrator/workers",
+  "frontend_url": "http://127.0.0.1:4174/",
+  "frontend_proxy_url": "http://127.0.0.1:4174/api/orchestrator/workers",
+  "backend_log_path": "/Users/unka/DevSpace/dp-ring/.ring/runtime/backend.log",
+  "frontend_log_path": "/Users/unka/DevSpace/dp-ring/.ring/runtime/frontend.log",
+  "verified_at": "2026-04-12T19:20:47.866Z"
+}

@@ -1,0 +1,39 @@
+[
+  {
+    "id": "worker-agent",
+    "display_name": "Workflow Worker",
+    "role": "workflow-worker",
+    "description": "Executes workflow-run packets and reports native dp-ring status updates.",
+    "status": "active",
+    "callback_protocols": [
+      "ring.workflow-run-report.v1"
+    ],
+    "auth_schemes": [
+      "bearer+hmac-sha256"
+    ],
+    "capability_tags": [
+      "workflow-execution",
+      "git",
+      "callback"
+    ]
+  },
+  {
+    "id": "a2a-worker",
+    "display_name": "A2A Workflow Worker",
+    "role": "workflow-worker",
+    "description": "Executes workflow-run packets and reports A2A-style task status envelopes.",
+    "status": "active",
+    "callback_protocols": [
+      "a2a.task-status.v1",
+      "ring.workflow-run-report.v1"
+    ],
+    "auth_schemes": [
+      "bearer+hmac-sha256"
+    ],
+    "capability_tags": [
+      "workflow-execution",
+      "a2a",
+      "callback"
+    ]
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "id": "s1-step1-baseline",
+  "type": "session",
+  "version": 1,
+  "created_at": "2026-04-02T00:00:00Z",
+  "updated_at": "2026-04-02T12:00:00Z",
+  "created_by": "human",
+  "session_id": "s1-step1-baseline",
+  "status": "closed",
+  "data": {
+    "requirement_id": "r1-prototype-baseline",
+    "milestone_id": "r1m1-repository-and-docs-baseline",
+    "task_ids": ["t1-step1-baseline"],
+    "workflow_run_ids": [],
+    "evaluation_id": null,
+    "distillation_id": null,
+    "context_injected": {
+      "workflow_template": "wf-baseline-delivery",
+      "distillations_applied": [],
+      "registry_rank_at_selection": null
+    },
+    "execution_log": [
+      { "timestamp": "2026-04-02T00:00:00Z", "event": "status_transition", "from": "gate_pending", "to": "preparing", "actor": "human" },
+      { "timestamp": "2026-04-02T01:00:00Z", "event": "status_transition", "from": "preparing", "to": "executing", "actor": "human" },
+      { "timestamp": "2026-04-02T10:00:00Z", "event": "status_transition", "from": "executing", "to": "reviewing", "actor": "human" },
+      { "timestamp": "2026-04-02T11:00:00Z", "event": "status_transition", "from": "reviewing", "to": "closing", "actor": "human" },
+      { "timestamp": "2026-04-02T12:00:00Z", "event": "status_transition", "from": "closing", "to": "closed", "actor": "human" }
+    ]
+  }
+}

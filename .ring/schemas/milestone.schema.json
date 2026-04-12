@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "milestone.schema.json",
+  "title": "Milestone",
+  "description": "A milestone within a requirement, carrying machine-evaluable prerequisites and gate status.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id":         { "type": "string", "pattern": "^r\\d+m\\d+-" },
+    "type":       { "const": "milestone" },
+    "version":    { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "blocked", "satisfied", "archived"]
+    },
+    "data": {
+      "type": "object",
+      "required": ["name", "requirement_id", "description", "prerequisites"],
+      "additionalProperties": false,
+      "properties": {
+        "name":           { "type": "string", "minLength": 1 },
+        "requirement_id": { "type": "string" },
+        "description":    { "type": "string" },
+        "acceptance_checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "checked"],
+            "additionalProperties": false,
+            "properties": {
+              "id":          { "type": "string" },
+              "description": { "type": "string" },
+              "checked":     { "type": "boolean" }
+            }
+          },
+          "default": []
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "check_type", "check", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "id":          { "type": "string" },
+              "description": { "type": "string" },
+              "check_type":  { "type": "string", "enum": ["automated", "human", "reference"] },
+              "check": {
+                "type": "object",
+                "description": "Type-specific check definition. automated: {command, expect_exit_code}. human: {requires, approver_role}. reference: {artifact, field, equals}."
+              },
+              "status":       { "type": "string", "enum": ["satisfied", "unsatisfied", "unknown"] },
+              "last_checked": { "type": ["string", "null"], "format": "date-time" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "draft":     ["active"],
+      "active":    ["blocked", "satisfied"],
+      "blocked":   ["active"],
+      "satisfied": ["archived"],
+      "archived":  ["draft"]
+    }
+  }
+}
