@@ -1,0 +1,184 @@
+[
+  {
+    "id": "writer-agent",
+    "display_name": "Requirement Writer",
+    "role": "writer",
+    "description": "Turns a requirement into an auditable requirement document.",
+    "accepts": [
+      "requirement_to_document"
+    ],
+    "produces": [
+      "requirement_document"
+    ],
+    "capability_tags": [
+      "writing",
+      "requirements",
+      "handoff"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "auditor",
+    "display_name": "Requirement Auditor",
+    "role": "auditor",
+    "description": "Checks requirement documents for quality and next-step readiness.",
+    "accepts": [
+      "requirement_document_audit"
+    ],
+    "produces": [
+      "audit_verdict"
+    ],
+    "capability_tags": [
+      "audit",
+      "quality",
+      "gate"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "milestone-planner",
+    "display_name": "Milestone Planner",
+    "role": "planner",
+    "description": "Converts an approved requirement into milestone planning artifacts.",
+    "accepts": [
+      "requirement_to_milestones"
+    ],
+    "produces": [
+      "milestone_plan"
+    ],
+    "capability_tags": [
+      "planning",
+      "milestones",
+      "decomposition"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "prerequisite-preparer",
+    "display_name": "Prerequisite Preparer",
+    "role": "planner",
+    "description": "Splits milestone prerequisites into ready-now and blocked groups.",
+    "accepts": [
+      "milestones_to_prerequisites"
+    ],
+    "produces": [
+      "prerequisite_analysis"
+    ],
+    "capability_tags": [
+      "readiness",
+      "prerequisites",
+      "triage"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "task-dispatcher",
+    "display_name": "Task Dispatcher",
+    "role": "planner",
+    "description": "Produces the smallest dispatchable tasks from the current ready state.",
+    "accepts": [
+      "milestones_to_tasks"
+    ],
+    "produces": [
+      "task_dispatch_plan"
+    ],
+    "capability_tags": [
+      "tasks",
+      "decomposition",
+      "scope"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "workflow-architect",
+    "display_name": "Workflow Architect",
+    "role": "planner",
+    "description": "Assigns one reusable or custom workflow to each ready task.",
+    "accepts": [
+      "tasks_to_workflows"
+    ],
+    "produces": [
+      "workflow_assignment"
+    ],
+    "capability_tags": [
+      "workflow",
+      "reuse",
+      "templates"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/agent-report"
+  },
+  {
+    "id": "task-judge",
+    "display_name": "Task Judge",
+    "role": "judge",
+    "description": "Determines whether a finalized task is successful and merge-ready.",
+    "accepts": [
+      "task_completion_review"
+    ],
+    "produces": [
+      "task_review_verdict"
+    ],
+    "capability_tags": [
+      "judge",
+      "merge",
+      "quality"
+    ],
+    "callback_endpoint": "/api/task/:task_id/judge"
+  },
+  {
+    "id": "task-replanner",
+    "display_name": "Task Replanner",
+    "role": "planner",
+    "description": "Decides whether a failed task should be redispatched or terminated.",
+    "accepts": [
+      "task_replanning"
+    ],
+    "produces": [
+      "task_replan_verdict"
+    ],
+    "capability_tags": [
+      "replanning",
+      "recovery",
+      "scope"
+    ],
+    "callback_endpoint": "/api/task/:task_id/replan"
+  },
+  {
+    "id": "distiller",
+    "display_name": "Distiller",
+    "role": "distiller",
+    "description": "Turns failures and blocked work into feedback and reusable lessons.",
+    "accepts": [
+      "blocked_prerequisites",
+      "task_failure_summary"
+    ],
+    "produces": [
+      "feedback",
+      "distillation"
+    ],
+    "capability_tags": [
+      "distillation",
+      "feedback",
+      "learning"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/interventions"
+  },
+  {
+    "id": "dispatcher",
+    "display_name": "Batch Dispatcher",
+    "role": "dispatcher",
+    "description": "Launches every ready waiting task into one session batch.",
+    "accepts": [
+      "batch_session_launch"
+    ],
+    "produces": [
+      "session_dispatch"
+    ],
+    "capability_tags": [
+      "dispatch",
+      "session",
+      "batch"
+    ],
+    "callback_endpoint": "/api/orchestrator/jobs/:job_id/interventions"
+  }
+]

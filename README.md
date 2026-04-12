@@ -17,11 +17,12 @@ cli-tool/       Legacy CLI for doc/session naming conventions
 ```bash
 npm ci
 
-# Start the backend API server
-npm run ring:serve        # http://localhost:3100
+# Recommended: build, start backend + preview, then verify both health checks
+npm run stack:start       # frontend http://127.0.0.1:4174, backend http://127.0.0.1:3100
 
-# Start the frontend dev server (proxies /api to backend)
-npm run dev               # http://localhost:5173
+# Inspect or stop the managed services
+npm run stack:status
+npm run stack:stop
 ```
 
 ## Scripts
@@ -30,6 +31,10 @@ npm run dev               # http://localhost:5173
 |---|---|
 | `npm run dev` | Vite frontend dev server |
 | `npm run build` | Production build (outputs `dist/`) |
+| `npm run stack:start` | Build frontend, start backend + preview, and verify frontend/backend/proxy health |
+| `npm run stack:status` | Show managed service PIDs and current health |
+| `npm run stack:stop` | Stop the managed backend + preview services |
+| `npm run stack:restart` | Restart the managed backend + preview services |
 | `npm run ring:serve` | Ring REST API server (port 3100) |
 | `npm run ring -- <cmd>` | Ring CLI (create, read, list, update, validate, gate, rank, new-id, knowledge, context) |
 | `npm run typecheck` | `tsc --noEmit` |

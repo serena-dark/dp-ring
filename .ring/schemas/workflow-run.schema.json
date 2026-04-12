@@ -20,13 +20,94 @@
     },
     "data": {
       "type": "object",
-      "required": ["workflow_template_id", "workflow_template_version", "task_id", "steps", "current_step_index"],
+      "required": ["workflow_template_id", "workflow_template_version", "task_id", "steps", "current_step_index", "callback", "reports"],
       "additionalProperties": false,
       "properties": {
         "workflow_template_id":      { "type": "string" },
         "workflow_template_version": { "type": "integer", "minimum": 1 },
         "task_id":                   { "type": "string" },
         "current_step_index":        { "type": "integer", "minimum": 0 },
+        "callback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "auth_scheme",
+            "report_url",
+            "token",
+            "signing_secret",
+            "signature_algorithm",
+            "key_version",
+            "status",
+            "issued_at",
+            "prepared_at",
+            "last_report_at",
+            "last_retry_at",
+            "last_rotated_at",
+            "next_retry_at",
+            "report_timeout_ms",
+            "max_retries",
+            "retry_count",
+            "retry_backoff_ms",
+            "signature_ttl_ms",
+            "timeout_at",
+            "packet_path",
+            "allowed_worker_ids",
+            "accepted_protocols",
+            "last_worker_id",
+            "last_protocol",
+            "last_error"
+          ],
+          "properties": {
+            "auth_scheme": { "type": "string", "enum": ["bearer"] },
+            "report_url": { "type": ["string", "null"] },
+            "token": { "type": ["string", "null"] },
+            "signing_secret": { "type": ["string", "null"] },
+            "signature_algorithm": { "type": "string", "enum": ["hmac-sha256"] },
+            "key_version": { "type": "integer", "minimum": 1 },
+            "status": {
+              "type": "string",
+              "enum": ["pending", "active", "retry_scheduled", "completed", "failed", "timed_out"]
+            },
+            "issued_at": { "type": ["string", "null"], "format": "date-time" },
+            "prepared_at": { "type": ["string", "null"], "format": "date-time" },
+            "last_report_at": { "type": ["string", "null"], "format": "date-time" },
+            "last_retry_at": { "type": ["string", "null"], "format": "date-time" },
+            "last_rotated_at": { "type": ["string", "null"], "format": "date-time" },
+            "next_retry_at": { "type": ["string", "null"], "format": "date-time" },
+            "report_timeout_ms": { "type": "integer", "minimum": 1 },
+            "max_retries": { "type": "integer", "minimum": 0 },
+            "retry_count": { "type": "integer", "minimum": 0 },
+            "retry_backoff_ms": { "type": "integer", "minimum": 1 },
+            "signature_ttl_ms": { "type": "integer", "minimum": 1 },
+            "timeout_at": { "type": ["string", "null"], "format": "date-time" },
+            "packet_path": { "type": ["string", "null"] },
+            "allowed_worker_ids": { "type": "array", "items": { "type": "string" } },
+            "accepted_protocols": { "type": "array", "items": { "type": "string" } },
+            "last_worker_id": { "type": ["string", "null"] },
+            "last_protocol": { "type": ["string", "null"] },
+            "last_error": { "type": ["string", "null"] }
+          }
+        },
+        "reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at", "status", "actor", "authenticated"],
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "status": { "type": "string" },
+              "actor": { "type": "string" },
+              "step_id": { "type": ["string", "null"] },
+              "note": { "type": ["string", "null"] },
+              "commit_sha": { "type": ["string", "null"] },
+              "worker_id": { "type": ["string", "null"] },
+              "protocol": { "type": ["string", "null"] },
+              "authenticated": { "type": "boolean" },
+              "outputs": { "type": ["object", "null"] }
+            }
+          }
+        },
         "steps": {
           "type": "array",
           "items": {

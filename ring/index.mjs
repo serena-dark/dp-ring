@@ -24,6 +24,10 @@ import { join, resolve } from 'node:path';
 import { createValidator } from './lib/validator.mjs';
 import { createStore } from './lib/store.mjs';
 import { createRegistry } from './lib/registry.mjs';
+import { createOrchestrator } from './lib/orchestrator.mjs';
+import { createSessionRunner } from './lib/session-runner.mjs';
+import { createTaskExecution } from './lib/task-execution.mjs';
+import { createLoopbackRuntime } from './lib/loopback-runtime.mjs';
 import { checkTransition, validNextStatuses, extractStateMachine } from './lib/state-machine.mjs';
 import { computeComposite, buildEvaluation, computeEfficiency } from './lib/evaluator.mjs';
 import { generateId } from './lib/id.mjs';
@@ -150,6 +154,71 @@ export async function createRing(repoRoot) {
     };
   }
 
+  const orchestrator = await createOrchestrator(root, {
+    create,
+    read,
+    update,
+    list,
+    query,
+    store,
+    registry,
+    newId,
+    config,
+    repoRoot: root,
+    ringDir,
+  });
+  const taskExecution = createTaskExecution(
+    root,
+    {
+      create,
+      read,
+      update,
+      list,
+      query,
+      store,
+      registry,
+      newId,
+    },
+    () => orchestrator.getConfig(),
+  );
+  const sessionRunner = createSessionRunner(
+    root,
+    {
+      create,
+      read,
+      update,
+      list,
+      query,
+      store,
+      registry,
+      newId,
+    },
+    {
+      orchestrator,
+      taskExecution,
+    },
+  );
+  const loopbackRuntime = createLoopbackRuntime(
+    root,
+    {
+      create,
+      read,
+      update,
+      list,
+      query,
+      store,
+      registry,
+      newId,
+    },
+    {
+      orchestrator,
+      sessionRunner,
+      taskExecution,
+    },
+  );
+  orchestrator.registerTickHook(() => sessionRunner.tick());
+  orchestrator.registerTickHook(() => loopbackRuntime.tick());
+
   return {
     // Core CRUD
     create,
@@ -175,6 +244,18 @@ export async function createRing(repoRoot) {
 
     // Session context (agent startup)
     sessionContext,
+
+    // Dispatch center / scheduler
+    orchestrator,
+
+    // Task-level completion / judgement
+    taskExecution,
+
+    // Session execution runner
+    sessionRunner,
+
+    // Local automation / loopback runtime
+    loopbackRuntime,
 
     // ID generation
     newId,

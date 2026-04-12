@@ -28,6 +28,7 @@
       "properties": {
         "requirement_id":  { "type": "string" },
         "milestone_id":    { "type": "string" },
+        "milestone_ids":   { "type": "array", "items": { "type": "string" } },
         "task_ids":        { "type": "array", "items": { "type": "string" } },
         "workflow_run_ids": { "type": "array", "items": { "type": "string" } },
         "evaluation_id":   { "type": ["string", "null"] },

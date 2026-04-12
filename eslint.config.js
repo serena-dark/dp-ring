@@ -27,7 +27,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["ring/**/*.mjs", "tests/**/*.mjs"],
+    files: ["ring/**/*.mjs", "tests/**/*.mjs", "scripts/**/*.mjs"],
     languageOptions: {
       globals: globals.node,
     },

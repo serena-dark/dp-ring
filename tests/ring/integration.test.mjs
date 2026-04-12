@@ -27,6 +27,11 @@ describe('Ring integration', async () => {
       JSON.stringify({ updated_at: '2026-04-08T00:00:00Z', rankings: {} }));
 
     ring = await createRing(tempDir);
+    await ring.orchestrator.updateConfig({
+      automation: {
+        enabled: false,
+      },
+    });
   });
 
   after(async () => {
@@ -106,6 +111,12 @@ describe('Ring integration', async () => {
         requirement_id: 'r1-integration-test',
         milestone_id: 'r1m1-integration-ms',
         workflow_template_id: 'wf-integration-test',
+        scope: {
+          target_type: 'module',
+          target_path: 'tests/ring',
+          repo_root: '.',
+          file_paths: ['tests/ring/integration.test.mjs'],
+        },
         acceptance_criteria: [
           { id: 'ac1', description: 'Lifecycle completes', satisfied: false },
         ],

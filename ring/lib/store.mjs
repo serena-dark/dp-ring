@@ -179,6 +179,24 @@ export function createStore(ringDir, validator, config) {
       updated.data = { ...existing.data, ...patch.data };
     }
 
+    if (
+      type === 'task' &&
+      patch.status === 'completed' &&
+      updated.data?.execution &&
+      updated.data.execution.review_status !== 'approved'
+    ) {
+      return {
+        ok: false,
+        artifact: null,
+        errors: [
+          {
+            message:
+              'Tasks with an execution contract can only complete after the judge agent approves them.',
+          },
+        ],
+      };
+    }
+
     const result = await write(type, updated, { previousStatus });
     return result.ok
       ? { ok: true, artifact: updated, errors: null }

@@ -1,0 +1,47 @@
+{
+  "schema_version": 4,
+  "message_protocol_version": "ring.orchestrator.v1",
+  "poll_interval_ms": 30000,
+  "document_idle_threshold_ms": 120000,
+  "writer_agent_id": "writer-agent",
+  "auditor_agent_id": "auditor",
+  "milestone_planner_agent_id": "milestone-planner",
+  "prerequisite_preparer_agent_id": "prerequisite-preparer",
+  "task_dispatcher_agent_id": "task-dispatcher",
+  "workflow_designer_agent_id": "workflow-architect",
+  "task_judge_agent_id": "task-judge",
+  "task_replanner_agent_id": "task-replanner",
+  "distiller_agent_id": "distiller",
+  "document_output_dir": "docs/generated",
+  "milestone_output_dir": "docs/milestones",
+  "prerequisite_output_dir": "docs/prerequisites",
+  "task_dispatch_output_dir": "docs/tasks/plans",
+  "workflow_output_dir": "docs/workflows/plans",
+  "task_summary_output_dir": "docs/tasks/reviews",
+  "followup_output_dir": "docs/followups",
+  "session_runner": {
+    "report_timeout_ms": 120000,
+    "max_report_retries": 2,
+    "retry_backoff_ms": 30000,
+    "signature_ttl_ms": 300000
+  },
+  "automation": {
+    "enabled": true,
+    "loopback_agents": true,
+    "loopback_worker": true,
+    "auto_judge": true,
+    "auto_replan": true,
+    "max_replan_depth": 1,
+    "worker_id": "worker-agent",
+    "judge_agent_id": "task-judge",
+    "replanner_agent_id": "task-replanner",
+    "commit_message_prefix": "ring auto",
+    "default_callback_protocol": "ring.workflow-run-report.v1"
+  },
+  "auditor": {
+    "min_character_count": 240,
+    "require_heading": true,
+    "require_subsection": true,
+    "require_list": true
+  }
+}
