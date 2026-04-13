@@ -71,13 +71,12 @@ export default function RequirementDetail({ id }: { id: string }) {
       loading={loading}
       error={error}
       empty={!requirement}
-      emptyMessage={`Requirement ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {requirement ? (
         <div className="page">
           <section className="page-hero">
             <div>
-              <p className="eyebrow">Requirement</p>
               <h3>{requirement.data.name}</h3>
               <div className="badge-list">
                 <StatusBadge value={requirement.status} />
@@ -96,10 +95,7 @@ export default function RequirementDetail({ id }: { id: string }) {
             <div className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Description</p>
-                    <h3>Scope and intent</h3>
-                  </div>
+                  <h3>Summary</h3>
                 </div>
                 <p>{requirement.data.description}</p>
                 <div className="divider" />
@@ -125,10 +121,7 @@ export default function RequirementDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Acceptance</p>
-                    <h3>Criteria</h3>
-                  </div>
+                  <h3>Acceptance</h3>
                 </div>
                 <div className="panel-grid">
                   {requirement.data.acceptance_criteria.map((criterion) => (
@@ -147,10 +140,7 @@ export default function RequirementDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Milestones</p>
-                    <h3>Gate-driven delivery</h3>
-                  </div>
+                  <h3>Milestones</h3>
                 </div>
                 <div className="panel-grid">
                   {linkedMilestones.length > 0 ? (
@@ -184,7 +174,7 @@ export default function RequirementDetail({ id }: { id: string }) {
 
                           <div className="divider" />
 
-                          <p className="eyebrow">Prerequisites</p>
+                          <strong>Prerequisites</strong>
                           <div className="panel-grid">
                             {milestone.data.prerequisites.map((prerequisite) => (
                               <div key={prerequisite.id} className="panel">
@@ -209,7 +199,7 @@ export default function RequirementDetail({ id }: { id: string }) {
                             >
                               {gatePendingId === milestone.id
                                 ? "Checking..."
-                                : "Check Gate"}
+                                : "Gate"}
                             </button>
                           </div>
 
@@ -266,10 +256,7 @@ export default function RequirementDetail({ id }: { id: string }) {
             <aside className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Tasks</p>
-                    <h3>Execution units</h3>
-                  </div>
+                  <h3>Tasks</h3>
                 </div>
                 {linkedTasks.length > 0 ? (
                   <div className="panel-grid">

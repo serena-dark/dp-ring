@@ -33,6 +33,9 @@ import type {
   OrchestratorJob,
   OrchestratorTickResult,
   ServiceStackStatus,
+  UiConfig,
+  UiConfigPatch,
+  UiThemeTemplate,
   AdaptiveBundleEnvelope,
   DispatchBundleRecord,
   DispatchProtocolDescriptor,
@@ -332,6 +335,17 @@ export function getKnowledge(
 export const runtime = {
   services: {
     read: () => get<ServiceStackStatus>(`${BASE}/runtime/services`),
+  },
+};
+
+export const ui = {
+  config: {
+    read: () => get<UiConfig>(`${BASE}/ui/config`),
+    update: (patchBody: UiConfigPatch) =>
+      patch<UiConfig>(`${BASE}/ui/config`, patchBody),
+  },
+  themes: {
+    list: () => get<UiThemeTemplate[]>(`${BASE}/ui/themes`),
   },
 };
 

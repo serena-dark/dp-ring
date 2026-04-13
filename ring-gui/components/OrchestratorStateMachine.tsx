@@ -159,7 +159,6 @@ export function OrchestratorStateMachine({
     return (
       <article className="panel state-panel">
         <h3>State machine</h3>
-        <p className="subtle">No job selected.</p>
       </article>
     );
   }

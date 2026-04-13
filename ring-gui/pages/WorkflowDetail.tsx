@@ -37,13 +37,12 @@ export default function WorkflowDetail({ id }: { id: string }) {
       loading={workflowState.loading}
       error={workflowState.error}
       empty={!workflow}
-      emptyMessage={`Workflow ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {workflow ? (
         <div className="page">
           <section className="page-hero">
             <div>
-              <p className="eyebrow">Workflow</p>
               <h3>{workflow.data.name}</h3>
               <div className="badge-list">
                 <StatusBadge value={workflow.status} />
@@ -64,10 +63,7 @@ export default function WorkflowDetail({ id }: { id: string }) {
             <div className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Description</p>
-                    <h3>Template purpose</h3>
-                  </div>
+                  <h3>Summary</h3>
                 </div>
                 <p>{workflow.data.description}</p>
                 <div className="divider" />
@@ -98,10 +94,7 @@ export default function WorkflowDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Steps</p>
-                    <h3>Workflow definition</h3>
-                  </div>
+                  <h3>Steps</h3>
                 </div>
                 <div className="panel-grid">
                   {workflow.data.steps.map((step) => (
@@ -132,10 +125,7 @@ export default function WorkflowDetail({ id }: { id: string }) {
             <aside className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Quality history</p>
-                    <h3>Recent scores</h3>
-                  </div>
+                  <h3>Scores</h3>
                 </div>
                 {workflow.data.quality_history?.recent_scores?.length ? (
                   <div className="score-stack">

@@ -229,6 +229,20 @@ async function handler(req, res) {
       return err(res, 404, 'Not found');
     }
 
+    if (parts[0] === 'ui') {
+      if (parts[1] === 'config' && req.method === 'GET') {
+        return ok(res, await ring.ui.getConfig());
+      }
+      if (parts[1] === 'config' && req.method === 'PATCH') {
+        const body = await readBody(req);
+        return ok(res, await ring.ui.updateConfig(body ?? {}));
+      }
+      if (parts[1] === 'themes' && req.method === 'GET') {
+        return ok(res, await ring.ui.getThemes());
+      }
+      return err(res, 404, 'Not found');
+    }
+
     if (parts[0] === 'dispatch') {
       if (parts[1] === 'protocols' && req.method === 'GET') {
         return ok(res, await ring.orchestrator.getDispatchProtocols());

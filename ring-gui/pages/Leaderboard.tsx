@@ -51,21 +51,29 @@ export default function Leaderboard() {
     <div className="page">
       <section className="panel">
         <div className="panel-header">
-          <h3>Leaderboard</h3>
-          <div className="search-row">
-            <select
-              value={activeTaskType}
-              onChange={(event) => setSelectedTaskType(event.target.value)}
+          <h3>Ranking</h3>
+          <div className="panel-header-actions">
+            <AppLink
+              to="/workflows"
+              className="button button-ghost button-small"
             >
-              {knownTaskTypes.length === 0 ? (
-                <option value="">No task types yet</option>
-              ) : null}
-              {knownTaskTypes.map((item) => (
-                <option key={item} value={item}>
-                  {titleize(item)}
-                </option>
-              ))}
-            </select>
+              Workflows
+            </AppLink>
+            <div className="search-row">
+              <select
+                value={activeTaskType}
+                onChange={(event) => setSelectedTaskType(event.target.value)}
+              >
+                {knownTaskTypes.length === 0 ? (
+                  <option value="">No task types yet</option>
+                ) : null}
+                {knownTaskTypes.map((item) => (
+                  <option key={item} value={item}>
+                    {titleize(item)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

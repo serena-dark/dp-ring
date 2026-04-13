@@ -1,46 +1,76 @@
+import type { ComponentType } from "react";
+import {
+  IconBook2,
+  IconClockPlay,
+  IconFileDescription,
+  IconLayoutDashboard,
+  IconMessage2Exclamation,
+  IconRoute,
+  IconSettings,
+} from "@tabler/icons-react";
 import type { ArtifactType } from "@ring-gui/types/api";
 
 export interface NavItem {
   label: string;
   path: string;
+  depth?: number;
+  icon?: ComponentType<{
+    size?: number | string;
+    stroke?: number | string;
+    className?: string;
+  }>;
 }
 
 export const NAV_ITEMS: NavItem[] = [
   {
     label: "Dashboard",
     path: "/",
-  },
-  {
-    label: "Dispatcher",
-    path: "/dispatcher",
-  },
-  {
-    label: "Sessions",
-    path: "/sessions",
+    icon: IconLayoutDashboard,
   },
   {
     label: "Requirements",
     path: "/requirements",
+    icon: IconFileDescription,
+  },
+  {
+    label: "Sessions",
+    path: "/sessions",
+    icon: IconClockPlay,
+  },
+  {
+    label: "Dispatcher",
+    path: "/dispatcher",
+    depth: 1,
   },
   {
     label: "Tasks",
     path: "/tasks",
+    depth: 1,
   },
   {
-    label: "Workflows",
+    label: "Workflow",
     path: "/workflows",
+    icon: IconRoute,
   },
   {
-    label: "Leaderboard",
-    path: "/leaderboard",
+    label: "Ranking",
+    path: "/workflows/rankings",
+    depth: 1,
   },
   {
     label: "Knowledge",
     path: "/knowledge",
+    icon: IconBook2,
   },
   {
     label: "Feedback",
     path: "/feedback",
+    icon: IconMessage2Exclamation,
+  },
+  {
+    label: "Settings",
+    path: "/settings",
+    icon: IconSettings,
   },
 ];
 
@@ -54,10 +84,11 @@ export type RouteKey =
   | "tasks"
   | "task-detail"
   | "workflows"
+  | "workflow-rankings"
   | "workflow-detail"
-  | "leaderboard"
   | "knowledge"
-  | "feedback";
+  | "feedback"
+  | "settings";
 
 interface RouteDefinition {
   key: RouteKey;
@@ -86,13 +117,18 @@ const ROUTES: RouteDefinition[] = [
   { key: "task-detail", title: "Task Detail", pattern: "/tasks/:id" },
   { key: "workflows", title: "Workflows", pattern: "/workflows" },
   {
+    key: "workflow-rankings",
+    title: "Workflow Ranking",
+    pattern: "/workflows/rankings",
+  },
+  {
     key: "workflow-detail",
     title: "Workflow Detail",
     pattern: "/workflows/:id",
   },
-  { key: "leaderboard", title: "Leaderboard", pattern: "/leaderboard" },
   { key: "knowledge", title: "Knowledge Base", pattern: "/knowledge" },
   { key: "feedback", title: "Feedback", pattern: "/feedback" },
+  { key: "settings", title: "Settings", pattern: "/settings" },
 ];
 
 export function cleanPath(pathname: string): string {

@@ -176,13 +176,12 @@ export default function TaskDetail({ id }: { id: string }) {
       loading={loading}
       error={error}
       empty={!task}
-      emptyMessage={`Task ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {task ? (
         <div className="page">
           <section className="page-hero">
             <div>
-              <p className="eyebrow">Task</p>
               <h3>{task.data.name}</h3>
               <div className="badge-list">
                 <StatusBadge value={task.status} />
@@ -201,10 +200,7 @@ export default function TaskDetail({ id }: { id: string }) {
             <div className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Description</p>
-                    <h3>Task scope</h3>
-                  </div>
+                  <h3>Summary</h3>
                 </div>
                 <p>{task.data.description}</p>
                 <div className="divider" />
@@ -253,10 +249,7 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Execution Contract</p>
-                    <h3>Bound scope and completion pipeline</h3>
-                  </div>
+                  <h3>Execution</h3>
                 </div>
                 <div className="detail-grid">
                   <div className="detail-item">
@@ -317,7 +310,7 @@ export default function TaskDetail({ id }: { id: string }) {
                 {scope ? (
                   <>
                     <div className="divider" />
-                    <p className="subtle">Bound file contract</p>
+                    <strong>Files</strong>
                     <div className="panel-grid">
                       {scope.file_paths.map((path) => (
                         <div key={path} className="panel">
@@ -327,12 +320,12 @@ export default function TaskDetail({ id }: { id: string }) {
                     </div>
                   </>
                 ) : (
-                  <p className="empty-line">This task does not yet declare a file scope.</p>
+                  <p className="empty-line">No scope.</p>
                 )}
                 {execution?.changed_files?.length ? (
                   <>
                     <div className="divider" />
-                    <p className="subtle">Observed changed files</p>
+                    <strong>Changed files</strong>
                     <div className="panel-grid">
                       {execution.changed_files.map((path) => (
                         <div key={path} className="panel">
@@ -358,10 +351,7 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Acceptance</p>
-                    <h3>Criteria</h3>
-                  </div>
+                  <h3>Acceptance</h3>
                 </div>
                 <div className="panel-grid">
                   {task.data.acceptance_criteria.map((criterion) => (
@@ -380,10 +370,7 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Workflow execution</p>
-                    <h3>Template and run state</h3>
-                  </div>
+                  <h3>Workflow</h3>
                 </div>
                 {workflowRun ? (
                   <div className="panel-grid">
@@ -397,7 +384,7 @@ export default function TaskDetail({ id }: { id: string }) {
                           {formatDateTime(step.started_at)} to{" "}
                           {formatDateTime(step.ended_at)}
                         </p>
-                        <p>{step.notes ?? "No notes recorded."}</p>
+                        <p>{step.notes ?? "No notes."}</p>
                       </div>
                     ))}
                   </div>
@@ -420,10 +407,7 @@ export default function TaskDetail({ id }: { id: string }) {
             <aside className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Task Finalization</p>
-                    <h3>Git verification and agent judgement</h3>
-                  </div>
+                  <h3>Finalize</h3>
                 </div>
                 <div className="field-grid">
                   <div className="field">
@@ -463,7 +447,7 @@ export default function TaskDetail({ id }: { id: string }) {
                       void finalizeTask();
                     }}
                   >
-                    {taskAction === "finalize" ? "Verifying..." : "Finalize Task"}
+                    {taskAction === "finalize" ? "Verifying..." : "Finalize"}
                   </button>
                   <button
                     type="button"
@@ -476,7 +460,7 @@ export default function TaskDetail({ id }: { id: string }) {
                       void judgeTask("approved");
                     }}
                   >
-                    {taskAction === "approved" ? "Approving..." : "Judge Approve"}
+                    {taskAction === "approved" ? "Approving..." : "Approve"}
                   </button>
                   <button
                     type="button"
@@ -489,13 +473,13 @@ export default function TaskDetail({ id }: { id: string }) {
                       void judgeTask("rejected");
                     }}
                   >
-                    {taskAction === "rejected" ? "Rejecting..." : "Judge Reject"}
+                    {taskAction === "rejected" ? "Rejecting..." : "Reject"}
                   </button>
                 </div>
                 {execution?.review_packet ? (
                   <>
                     <div className="divider" />
-                    <p className="eyebrow">Judge packet</p>
+                    <strong>Judge packet</strong>
                     <strong>{execution.review_packet.subject}</strong>
                     <p className="subtle">
                       Sent {formatDateTime(execution.review_packet.dispatched_at)} to{" "}
@@ -508,10 +492,7 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Task Replanning</p>
-                    <h3>Decide whether failure becomes a new task</h3>
-                  </div>
+                  <h3>Replan</h3>
                 </div>
                 <div className="detail-grid">
                   <div className="detail-item">
@@ -624,7 +605,7 @@ export default function TaskDetail({ id }: { id: string }) {
                       void replanTask("redispatch");
                     }}
                   >
-                    {taskAction === "redispatch" ? "Redispatching..." : "Redispatch Task"}
+                    {taskAction === "redispatch" ? "Redispatching..." : "Redispatch"}
                   </button>
                   <button
                     type="button"
@@ -638,13 +619,13 @@ export default function TaskDetail({ id }: { id: string }) {
                       void replanTask("terminal");
                     }}
                   >
-                    {taskAction === "terminal" ? "Marking..." : "Mark Terminal"}
+                    {taskAction === "terminal" ? "Marking..." : "Terminal"}
                   </button>
                 </div>
                 {replanning?.packet ? (
                   <>
                     <div className="divider" />
-                    <p className="eyebrow">Replanner packet</p>
+                    <strong>Replanner packet</strong>
                     <strong>{replanning.packet.subject}</strong>
                     <p className="subtle">
                       Sent {formatDateTime(replanning.packet.dispatched_at)} to{" "}
@@ -657,14 +638,11 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Links</p>
-                    <h3>Related records</h3>
-                  </div>
+                  <h3>Links</h3>
                 </div>
                 <div className="panel-grid">
                   <div className="panel">
-                    <p className="eyebrow">Requirement</p>
+                    <strong>Requirement</strong>
                     {requirement ? (
                       <AppLink
                         to={`/requirements/${requirement.id}`}
@@ -677,12 +655,12 @@ export default function TaskDetail({ id }: { id: string }) {
                     )}
                   </div>
                   <div className="panel">
-                    <p className="eyebrow">Milestone</p>
+                    <strong>Milestone</strong>
                     <p>{milestone?.data.name ?? task.data.milestone_id}</p>
                     <p className="subtle">{milestone?.id ?? ""}</p>
                   </div>
                   <div className="panel">
-                    <p className="eyebrow">Workflow template</p>
+                    <strong>Workflow template</strong>
                     {workflow ? (
                       <AppLink
                         to={`/workflows/${workflow.id}`}
@@ -691,21 +669,21 @@ export default function TaskDetail({ id }: { id: string }) {
                         {workflow.data.name}
                       </AppLink>
                     ) : (
-                      <p className="empty-line">No explicit template selected.</p>
+                      <p className="empty-line">None.</p>
                     )}
                   </div>
                   <div className="panel">
-                    <p className="eyebrow">Failure feedback</p>
+                    <strong>Failure feedback</strong>
                     <p>{execution?.failure_feedback_id ?? "--"}</p>
                     <p className="subtle">{execution?.failure_distillation_id ?? ""}</p>
                   </div>
                   <div className="panel">
-                    <p className="eyebrow">Replanning chain</p>
+                    <strong>Replanning chain</strong>
                     <p>{replanning?.parent_task_id ?? "--"}</p>
                     <p className="subtle">{replanning?.successor_task_id ?? ""}</p>
                   </div>
                   <div className="panel">
-                    <p className="eyebrow">Success distillation</p>
+                    <strong>Success distillation</strong>
                     <p>{execution?.completion_distillation_id ?? "--"}</p>
                     <p className="subtle">{execution?.summary_path ?? ""}</p>
                   </div>
@@ -714,10 +692,7 @@ export default function TaskDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Compatible templates</p>
-                    <h3>Registry candidates</h3>
-                  </div>
+                  <h3>Templates</h3>
                 </div>
                 {compatibleWorkflows.length > 0 ? (
                   <div className="panel-grid">
@@ -733,9 +708,7 @@ export default function TaskDetail({ id }: { id: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="empty-line">
-                    No workflow currently advertises support for this task type.
-                  </p>
+                  <p className="empty-line">No templates.</p>
                 )}
               </article>
             </aside>

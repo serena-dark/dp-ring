@@ -155,55 +155,61 @@ export default function Dashboard() {
           </article>
         </section>
 
-        <section className="split-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Recent sessions</h3>
-              <AppLink to="/sessions" className="button button-ghost button-small">
-                All
-              </AppLink>
-            </div>
+        <article className="panel">
+          <div className="panel-header">
+            <h3>Recent sessions</h3>
+            <AppLink to="/sessions" className="button button-ghost button-small">
+              All
+            </AppLink>
+          </div>
 
-            {recentSessions.length > 0 ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Status</th>
-                      <th>Requirement</th>
-                      <th>Updated</th>
+          {recentSessions.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Status</th>
+                    <th>Requirement</th>
+                    <th>Updated</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentSessions.map((session) => (
+                    <tr key={session.id}>
+                      <td>
+                        <AppLink
+                          to={`/sessions/${session.id}`}
+                          className="record-link"
+                        >
+                          {session.id}
+                        </AppLink>
+                      </td>
+                      <td>
+                        <StatusBadge value={session.status} />
+                      </td>
+                      <td>{session.data.requirement_id}</td>
+                      <td>{formatDateTime(session.updated_at)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {recentSessions.map((session) => (
-                      <tr key={session.id}>
-                        <td>
-                          <AppLink
-                            to={`/sessions/${session.id}`}
-                            className="record-link"
-                          >
-                            {session.id}
-                          </AppLink>
-                        </td>
-                        <td>
-                          <StatusBadge value={session.status} />
-                        </td>
-                        <td>{session.data.requirement_id}</td>
-                        <td>{formatDateTime(session.updated_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="empty-line">No sessions.</p>
-            )}
-          </article>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="empty-line">No sessions.</p>
+          )}
+        </article>
 
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Ring health</h3>
+        <article className="panel">
+          <div className="panel-header">
+            <h3>Ring health</h3>
+            <div className="panel-header-actions">
+              <StatusBadge
+                value={
+                  serviceStack?.overall_status ??
+                  (serviceStackState.loading ? "unmanaged" : "offline")
+                }
+              />
               <button
                 type="button"
                 className="button button-ghost button-small icon-button service-refresh-button"
@@ -225,63 +231,51 @@ export default function Dashboard() {
                 </svg>
               </button>
             </div>
+          </div>
 
-            <section className="service-status-card">
-              <div className="service-status-header">
-                <div>
-                  <h3>Health</h3>
-                </div>
-                <StatusBadge
-                  value={
-                    serviceStack?.overall_status ??
-                    (serviceStackState.loading ? "unmanaged" : "offline")
-                  }
-                />
-              </div>
-
-              {serviceStackState.error ? (
-                <p className="empty-line">
-                  {serviceStackState.error}
-                </p>
-              ) : (
-                <>
-                  <div className="service-status-grid">
-                    {serviceChecks.map((service) => (
-                      <div key={service.label} className="service-status-item">
-                        <div className="service-status-title">
-                          <strong>{service.label}</strong>
-                          <StatusBadge value={service.status} />
-                        </div>
-                        <code className="service-endpoint">
-                          {service.endpoint}
-                        </code>
-                        <div className="service-status-footer">
-                          {service.extra ? (
-                            <p className="subtle">{service.extra}</p>
-                          ) : (
-                            <span />
-                          )}
-                          <a
-                            href={service.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="button button-ghost button-small service-status-button"
-                          >
-                            Open
-                          </a>
-                        </div>
+          <section className="service-status-card">
+            {serviceStackState.error ? (
+              <p className="empty-line">
+                {serviceStackState.error}
+              </p>
+            ) : (
+              <>
+                <div className="service-status-grid">
+                  {serviceChecks.map((service) => (
+                    <div key={service.label} className="service-status-item">
+                      <div className="service-status-title">
+                        <strong>{service.label}</strong>
+                        <StatusBadge value={service.status} />
                       </div>
-                    ))}
-                  </div>
+                      <code className="service-endpoint">
+                        {service.endpoint}
+                      </code>
+                      <div className="service-status-footer">
+                        {service.extra ? (
+                          <p className="subtle">{service.extra}</p>
+                        ) : (
+                          <span />
+                        )}
+                        <a
+                          href={service.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="button button-ghost button-small service-status-button"
+                        >
+                          Open
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                  <p className="subtle service-status-summary">
-                    Updated {formatUpdatedTimestamp(serviceStack?.verified_at)}
-                  </p>
-                </>
-              )}
-            </section>
-          </article>
-        </section>
+                <p className="subtle service-status-summary">
+                  Updated {formatUpdatedTimestamp(serviceStack?.verified_at)}
+                </p>
+              </>
+            )}
+          </section>
+        </article>
       </DataState>
     </div>
   );

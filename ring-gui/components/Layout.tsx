@@ -19,11 +19,23 @@ export function Layout({
         </div>
 
         <nav className="nav-list" aria-label="Primary navigation">
-          {NAV_ITEMS.map((item) => (
-            <AppLink key={item.path} to={item.path} className="nav-link">
-              <strong>{item.label}</strong>
-            </AppLink>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <AppLink
+                key={item.path}
+                to={item.path}
+                className={`nav-link${item.depth ? ` nav-link-depth-${item.depth}` : ""}`}
+              >
+                {Icon ? (
+                  <span className="nav-icon" aria-hidden="true">
+                    <Icon size={18} stroke={1.8} />
+                  </span>
+                ) : null}
+                <strong>{item.label}</strong>
+              </AppLink>
+            );
+          })}
         </nav>
       </aside>
 

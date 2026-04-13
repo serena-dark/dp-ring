@@ -31,7 +31,7 @@ export function StateActions({
         >
           {pendingStatus === nextStatus
             ? "Updating..."
-            : `Move to ${titleize(nextStatus)}`}
+            : titleize(nextStatus)}
         </button>
       ))}
     </div>

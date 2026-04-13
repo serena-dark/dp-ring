@@ -26,18 +26,26 @@ export default function WorkflowList() {
       <section className="panel">
         <div className="panel-header">
           <h3>Workflows</h3>
-          <div className="search-row">
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+          <div className="panel-header-actions">
+            <AppLink
+              to="/workflows/rankings"
+              className="button button-ghost button-small"
             >
-              <option value="">All statuses</option>
-              {workflowStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {titleize(status)}
-                </option>
-              ))}
-            </select>
+              Ranking
+            </AppLink>
+            <div className="search-row">
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="">All statuses</option>
+                {workflowStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {titleize(status)}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

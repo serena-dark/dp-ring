@@ -130,13 +130,12 @@ export default function SessionDetail({ id }: { id: string }) {
       loading={loading}
       error={error}
       empty={!session}
-      emptyMessage={`Session ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {session ? (
         <div className="page">
           <section className="page-hero">
             <div>
-              <p className="eyebrow">Session</p>
               <h3>{session.id}</h3>
               <div className="badge-list">
                 <StatusBadge value={session.status} />
@@ -154,10 +153,7 @@ export default function SessionDetail({ id }: { id: string }) {
             <div className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Overview</p>
-                    <h3>Execution summary</h3>
-                  </div>
+                  <h3>Summary</h3>
                 </div>
                 <div className="detail-grid">
                   <div className="detail-item">
@@ -204,10 +200,7 @@ export default function SessionDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Timeline</p>
-                    <h3>Execution log</h3>
-                  </div>
+                  <h3>Timeline</h3>
                 </div>
                 <TimelineLog entries={session.data.execution_log} />
               </article>
@@ -216,10 +209,7 @@ export default function SessionDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Distillation</p>
-                    <h3>Knowledge extracted</h3>
-                  </div>
+                  <h3>Distillation</h3>
                 </div>
                 {distillationState.data ? (
                   <div className="panel-grid">
@@ -245,9 +235,7 @@ export default function SessionDetail({ id }: { id: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="subtle">
-                    No distillation artifact is linked to this session.
-                  </p>
+                  <p className="subtle">No distillation.</p>
                 )}
               </article>
             </div>
@@ -255,10 +243,7 @@ export default function SessionDetail({ id }: { id: string }) {
             <aside className="page">
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Context injected</p>
-                    <h3>Selection inputs</h3>
-                  </div>
+                  <h3>Context</h3>
                 </div>
                 <div className="detail-grid">
                   <div className="detail-item">
@@ -299,14 +284,11 @@ export default function SessionDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Links</p>
-                    <h3>Related records</h3>
-                  </div>
+                  <h3>Links</h3>
                 </div>
                 <div className="panel-grid">
                   <div className="panel">
-                    <p className="eyebrow">Tasks</p>
+                    <strong>Tasks</strong>
                     {linkedTasks.length > 0 ? (
                       <div className="inline-list">
                         {linkedTasks.map((task) => (
@@ -320,12 +302,12 @@ export default function SessionDetail({ id }: { id: string }) {
                         ))}
                       </div>
                     ) : (
-                      <p className="empty-line">No linked tasks.</p>
+                      <p className="empty-line">No tasks.</p>
                     )}
                   </div>
 
                   <div className="panel">
-                    <p className="eyebrow">Workflow runs</p>
+                    <strong>Workflow runs</strong>
                     {linkedWorkflowRuns.length > 0 ? (
                       linkedWorkflowRuns.map((run) => (
                         <div key={run.id}>
@@ -337,7 +319,7 @@ export default function SessionDetail({ id }: { id: string }) {
                         </div>
                       ))
                     ) : (
-                      <p className="empty-line">No workflow runs attached.</p>
+                      <p className="empty-line">No runs.</p>
                     )}
                   </div>
                 </div>
@@ -345,17 +327,14 @@ export default function SessionDetail({ id }: { id: string }) {
 
               <article className="panel">
                 <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Agent startup</p>
-                    <h3>Context bundle</h3>
-                  </div>
+                  <h3>Bundle</h3>
                   <button
                     type="button"
                     className="button button-secondary button-small"
                     onClick={loadContext}
                     disabled={contextLoading}
                   >
-                    {contextLoading ? "Loading..." : "Get Agent Context"}
+                    {contextLoading ? "Loading..." : "Load"}
                   </button>
                 </div>
                 {contextError ? (
@@ -366,20 +345,14 @@ export default function SessionDetail({ id }: { id: string }) {
                 {contextJson ? (
                   <pre className="code-block">{contextJson}</pre>
                 ) : (
-                  <p className="subtle">
-                    Fetches the full startup bundle including tasks, workflow
-                    templates, knowledge items, and blocking feedback.
-                  </p>
+                  <p className="subtle">No bundle.</p>
                 )}
               </article>
 
               {linkedWorkflowRuns.length > 0 ? (
                 <article className="panel">
                   <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Workflow run detail</p>
-                      <h3>Step progress</h3>
-                    </div>
+                    <h3>Run detail</h3>
                   </div>
                   <div className="panel-grid">
                     {linkedWorkflowRuns.map((run) => (

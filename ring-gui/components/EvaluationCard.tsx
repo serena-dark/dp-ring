@@ -13,7 +13,7 @@ export function EvaluationCard({
         <div className="panel-header">
           <h3>Evaluation</h3>
         </div>
-        <p className="subtle">No evaluation artifact is linked to this session.</p>
+        <p className="subtle">No evaluation.</p>
       </section>
     );
   }
@@ -28,23 +28,17 @@ export function EvaluationCard({
   return (
     <section className="panel">
       <div className="panel-header">
-        <div>
-          <p className="eyebrow">Evaluation</p>
-          <h3>{evaluation.id}</h3>
-        </div>
+        <h3>{evaluation.id}</h3>
         <StatusBadge value={evaluation.data.outcome} />
       </div>
 
       <div className="metric-hero">
         <div>
-          <p className="eyebrow">Composite Score</p>
           <strong className="hero-number">
             {formatPercent(evaluation.data.composite_score)}
           </strong>
         </div>
-        <p className="subtle">
-          Evaluated by {titleize(evaluation.data.evaluator)}.
-        </p>
+        <p className="subtle">{titleize(evaluation.data.evaluator)}</p>
       </div>
 
       <div className="score-stack">
@@ -72,7 +66,7 @@ export function EvaluationCard({
             </div>
           ))
         ) : (
-          <p className="subtle">No evaluation evidence recorded.</p>
+          <p className="subtle">No evidence.</p>
         )}
       </div>
     </section>

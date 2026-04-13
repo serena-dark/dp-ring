@@ -416,6 +416,34 @@ export interface ServiceStackStatus {
   frontend_log_path: string | null;
 }
 
+export interface UiConfig {
+  schema_version: number;
+  theme: {
+    mode: "system" | "light" | "dark";
+    template_id: string;
+  };
+  layout: {
+    sidebar_width_px: number;
+    content_padding_px: number;
+    panel_radius_px: number;
+  };
+}
+
+export interface UiConfigPatch {
+  theme?: Partial<UiConfig["theme"]>;
+  layout?: Partial<UiConfig["layout"]>;
+}
+
+export interface UiThemeTemplate {
+  id: string;
+  label: string;
+  description: string;
+  tokens: {
+    light: Record<string, string>;
+    dark: Record<string, string>;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Orchestrator / dispatch center
 // ---------------------------------------------------------------------------
