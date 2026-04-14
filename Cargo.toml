@@ -1,0 +1,31 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/platform-types",
+  "services/control-api",
+  "services/orchestrator",
+  "services/runtime-broker",
+  "services/knowledge-hub",
+  "agents/worker-daemon",
+]
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.1.0"
+authors = ["dp-ring v2"]
+
+[workspace.dependencies]
+anyhow = "1.0.98"
+axum = { version = "0.8.4", features = ["http1", "json", "macros", "tokio", "ws"] }
+chrono = { version = "0.4.41", features = ["serde"] }
+futures-util = "0.3.31"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+tokio = { version = "1.47.1", features = ["full"] }
+tokio-stream = { version = "0.1.17", features = ["sync"] }
+tower-http = { version = "0.6.6", features = ["cors", "trace"] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
+uuid = { version = "1.18.0", features = ["serde", "v4"] }

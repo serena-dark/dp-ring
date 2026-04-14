@@ -8,6 +8,10 @@ import {
   workflowRuns,
 } from "@ring-gui/api/client";
 import { DataState } from "@ring-gui/components/DataState";
+import { DetailGrid } from "@ring-gui/components/DetailGrid";
+import { PageSection } from "@ring-gui/components/PageSection";
+import { PageHero } from "@ring-gui/components/PageHero";
+import { PanelSection } from "@ring-gui/components/PanelSection";
 import { StateActions } from "@ring-gui/components/StateActions";
 import { StatusBadge } from "@ring-gui/components/StatusBadge";
 import { formatDateTime, titleize } from "@ring-gui/lib/format";
@@ -180,133 +184,138 @@ export default function TaskDetail({ id }: { id: string }) {
     >
       {task ? (
         <div className="page">
-          <section className="page-hero">
-            <div>
-              <h3>{task.data.name}</h3>
-              <div className="badge-list">
-                <StatusBadge value={task.status} />
-                <StatusBadge value={task.data.execution_mode ?? "--"} />
-              </div>
-            </div>
-            <StateActions
-              type="task"
-              status={task.status}
-              pendingStatus={pendingStatus}
-              onTransition={handleTransition}
+          <PageSection id="summary" label="Task summary">
+            <PageHero
+              title={task.data.name}
+              badges={[
+                <StatusBadge key="status" value={task.status} />,
+                <StatusBadge
+                  key="execution-mode"
+                  value={task.data.execution_mode ?? "--"}
+                />,
+              ]}
+              actions={
+                <StateActions
+                  type="task"
+                  status={task.status}
+                  pendingStatus={pendingStatus}
+                  onTransition={handleTransition}
+                />
+              }
             />
-          </section>
+          </PageSection>
 
           <section className="split-grid">
-            <div className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Summary</h3>
-                </div>
+            <PageSection id="execution" label="Task execution" className="page">
+              <PanelSection title="Summary">
                 <p>{task.data.description}</p>
                 <div className="divider" />
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(task.created_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(task.updated_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Task type</dt>
-                    <dd>{task.data.task_type}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Session</dt>
-                    <dd>
-                      {session ? (
-                        <AppLink
-                          to={`/sessions/${session.id}`}
-                          className="record-link"
-                        >
+                <DetailGrid
+                  items={[
+                    {
+                      key: "created",
+                      label: "Created",
+                      value: formatDateTime(task.created_at),
+                    },
+                    {
+                      key: "updated",
+                      label: "Updated",
+                      value: formatDateTime(task.updated_at),
+                    },
+                    {
+                      key: "task-type",
+                      label: "Task type",
+                      value: task.data.task_type,
+                    },
+                    {
+                      key: "session",
+                      label: "Session",
+                      value: session ? (
+                        <AppLink to={`/sessions/${session.id}`} className="record-link">
                           {session.id}
                         </AppLink>
                       ) : (
                         task.session_id ?? "--"
-                      )}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Target</dt>
-                    <dd>
-                      {scope
+                      ),
+                    },
+                    {
+                      key: "target",
+                      label: "Target",
+                      value: scope
                         ? `${titleize(scope.target_type)} · ${scope.target_path}`
-                        : "--"}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Git repo</dt>
-                    <dd>{scope?.repo_root ?? "--"}</dd>
-                  </div>
-                </div>
-              </article>
+                        : "--",
+                    },
+                    {
+                      key: "git-repo",
+                      label: "Git repo",
+                      value: scope?.repo_root ?? "--",
+                    },
+                  ]}
+                />
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Execution</h3>
-                </div>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Review status</dt>
-                    <dd>
-                      <StatusBadge value={execution?.review_status ?? "--"} />
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Judge agent</dt>
-                    <dd>{execution?.judge_agent_id ?? "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Commit</dt>
-                    <dd>{execution?.completion_commit_sha ?? "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Scope match</dt>
-                    <dd>
-                      {execution?.scope_match == null
-                        ? "--"
-                        : execution.scope_match
-                          ? "Exact match"
-                          : "Mismatch"}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Build</dt>
-                    <dd>
-                      {execution
+              <PanelSection title="Execution">
+                <DetailGrid
+                  items={[
+                    {
+                      key: "review-status",
+                      label: "Review status",
+                      value: <StatusBadge value={execution?.review_status ?? "--"} />,
+                    },
+                    {
+                      key: "judge-agent",
+                      label: "Judge agent",
+                      value: execution?.judge_agent_id ?? "--",
+                    },
+                    {
+                      key: "commit",
+                      label: "Commit",
+                      value: execution?.completion_commit_sha ?? "--",
+                    },
+                    {
+                      key: "scope-match",
+                      label: "Scope match",
+                      value:
+                        execution?.scope_match == null
+                          ? "--"
+                          : execution.scope_match
+                            ? "Exact match"
+                            : "Mismatch",
+                    },
+                    {
+                      key: "build",
+                      label: "Build",
+                      value: execution
                         ? `${execution.build_required ? "Required" : "Skipped"} · ${titleize(execution.build_status)}`
-                        : "--"}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Cleanup</dt>
-                    <dd>{execution ? titleize(execution.cleanup_status) : "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Merge</dt>
-                    <dd>{execution ? titleize(execution.merge_status) : "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Summary</dt>
-                    <dd>{execution?.summary_path ?? "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Replanning</dt>
-                    <dd>
-                      <StatusBadge value={replanning?.status ?? "pending"} />
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Replanner</dt>
-                    <dd>{replanning?.replanner_agent_id ?? "--"}</dd>
-                  </div>
-                </div>
+                        : "--",
+                    },
+                    {
+                      key: "cleanup",
+                      label: "Cleanup",
+                      value: execution ? titleize(execution.cleanup_status) : "--",
+                    },
+                    {
+                      key: "merge",
+                      label: "Merge",
+                      value: execution ? titleize(execution.merge_status) : "--",
+                    },
+                    {
+                      key: "summary",
+                      label: "Summary",
+                      value: execution?.summary_path ?? "--",
+                    },
+                    {
+                      key: "replanning",
+                      label: "Replanning",
+                      value: <StatusBadge value={replanning?.status ?? "pending"} />,
+                    },
+                    {
+                      key: "replanner",
+                      label: "Replanner",
+                      value: replanning?.replanner_agent_id ?? "--",
+                    },
+                  ]}
+                />
                 {scope ? (
                   <>
                     <div className="divider" />
@@ -347,12 +356,9 @@ export default function TaskDetail({ id }: { id: string }) {
                     <p className="machine-history-note">{replanning.decision_note}</p>
                   </>
                 ) : null}
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Acceptance</h3>
-                </div>
+              <PanelSection title="Acceptance">
                 <div className="panel-grid">
                   {task.data.acceptance_criteria.map((criterion) => (
                     <div key={criterion.id} className="panel">
@@ -366,12 +372,9 @@ export default function TaskDetail({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Workflow</h3>
-                </div>
+              <PanelSection title="Workflow">
                 {workflowRun ? (
                   <div className="panel-grid">
                     {workflowRun.data.steps.map((step) => (
@@ -401,14 +404,11 @@ export default function TaskDetail({ id }: { id: string }) {
                 ) : (
                   <p className="empty-line">No workflow.</p>
                 )}
-              </article>
-            </div>
+              </PanelSection>
+            </PageSection>
 
-            <aside className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Finalize</h3>
-                </div>
+            <PageSection id="related" label="Task related records" className="page">
+              <PanelSection title="Finalize">
                 <div className="field-grid">
                   <div className="field">
                     <label htmlFor="task-commit-sha">Commit SHA</label>
@@ -488,27 +488,25 @@ export default function TaskDetail({ id }: { id: string }) {
                     <pre className="code-block">{execution.review_packet.body}</pre>
                   </>
                 ) : null}
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Replan</h3>
-                </div>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Replanning status</dt>
-                    <dd>
-                      <StatusBadge value={replanning?.status ?? "pending"} />
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Failure source</dt>
-                    <dd>{replanning?.source_failure ?? "--"}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Parent task</dt>
-                    <dd>
-                      {replanning?.parent_task_id ? (
+              <PanelSection title="Replan">
+                <DetailGrid
+                  items={[
+                    {
+                      key: "replanning-status",
+                      label: "Replanning status",
+                      value: <StatusBadge value={replanning?.status ?? "pending"} />,
+                    },
+                    {
+                      key: "failure-source",
+                      label: "Failure source",
+                      value: replanning?.source_failure ?? "--",
+                    },
+                    {
+                      key: "parent-task",
+                      label: "Parent task",
+                      value: replanning?.parent_task_id ? (
                         <AppLink
                           to={`/tasks/${replanning.parent_task_id}`}
                           className="record-link"
@@ -517,13 +515,12 @@ export default function TaskDetail({ id }: { id: string }) {
                         </AppLink>
                       ) : (
                         "--"
-                      )}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Successor task</dt>
-                    <dd>
-                      {replanning?.successor_task_id ? (
+                      ),
+                    },
+                    {
+                      key: "successor-task",
+                      label: "Successor task",
+                      value: replanning?.successor_task_id ? (
                         <AppLink
                           to={`/tasks/${replanning.successor_task_id}`}
                           className="record-link"
@@ -532,10 +529,10 @@ export default function TaskDetail({ id }: { id: string }) {
                         </AppLink>
                       ) : (
                         "--"
-                      )}
-                    </dd>
-                  </div>
-                </div>
+                      ),
+                    },
+                  ]}
+                />
                 <div className="field-grid">
                   <div className="field">
                     <label htmlFor="task-replanner-agent">Replanner agent</label>
@@ -634,12 +631,9 @@ export default function TaskDetail({ id }: { id: string }) {
                     <pre className="code-block">{replanning.packet.body}</pre>
                   </>
                 ) : null}
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Links</h3>
-                </div>
+              <PanelSection title="Links">
                 <div className="panel-grid">
                   <div className="panel">
                     <strong>Requirement</strong>
@@ -688,12 +682,9 @@ export default function TaskDetail({ id }: { id: string }) {
                     <p className="subtle">{execution?.summary_path ?? ""}</p>
                   </div>
                 </div>
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Templates</h3>
-                </div>
+              <PanelSection title="Templates">
                 {compatibleWorkflows.length > 0 ? (
                   <div className="panel-grid">
                     {compatibleWorkflows.map((item) => (
@@ -710,8 +701,8 @@ export default function TaskDetail({ id }: { id: string }) {
                 ) : (
                   <p className="empty-line">No templates.</p>
                 )}
-              </article>
-            </aside>
+              </PanelSection>
+            </PageSection>
           </section>
         </div>
       ) : null}

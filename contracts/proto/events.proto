@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package dpring.v2.events;
+
+message DomainEvent {
+  string event_id = 1;
+  string event_name = 2;
+  string resource_type = 3;
+  string resource_id = 4;
+  string occurred_at = 5;
+  string workspace_id = 6;
+  bytes payload_json = 7;
+}

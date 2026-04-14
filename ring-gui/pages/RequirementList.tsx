@@ -1,19 +1,17 @@
-import { useState } from "react";
 import { milestones, requirements } from "@ring-gui/api/client";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
+import { PageSection } from "@ring-gui/components/PageSection";
 import RequirementComposerCard from "@ring-gui/components/RequirementComposerCard";
 import { DataState } from "@ring-gui/components/DataState";
-import { StatusBadge } from "@ring-gui/components/StatusBadge";
-import {
-  formatDateTime,
-  sortByUpdatedAt,
-  titleize,
-} from "@ring-gui/lib/format";
-import { AppLink } from "@ring-gui/lib/router";
+import { sortByUpdatedAt, titleize } from "@ring-gui/lib/format";
+import { usePageQuery } from "@ring-gui/lib/page-state";
+import { createRequirementListTableFactory } from "@ring-gui/lib/tables/list-factories";
 import { requirementStatuses } from "@ring-gui/lib/state";
 import { useApi } from "@ring-gui/hooks/useApi";
 
 export default function RequirementList() {
-  const [statusFilter, setStatusFilter] = useState("");
+  const { values, setQuery } = usePageQuery();
+  const statusFilter = values.status ?? "";
 
   const requirementsState = useApi(
     () => requirements.list(statusFilter || undefined),
@@ -26,81 +24,82 @@ export default function RequirementList() {
 
   const milestoneItems = milestonesState.data ?? [];
   const requirementItems = sortByUpdatedAt(requirementsState.data ?? []);
+  const milestoneCountByRequirementId = new Map<string, number>();
+
+  for (const item of milestoneItems) {
+    const count = milestoneCountByRequirementId.get(item.data.requirement_id) ?? 0;
+    milestoneCountByRequirementId.set(item.data.requirement_id, count + 1);
+  }
+
+  const requirementTableFactory = createRequirementListTableFactory({
+    milestoneCountByRequirementId,
+  });
+  const readyCount = requirementItems.filter((item) => item.status === "ready").length;
+  const inProgressCount = requirementItems.filter(
+    (item) => item.status === "in_progress",
+  ).length;
+  const totalMilestones = milestoneItems.length;
 
   return (
     <div className="page">
-      <RequirementComposerCard />
-
-      <section className="panel">
-        <div className="panel-header">
-          <h3>Requirements</h3>
-          <div className="search-row">
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="">All statuses</option>
-              {requirementStatuses.map((status) => (
-                <option key={status} value={status}>
-                  {titleize(status)}
-                </option>
-              ))}
-            </select>
-          </div>
+      <PageSection id="summary" label="Requirement summary">
+        <div className="stats-grid">
+          <article className="panel stat-card">
+            <p className="eyebrow">Total requirements</p>
+            <strong>{requirementItems.length}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">Ready</p>
+            <strong>{readyCount}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">In progress</p>
+            <strong>{inProgressCount}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">Milestones</p>
+            <strong>{totalMilestones}</strong>
+          </article>
         </div>
+      </PageSection>
 
-        <DataState
-          loading={loading}
-          error={error}
-          empty={requirementItems.length === 0}
-          emptyMessage="No requirements."
-        >
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Milestones</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {requirementItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <AppLink
-                        to={`/requirements/${item.id}`}
-                        className="record-link"
-                      >
-                        {item.id}
-                      </AppLink>
-                    </td>
-                    <td>{item.data.name}</td>
-                    <td>
-                      <StatusBadge value={item.status} />
-                    </td>
-                    <td>
-                      <StatusBadge value={item.data.priority} kind="priority" />
-                    </td>
-                    <td>
-                      {
-                        milestoneItems.filter(
-                          (milestone) =>
-                            milestone.data.requirement_id === item.id,
-                        ).length
-                      }
-                    </td>
-                    <td>{formatDateTime(item.updated_at)}</td>
-                  </tr>
+      <PageSection id="create" label="Create requirement">
+        <RequirementComposerCard />
+      </PageSection>
+
+      <PageSection id="records" label="Requirement records">
+        <section className="panel">
+          <div className="panel-header">
+            <h3>Requirements</h3>
+            <div className="search-row">
+              <select
+                value={statusFilter}
+                onChange={(event) =>
+                  setQuery({
+                    status: event.target.value || null,
+                  })
+                }
+              >
+                <option value="">All statuses</option>
+                {requirementStatuses.map((status) => (
+                  <option key={status} value={status}>
+                    {titleize(status)}
+                  </option>
                 ))}
-              </tbody>
-            </table>
+              </select>
+            </div>
           </div>
-        </DataState>
-      </section>
+
+          <DataState
+            loading={loading}
+            error={error}
+            empty={requirementItems.length === 0}
+            emptyMessage="No requirements."
+          >
+            <FactoryTable factory={requirementTableFactory} rows={requirementItems} />
+          </DataState>
+        </section>
+      </PageSection>
     </div>
   );
 }

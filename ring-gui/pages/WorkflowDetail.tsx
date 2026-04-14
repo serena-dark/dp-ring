@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { workflows } from "@ring-gui/api/client";
 import { DataState } from "@ring-gui/components/DataState";
+import { DetailGrid } from "@ring-gui/components/DetailGrid";
+import { PageSection } from "@ring-gui/components/PageSection";
+import { PageHero } from "@ring-gui/components/PageHero";
+import { PanelSection } from "@ring-gui/components/PanelSection";
 import { StateActions } from "@ring-gui/components/StateActions";
 import { StatusBadge } from "@ring-gui/components/StatusBadge";
 import {
@@ -41,61 +45,60 @@ export default function WorkflowDetail({ id }: { id: string }) {
     >
       {workflow ? (
         <div className="page">
-          <section className="page-hero">
-            <div>
-              <h3>{workflow.data.name}</h3>
-              <div className="badge-list">
-                <StatusBadge value={workflow.status} />
-                {workflow.data.applicable_to.map((item) => (
+          <PageSection id="summary" label="Workflow summary">
+            <PageHero
+              title={workflow.data.name}
+              badges={[
+                <StatusBadge key="status" value={workflow.status} />,
+                ...workflow.data.applicable_to.map((item) => (
                   <StatusBadge key={item} value={item} />
-                ))}
-              </div>
-            </div>
-            <StateActions
-              type="workflow"
-              status={workflow.status}
-              pendingStatus={pendingStatus}
-              onTransition={handleTransition}
+                )),
+              ]}
+              actions={
+                <StateActions
+                  type="workflow"
+                  status={workflow.status}
+                  pendingStatus={pendingStatus}
+                  onTransition={handleTransition}
+                />
+              }
             />
-          </section>
+          </PageSection>
 
           <section className="split-grid">
-            <div className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Summary</h3>
-                </div>
+            <PageSection id="records" label="Workflow records" className="page">
+              <PanelSection title="Summary">
                 <p>{workflow.data.description}</p>
                 <div className="divider" />
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(workflow.created_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(workflow.updated_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Usage count</dt>
-                    <dd>{workflow.data.quality_history?.usage_count ?? 0}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Average score</dt>
-                    <dd>
-                      {formatPercent(
-                        workflow.data.quality_history?.avg_composite_score ??
-                          null,
-                      )}
-                    </dd>
-                  </div>
-                </div>
-              </article>
+                <DetailGrid
+                  items={[
+                    {
+                      key: "created",
+                      label: "Created",
+                      value: formatDateTime(workflow.created_at),
+                    },
+                    {
+                      key: "updated",
+                      label: "Updated",
+                      value: formatDateTime(workflow.updated_at),
+                    },
+                    {
+                      key: "usage-count",
+                      label: "Usage count",
+                      value: workflow.data.quality_history?.usage_count ?? 0,
+                    },
+                    {
+                      key: "average-score",
+                      label: "Average score",
+                      value: formatPercent(
+                        workflow.data.quality_history?.avg_composite_score ?? null,
+                      ),
+                    },
+                  ]}
+                />
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Steps</h3>
-                </div>
+              <PanelSection title="Steps">
                 <div className="panel-grid">
                   {workflow.data.steps.map((step) => (
                     <div key={step.id} className="panel">
@@ -119,14 +122,11 @@ export default function WorkflowDetail({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
-              </article>
-            </div>
+              </PanelSection>
+            </PageSection>
 
-            <aside className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <h3>Scores</h3>
-                </div>
+            <PageSection id="related" label="Workflow scores" className="page">
+              <PanelSection title="Scores">
                 {workflow.data.quality_history?.recent_scores?.length ? (
                   <div className="score-stack">
                     {workflow.data.quality_history.recent_scores.map((entry) => (
@@ -142,12 +142,12 @@ export default function WorkflowDetail({ id }: { id: string }) {
                         </div>
                       </div>
                     ))}
-                </div>
-              ) : (
-                <p className="empty-line">No scores.</p>
-              )}
-              </article>
-            </aside>
+                  </div>
+                ) : (
+                  <p className="empty-line">No scores.</p>
+                )}
+              </PanelSection>
+            </PageSection>
           </section>
         </div>
       ) : null}

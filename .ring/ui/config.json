@@ -2,7 +2,7 @@
   "schema_version": 1,
   "theme": {
     "mode": "system",
-    "template_id": "ring-console"
+    "template_id": "monochrome-launch"
   },
   "layout": {
     "sidebar_width_px": 272,

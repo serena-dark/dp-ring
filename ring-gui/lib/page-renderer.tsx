@@ -1,4 +1,3 @@
-import { Layout } from "@ring-gui/components/Layout";
 import type { MatchedRoute } from "@ring-gui/lib/routes";
 import Dashboard from "@ring-gui/pages/Dashboard";
 import Dispatcher from "@ring-gui/pages/Dispatcher";
@@ -15,106 +14,66 @@ import TaskDetail from "@ring-gui/pages/TaskDetail";
 import TaskList from "@ring-gui/pages/TaskList";
 import WorkflowDetail from "@ring-gui/pages/WorkflowDetail";
 import WorkflowList from "@ring-gui/pages/WorkflowList";
+import type { ReactNode } from "react";
 
-export function renderRoute(route: MatchedRoute | null) {
+export interface RouteView {
+  title: string;
+  content: ReactNode;
+}
+
+export function renderRoute(route: MatchedRoute | null): RouteView {
   if (!route) {
-    return (
-      <Layout title="Not Found">
-        <NotFound />
-      </Layout>
-    );
+    return {
+      title: "Not Found",
+      content: <NotFound />,
+    };
   }
 
   switch (route.key) {
     case "dashboard":
-      return (
-        <Layout title={route.title}>
-          <Dashboard />
-        </Layout>
-      );
+      return { title: route.title, content: <Dashboard /> };
     case "dispatcher":
-      return (
-        <Layout title={route.title}>
-          <Dispatcher />
-        </Layout>
-      );
+      return { title: route.title, content: <Dispatcher /> };
     case "sessions":
-      return (
-        <Layout title={route.title}>
-          <SessionList />
-        </Layout>
-      );
+      return { title: route.title, content: <SessionList /> };
     case "session-detail":
-      return (
-        <Layout title={`${route.title} / ${route.params.id}`}>
-          <SessionDetail id={route.params.id} />
-        </Layout>
-      );
+      return {
+        title: `${route.title} / ${route.params.id}`,
+        content: <SessionDetail id={route.params.id} />,
+      };
     case "requirements":
-      return (
-        <Layout title={route.title}>
-          <RequirementList />
-        </Layout>
-      );
+      return { title: route.title, content: <RequirementList /> };
     case "requirement-detail":
-      return (
-        <Layout title={`${route.title} / ${route.params.id}`}>
-          <RequirementDetail id={route.params.id} />
-        </Layout>
-      );
+      return {
+        title: `${route.title} / ${route.params.id}`,
+        content: <RequirementDetail id={route.params.id} />,
+      };
     case "tasks":
-      return (
-        <Layout title={route.title}>
-          <TaskList />
-        </Layout>
-      );
+      return { title: route.title, content: <TaskList /> };
     case "task-detail":
-      return (
-        <Layout title={`${route.title} / ${route.params.id}`}>
-          <TaskDetail id={route.params.id} />
-        </Layout>
-      );
+      return {
+        title: `${route.title} / ${route.params.id}`,
+        content: <TaskDetail id={route.params.id} />,
+      };
     case "workflows":
-      return (
-        <Layout title={route.title}>
-          <WorkflowList />
-        </Layout>
-      );
+      return { title: route.title, content: <WorkflowList /> };
     case "workflow-rankings":
-      return (
-        <Layout title={route.title}>
-          <Leaderboard />
-        </Layout>
-      );
+      return { title: route.title, content: <Leaderboard /> };
     case "workflow-detail":
-      return (
-        <Layout title={`${route.title} / ${route.params.id}`}>
-          <WorkflowDetail id={route.params.id} />
-        </Layout>
-      );
+      return {
+        title: `${route.title} / ${route.params.id}`,
+        content: <WorkflowDetail id={route.params.id} />,
+      };
     case "knowledge":
-      return (
-        <Layout title={route.title}>
-          <Knowledge />
-        </Layout>
-      );
+      return { title: route.title, content: <Knowledge /> };
     case "feedback":
-      return (
-        <Layout title={route.title}>
-          <FeedbackList />
-        </Layout>
-      );
+      return { title: route.title, content: <FeedbackList /> };
     case "settings":
-      return (
-        <Layout title={route.title}>
-          <Settings />
-        </Layout>
-      );
+      return { title: route.title, content: <Settings /> };
     default:
-      return (
-        <Layout title="Not Found">
-          <NotFound />
-        </Layout>
-      );
+      return {
+        title: "Not Found",
+        content: <NotFound />,
+      };
   }
 }

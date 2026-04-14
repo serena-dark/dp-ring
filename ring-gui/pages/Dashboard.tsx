@@ -6,13 +6,13 @@ import {
   tasks,
   workflows,
 } from "@ring-gui/api/client";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
+import { PageSection } from "@ring-gui/components/PageSection";
 import { StatusBadge } from "@ring-gui/components/StatusBadge";
-import {
-  formatDateTime,
-  sortByUpdatedAt,
-} from "@ring-gui/lib/format";
+import { sortByUpdatedAt } from "@ring-gui/lib/format";
 import { AppLink } from "@ring-gui/lib/router";
+import { createDashboardRecentSessionsTableFactory } from "@ring-gui/lib/tables/dashboard-factories";
 import { useApi } from "@ring-gui/hooks/useApi";
 
 function formatEndpoint(value: string): string {
@@ -128,6 +128,7 @@ export default function Dashboard() {
         : null,
     },
   ];
+  const recentSessionsTableFactory = createDashboardRecentSessionsTableFactory();
 
   return (
     <div className="page">
@@ -136,146 +137,122 @@ export default function Dashboard() {
         error={error}
         empty={false}
       >
-        <section className="stats-grid">
-          <article className="panel stat-card">
-            <p className="eyebrow">Sessions</p>
-            <strong>{activeSessions}</strong>
-          </article>
-          <article className="panel stat-card">
-            <p className="eyebrow">Tasks</p>
-            <strong>{pendingTasks}</strong>
-          </article>
-          <article className="panel stat-card">
-            <p className="eyebrow">Feedback</p>
-            <strong>{openFeedback}</strong>
-          </article>
-          <article className="panel stat-card">
-            <p className="eyebrow">Workflows</p>
-            <strong>{workflowItems.length}</strong>
-          </article>
-        </section>
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Recent sessions</h3>
-            <AppLink to="/sessions" className="button button-ghost button-small">
-              All
-            </AppLink>
-          </div>
-
-          {recentSessions.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Status</th>
-                    <th>Requirement</th>
-                    <th>Updated</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentSessions.map((session) => (
-                    <tr key={session.id}>
-                      <td>
-                        <AppLink
-                          to={`/sessions/${session.id}`}
-                          className="record-link"
-                        >
-                          {session.id}
-                        </AppLink>
-                      </td>
-                      <td>
-                        <StatusBadge value={session.status} />
-                      </td>
-                      <td>{session.data.requirement_id}</td>
-                      <td>{formatDateTime(session.updated_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="empty-line">No sessions.</p>
-          )}
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Ring health</h3>
-            <div className="panel-header-actions">
-              <StatusBadge
-                value={
-                  serviceStack?.overall_status ??
-                  (serviceStackState.loading ? "unmanaged" : "offline")
-                }
-              />
-              <button
-                type="button"
-                className="button button-ghost button-small icon-button service-refresh-button"
-                aria-label="Refresh services"
-                title="Refresh services"
-                onClick={() => {
-                  void reloadServiceStack();
-                }}
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path
-                    d="M13.2 7.2A5.3 5.3 0 1 0 8.8 13v-1.6A3.8 3.8 0 1 1 11.7 5H9.6v1.6H15V1.2h-1.8z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <section className="service-status-card">
-            {serviceStackState.error ? (
-              <p className="empty-line">
-                {serviceStackState.error}
-              </p>
-            ) : (
-              <>
-                <div className="service-status-grid">
-                  {serviceChecks.map((service) => (
-                    <div key={service.label} className="service-status-item">
-                      <div className="service-status-title">
-                        <strong>{service.label}</strong>
-                        <StatusBadge value={service.status} />
-                      </div>
-                      <code className="service-endpoint">
-                        {service.endpoint}
-                      </code>
-                      <div className="service-status-footer">
-                        {service.extra ? (
-                          <p className="subtle">{service.extra}</p>
-                        ) : (
-                          <span />
-                        )}
-                        <a
-                          href={service.href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="button button-ghost button-small service-status-button"
-                        >
-                          Open
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <p className="subtle service-status-summary">
-                  Updated {formatUpdatedTimestamp(serviceStack?.verified_at)}
-                </p>
-              </>
-            )}
+        <PageSection id="summary" label="Dashboard summary">
+          <section className="stats-grid">
+            <article className="panel stat-card">
+              <p className="eyebrow">Sessions</p>
+              <strong>{activeSessions}</strong>
+            </article>
+            <article className="panel stat-card">
+              <p className="eyebrow">Tasks</p>
+              <strong>{pendingTasks}</strong>
+            </article>
+            <article className="panel stat-card">
+              <p className="eyebrow">Feedback</p>
+              <strong>{openFeedback}</strong>
+            </article>
+            <article className="panel stat-card">
+              <p className="eyebrow">Workflows</p>
+              <strong>{workflowItems.length}</strong>
+            </article>
           </section>
-        </article>
+        </PageSection>
+
+        <PageSection id="records" label="Recent sessions">
+          <article className="panel">
+            <div className="panel-header">
+              <h3>Recent sessions</h3>
+              <AppLink to="/sessions" className="button button-ghost button-small">
+                All
+              </AppLink>
+            </div>
+
+            {recentSessions.length > 0 ? (
+              <FactoryTable factory={recentSessionsTableFactory} rows={recentSessions} />
+            ) : (
+              <p className="empty-line">No sessions.</p>
+            )}
+          </article>
+        </PageSection>
+
+        <PageSection id="related" label="Service health">
+          <article className="panel">
+            <div className="panel-header">
+              <h3>Ring health</h3>
+              <div className="panel-header-actions">
+                <StatusBadge
+                  value={
+                    serviceStack?.overall_status ??
+                    (serviceStackState.loading ? "unmanaged" : "offline")
+                  }
+                />
+                <button
+                  type="button"
+                  className="button button-ghost button-small icon-button service-refresh-button"
+                  aria-label="Refresh services"
+                  title="Refresh services"
+                  onClick={() => {
+                    void reloadServiceStack();
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path
+                      d="M13.2 7.2A5.3 5.3 0 1 0 8.8 13v-1.6A3.8 3.8 0 1 1 11.7 5H9.6v1.6H15V1.2h-1.8z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <section className="service-status-card">
+              {serviceStackState.error ? (
+                <p className="empty-line">
+                  {serviceStackState.error}
+                </p>
+              ) : (
+                <>
+                  <div className="service-status-grid">
+                    {serviceChecks.map((service) => (
+                      <div key={service.label} className="service-status-item">
+                        <div className="service-status-title">
+                          <strong>{service.label}</strong>
+                          <StatusBadge value={service.status} />
+                        </div>
+                        <code className="service-endpoint">
+                          {service.endpoint}
+                        </code>
+                        <div className="service-status-footer">
+                          {service.extra ? (
+                            <p className="subtle">{service.extra}</p>
+                          ) : (
+                            <span />
+                          )}
+                          <a
+                            href={service.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="button button-ghost button-small service-status-button"
+                          >
+                            Open
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <p className="subtle service-status-summary">
+                    Updated {formatUpdatedTimestamp(serviceStack?.verified_at)}
+                  </p>
+                </>
+              )}
+            </section>
+          </article>
+        </PageSection>
       </DataState>
     </div>
   );

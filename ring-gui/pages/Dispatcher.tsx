@@ -1,21 +1,16 @@
 import { useEffect, useState } from "react";
 import { dispatch, orchestrator } from "@ring-gui/api/client";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
 import { OrchestratorStateMachine } from "@ring-gui/components/OrchestratorStateMachine";
-import { StatusBadge } from "@ring-gui/components/StatusBadge";
-import {
-  formatDateTime,
-  titleize,
-} from "@ring-gui/lib/format";
+import { PageSection } from "@ring-gui/components/PageSection";
 import { useNotifications } from "@ring-gui/lib/notifications";
+import { isJobActive } from "@ring-gui/lib/orchestrator";
 import {
-  getCurrentDocument,
-  getCurrentStageLabel,
-  isAwaitingAgent,
-  isJobActive,
-  isRetryable,
-} from "@ring-gui/lib/orchestrator";
-import { AppLink } from "@ring-gui/lib/router";
+  createDispatcherBundlesTableFactory,
+  createDispatcherJobsTableFactory,
+  createDispatcherProtocolsTableFactory,
+} from "@ring-gui/lib/tables/dispatcher-factories";
 import { useApi } from "@ring-gui/hooks/useApi";
 
 export default function Dispatcher() {
@@ -109,6 +104,19 @@ export default function Dispatcher() {
   const launchedBundles = dispatchBundles.filter(
     (bundle) => bundle.status === "session_launched",
   ).length;
+  const protocolTableFactory = createDispatcherProtocolsTableFactory();
+  const jobTableFactory = createDispatcherJobsTableFactory({
+    selectedJobId: selectedJob?.id ?? null,
+    onSelectJob: setSelectedJobId,
+    jobAction,
+    onMarkAgentComplete: (jobId) => {
+      void markAgentComplete(jobId);
+    },
+    onRetryJob: (jobId) => {
+      void retryJob(jobId);
+    },
+  });
+  const bundleTableFactory = createDispatcherBundlesTableFactory();
 
   const saveConfig = async () => {
     const seconds = Number(idleInputValue);
@@ -261,75 +269,76 @@ export default function Dispatcher() {
   return (
     <div className="page">
       <DataState loading={loading} error={error} empty={false}>
-        <section className="panel-grid">
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Control</h3>
-            </div>
-            <div className="field-grid">
-              <div className="field">
-                <label htmlFor="idle-threshold-seconds">
-                  Document idle threshold (seconds)
-                </label>
-                <input
-                  id="idle-threshold-seconds"
-                  value={idleInputValue}
-                  onChange={(event) => setIdleDraftSeconds(event.target.value)}
-                />
+        <PageSection id="summary" label="Dispatcher summary">
+          <section className="panel-grid">
+            <article className="panel">
+              <div className="panel-header">
+                <h3>Control</h3>
               </div>
-              <div className="field">
-                <label>Poll interval</label>
-                <input value={String(pollIntervalSeconds)} readOnly />
-              </div>
-              <div className="field">
-                <label htmlFor="automation-enabled">Auto closed loop</label>
-                <label
-                  htmlFor="automation-enabled"
-                  className="inline-checkbox"
-                >
+              <div className="field-grid">
+                <div className="field">
+                  <label htmlFor="idle-threshold-seconds">
+                    Document idle threshold (seconds)
+                  </label>
                   <input
-                    id="automation-enabled"
-                    type="checkbox"
-                    checked={automationEnabled}
-                    onChange={(event) =>
-                      setAutomationDraft(event.target.checked)
-                    }
+                    id="idle-threshold-seconds"
+                    value={idleInputValue}
+                    onChange={(event) => setIdleDraftSeconds(event.target.value)}
                   />
-                  <span>
-                    Enabled
-                  </span>
-                </label>
+                </div>
+                <div className="field">
+                  <label>Poll interval</label>
+                  <input value={String(pollIntervalSeconds)} readOnly />
+                </div>
+                <div className="field">
+                  <label htmlFor="automation-enabled">Auto closed loop</label>
+                  <label
+                    htmlFor="automation-enabled"
+                    className="inline-checkbox"
+                  >
+                    <input
+                      id="automation-enabled"
+                      type="checkbox"
+                      checked={automationEnabled}
+                      onChange={(event) =>
+                        setAutomationDraft(event.target.checked)
+                      }
+                    />
+                    <span>
+                      Enabled
+                    </span>
+                  </label>
+                </div>
               </div>
-            </div>
-            <div className="button-row">
-              <button
-                type="button"
-                className="button"
-                disabled={savingConfig}
-                onClick={() => {
-                  void saveConfig();
-                }}
-              >
-                {savingConfig ? "Saving..." : "Save"}
-              </button>
-              <button
-                type="button"
-                className="button button-ghost"
-                disabled={pollingNow}
-                onClick={() => {
-                  void runPollNow();
-                }}
-              >
-                {pollingNow ? "Polling..." : "Poll"}
-              </button>
-            </div>
-          </article>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={savingConfig}
+                  onClick={() => {
+                    void saveConfig();
+                  }}
+                >
+                  {savingConfig ? "Saving..." : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="button button-ghost"
+                  disabled={pollingNow}
+                  onClick={() => {
+                    void runPollNow();
+                  }}
+                >
+                  {pollingNow ? "Polling..." : "Poll"}
+                </button>
+              </div>
+            </article>
 
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Overview</h3>
-            </div>
-            <div className="detail-grid">
+            <article className="panel">
+              <div className="panel-header">
+                <h3>Overview</h3>
+              </div>
+              <div className="detail-grid">
               <div className="detail-item">
                 <dt>Active jobs</dt>
                 <dd>{activeJobs.length}</dd>
@@ -406,269 +415,99 @@ export default function Dispatcher() {
                 <dt>Follow-up briefs</dt>
                 <dd>{orchestratorConfig?.followup_output_dir ?? "--"}</dd>
               </div>
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Agents</h3>
-            </div>
-            {orchestratorAgents.length > 0 ? (
-              <div className="panel-grid">
-                {orchestratorAgents.map((agent) => (
-                  <div key={agent.id} className="panel">
-                    <strong>{agent.display_name}</strong>
-                    <p className="subtle">{agent.id}</p>
-                    <p className="subtle">
-                      Accepts {agent.accepts.join(", ") || "--"}
-                    </p>
-                  </div>
-                ))}
               </div>
-            ) : (
-              <p className="empty-line">No agents.</p>
-            )}
-          </article>
+            </article>
 
-          <article className="panel">
-            <div className="panel-header">
-              <h3>Protocols</h3>
-            </div>
-            <div className="detail-grid">
-              <div className="detail-item">
-                <dt>Protocols</dt>
-                <dd>{dispatchProtocols.length}</dd>
+            <article className="panel">
+              <div className="panel-header">
+                <h3>Agents</h3>
               </div>
-              <div className="detail-item">
-                <dt>Bundles queued</dt>
-                <dd>{readyBundles}</dd>
-              </div>
-              <div className="detail-item">
-                <dt>Bundles launched</dt>
-                <dd>{launchedBundles}</dd>
-              </div>
-            </div>
-            {dispatchProtocols.length > 0 ? (
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Protocol</th>
-                      <th>Support</th>
-                      <th>Required fields</th>
-                      <th>Transport</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dispatchProtocols.map((protocol) => (
-                      <tr key={protocol.id}>
-                        <td>{protocol.id}</td>
-                        <td>
-                          <StatusBadge value={protocol.support_level} />
-                        </td>
-                        <td>{protocol.required_fields.join(", ")}</td>
-                        <td>{protocol.transport_support.join(", ")}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="empty-line">No protocols.</p>
-            )}
-          </article>
-        </section>
-
-        <OrchestratorStateMachine
-          job={selectedJob}
-          onResolveIntervention={(jobId, interventionId) => {
-            void resolveIntervention(jobId, interventionId);
-          }}
-          resolvingInterventionId={resolvingInterventionId}
-          onDispatchFollowup={(jobId) => {
-            void draftFollowup(jobId);
-          }}
-          onCreateFollowupRequirement={(jobId) => {
-            void createFollowupRequirement(jobId);
-          }}
-          followupAction={followupAction}
-        />
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Jobs</h3>
-          </div>
-
-          {orchestratorJobs.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Job</th>
-                    <th>Requirement</th>
-                    <th>Stage</th>
-                    <th>Status</th>
-                    <th>Document</th>
-                    <th>Last activity</th>
-                    <th>Completion signal</th>
-                    <th>Output</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orchestratorJobs.map((job) => {
-                    const currentDocument = getCurrentDocument(job);
-                    const outputLabel =
-                      job.status === "session_dispatched"
-                        ? `${job.session_dispatch.session_id ?? "--"} / ${job.session_dispatch.workflow_run_ids.length} runs`
-                        : job.status === "waiting_for_session_dispatch"
-                          ? `${job.session_dispatch.waiting_task_ids.length} waiting / next tick launches batch`
-                          : job.status === "workflow_rework_required"
-                            ? job.workflow_preparation.parse_error ?? "Workflow plan needs rework"
-                            : job.status.startsWith("workflow_")
-                              ? `${job.workflow_preparation.waiting_tasks.length} ready tasks / ${job.workflow_preparation.generated_workflow_ids.length} custom workflows`
-                              : job.status === "post_milestone_rework_required"
-                                ? [
-                                    job.post_milestone.prerequisite_analysis.parse_error,
-                                    job.post_milestone.task_dispatch.parse_error,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" / ") || "Readiness routing needs rework"
-                                : job.status === "milestone_rework_required"
-                                  ? job.milestone_plan.parse_error ?? "Plan needs rework"
-                                  : job.status.startsWith("post_milestone_") ||
-                                      job.status === "milestones_ready"
-                                    ? `${job.post_milestone.prerequisite_analysis.distillation.feedback_ids.length} feedback / ${job.post_milestone.task_dispatch.generated_task_ids.length} tasks`
-                                    : job.requirement_document.audit.verdict
-                                      ? titleize(job.requirement_document.audit.verdict)
-                                      : "--";
-                    const interventionCount = job.interventions.filter(
-                      (intervention) => intervention.status === "open",
-                    ).length;
-
-                    return (
-                      <tr
-                        key={job.id}
-                        className={selectedJob?.id === job.id ? "is-selected" : undefined}
-                        onClick={() => {
-                          setSelectedJobId(job.id);
-                        }}
-                      >
-                        <td>{job.id}</td>
-                        <td>
-                          <AppLink
-                            to={`/requirements/${job.requirement_id}`}
-                            className="record-link"
-                          >
-                            {job.requirement_name}
-                          </AppLink>
-                          <p className="subtle">{job.requirement_id}</p>
-                        </td>
-                        <td>{getCurrentStageLabel(job)}</td>
-                        <td>
-                          <StatusBadge value={job.status} />
-                        </td>
-                        <td>
-                          <code>{currentDocument.path}</code>
-                        </td>
-                        <td>{formatDateTime(currentDocument.last_activity_at)}</td>
-                        <td>
-                          {currentDocument.completion_reason
-                            ? titleize(currentDocument.completion_reason)
-                            : "--"}
-                        </td>
-                        <td>{outputLabel}</td>
-                        <td>
-                          <div className="button-row">
-                            {interventionCount > 0 ? (
-                              <span className="subtle">
-                                {interventionCount} intervention
-                                {interventionCount === 1 ? "" : "s"}
-                              </span>
-                            ) : null}
-                            {isAwaitingAgent(job) ? (
-                              <button
-                                type="button"
-                                className="button button-ghost button-small"
-                                disabled={jobAction === `complete:${job.id}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedJobId(job.id);
-                                  void markAgentComplete(job.id);
-                                }}
-                              >
-                                {jobAction === `complete:${job.id}`
-                                  ? "Reporting..."
-                                  : "Agent Complete"}
-                              </button>
-                            ) : null}
-                            {isRetryable(job) ? (
-                              <button
-                                type="button"
-                                className="button button-ghost button-small"
-                                disabled={jobAction === `retry:${job.id}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setSelectedJobId(job.id);
-                                  void retryJob(job.id);
-                                }}
-                              >
-                                {jobAction === `retry:${job.id}`
-                                  ? "Retrying..."
-                                  : "Redispatch"}
-                              </button>
-                            ) : null}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="empty-line">No jobs.</p>
-          )}
-        </article>
-
-        <article className="panel">
-          <div className="panel-header">
-            <h3>Bundles</h3>
-          </div>
-
-          {dispatchBundles.length > 0 ? (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Bundle</th>
-                    <th>Protocol</th>
-                    <th>Status</th>
-                    <th>Goal</th>
-                    <th>Tasks</th>
-                    <th>Session</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dispatchBundles.map((bundle) => (
-                    <tr key={bundle.id}>
-                      <td>{bundle.id}</td>
-                      <td>{`${bundle.bundle_protocol}@${bundle.bundle_version}`}</td>
-                      <td>
-                        <StatusBadge value={bundle.status} />
-                      </td>
-                      <td>{bundle.canonical?.goal.title ?? "--"}</td>
-                      <td>{bundle.planning.planned_task_ids.length}</td>
-                      <td>{bundle.batching.session_id ?? "--"}</td>
-                    </tr>
+              {orchestratorAgents.length > 0 ? (
+                <div className="panel-grid">
+                  {orchestratorAgents.map((agent) => (
+                    <div key={agent.id} className="panel">
+                      <strong>{agent.display_name}</strong>
+                      <p className="subtle">{agent.id}</p>
+                      <p className="subtle">
+                        Accepts {agent.accepts.join(", ") || "--"}
+                      </p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                <p className="empty-line">No agents.</p>
+              )}
+            </article>
+
+            <article className="panel">
+              <div className="panel-header">
+                <h3>Protocols</h3>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <dt>Protocols</dt>
+                  <dd>{dispatchProtocols.length}</dd>
+                </div>
+                <div className="detail-item">
+                  <dt>Bundles queued</dt>
+                  <dd>{readyBundles}</dd>
+                </div>
+                <div className="detail-item">
+                  <dt>Bundles launched</dt>
+                  <dd>{launchedBundles}</dd>
+                </div>
+              </div>
+              {dispatchProtocols.length > 0 ? (
+                <FactoryTable factory={protocolTableFactory} rows={dispatchProtocols} />
+              ) : (
+                <p className="empty-line">No protocols.</p>
+              )}
+            </article>
+          </section>
+        </PageSection>
+
+        <PageSection id="records" label="Dispatcher records">
+          <OrchestratorStateMachine
+            job={selectedJob}
+            onResolveIntervention={(jobId, interventionId) => {
+              void resolveIntervention(jobId, interventionId);
+            }}
+            resolvingInterventionId={resolvingInterventionId}
+            onDispatchFollowup={(jobId) => {
+              void draftFollowup(jobId);
+            }}
+            onCreateFollowupRequirement={(jobId) => {
+              void createFollowupRequirement(jobId);
+            }}
+            followupAction={followupAction}
+          />
+
+          <article className="panel">
+            <div className="panel-header">
+              <h3>Jobs</h3>
             </div>
-          ) : (
-            <p className="empty-line">No bundles.</p>
-          )}
-        </article>
+
+            {orchestratorJobs.length > 0 ? (
+              <FactoryTable factory={jobTableFactory} rows={orchestratorJobs} />
+            ) : (
+              <p className="empty-line">No jobs.</p>
+            )}
+          </article>
+        </PageSection>
+
+        <PageSection id="related" label="Dispatcher bundles">
+          <article className="panel">
+            <div className="panel-header">
+              <h3>Bundles</h3>
+            </div>
+
+            {dispatchBundles.length > 0 ? (
+              <FactoryTable factory={bundleTableFactory} rows={dispatchBundles} />
+            ) : (
+              <p className="empty-line">No bundles.</p>
+            )}
+          </article>
+        </PageSection>
       </DataState>
     </div>
   );

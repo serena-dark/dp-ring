@@ -11,10 +11,12 @@ import {
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { loadEnvFiles } from '../ring/lib/env.mjs';
 
 const execFile = promisify(rawExecFile);
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+loadEnvFiles(repoRoot);
 const runtimeDir = join(repoRoot, '.ring', 'runtime');
 const statePath = join(runtimeDir, 'service-stack.json');
 const backendLogPath = join(runtimeDir, 'backend.log');
@@ -50,6 +52,10 @@ const frontend = {
   logPath: frontendLogPath,
   psMatch: 'vite.js preview --host 127.0.0.1 --port 4174',
 };
+
+function logStep(message) {
+  console.log(`[stack] ${message}`);
+}
 
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -263,17 +269,20 @@ async function tailLog(logPath) {
 }
 
 async function buildFrontend() {
+  logStep('building frontend preview bundle');
   await runCommand('vite build', process.execPath, [viteBin, 'build']);
 }
 
 async function stopManagedServices() {
   const state = await readState();
   if (!state) {
+    logStep('no recorded managed state found, checking ports directly');
     await terminateManagedPortProcess(frontend);
     await terminateManagedPortProcess(backend);
     return;
   }
 
+  logStep('stopping existing managed frontend/backend processes');
   await terminatePid(state.frontend_pid, frontend.psMatch);
   await terminatePid(state.backend_pid, backend.psMatch);
   await terminateManagedPortProcess(frontend);
@@ -282,8 +291,10 @@ async function stopManagedServices() {
 }
 
 async function startStack() {
+  logStep('preparing managed stack startup');
   await stopManagedServices();
   await ensureRuntimeDir();
+  logStep('verifying backend and frontend ports are free');
   await assertPortAvailable(backend);
   await assertPortAvailable(frontend);
   await buildFrontend();
@@ -301,18 +312,24 @@ async function startStack() {
   };
 
   try {
+    logStep('starting backend service');
     nextState.backend_pid = spawnManagedProcess(backend);
     await waitForHealthy('backend', backendHealthy);
 
+    logStep('starting frontend preview service');
     nextState.frontend_pid = spawnManagedProcess(frontend);
     await waitForHealthy('frontend', frontendHealthy);
+    logStep('verifying frontend api proxy');
     await waitForHealthy('frontend proxy', frontendProxyHealthy);
 
     nextState.verified_at = new Date().toISOString();
     await writeState(nextState);
+    logStep('managed stack is healthy');
     console.log(`Frontend: ${frontend.url}`);
     console.log(`Backend: ${backend.url.replace('/api/orchestrator/workers', '/')}`);
     console.log(`Proxy: ${frontend.proxyUrl}`);
+    console.log(`Backend log: ${backend.logPath}`);
+    console.log(`Frontend log: ${frontend.logPath}`);
   } catch (error) {
     if (nextState.frontend_pid) {
       await terminatePid(nextState.frontend_pid, frontend.psMatch);
@@ -386,6 +403,7 @@ async function main() {
   }
 
   if (command === 'stop') {
+    logStep('stopping managed services');
     await stopManagedServices();
     console.log('Stopped managed services.');
     return;
@@ -397,6 +415,7 @@ async function main() {
   }
 
   if (command === 'restart') {
+    logStep('restarting managed services');
     await startStack();
     return;
   }

@@ -22,6 +22,57 @@ const DEFAULT_AUTOMATION_CONFIG = {
 
 const RING_REPORT_PROTOCOL = 'ring.workflow-run-report.v1';
 const A2A_REPORT_PROTOCOL = 'a2a.task-status.v1';
+const TASK_FILE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['files'],
+  properties: {
+    files: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['path', 'content'],
+        properties: {
+          path: {
+            type: 'string',
+          },
+          content: {
+            type: 'string',
+          },
+        },
+      },
+    },
+  },
+};
+const JUDGE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'note'],
+  properties: {
+    verdict: {
+      type: 'string',
+      enum: ['approved', 'rejected'],
+    },
+    note: {
+      type: 'string',
+    },
+  },
+};
+const REPLAN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['verdict', 'note'],
+  properties: {
+    verdict: {
+      type: 'string',
+      enum: ['redispatch', 'terminal'],
+    },
+    note: {
+      type: 'string',
+    },
+  },
+};
 
 function nowIso() {
   return new Date().toISOString();
@@ -320,18 +371,226 @@ function nextFileContents(relativePath, currentContents, task, timestamp) {
   return `${currentContents.replace(/\s*$/, '')}${commentWrappedMarker(extension, marker)}`;
 }
 
-async function applyTaskFileChanges(repoRoot, task) {
+async function draftLoopbackDocument(openai, kind, payload) {
+  if (!openai?.completeText) {
+    return null;
+  }
+
+  const prompts = {
+    requirement: [
+      'Write a durable dp-ring requirement brief in Markdown.',
+      'Include the original goal, explicit constraints, automation notes, and acceptance criteria.',
+      'Keep the document concrete and immediately usable by milestone planning.',
+    ].join(' '),
+    milestone: [
+      'Write a dp-ring milestone planning document in Markdown.',
+      'Break the requirement into deterministic milestones with acceptance checks and prerequisites.',
+      'Keep it concise but executable by downstream automation.',
+    ].join(' '),
+    prerequisite: [
+      'Write a dp-ring prerequisite analysis document in Markdown.',
+      'Separate what is ready now from what is blocked for each milestone.',
+      'Keep the output structured for an automated dispatcher.',
+    ].join(' '),
+    workflow: [
+      'Write a dp-ring workflow preparation document in Markdown.',
+      'Assign one workflow to each waiting task with short deterministic steps.',
+      'Keep the workflows minimal, scoped, and execution-ready.',
+    ].join(' '),
+  };
+
+  try {
+    const result = await openai.completeText({
+      instructions: prompts[kind] ?? prompts.requirement,
+      input: JSON.stringify(payload, null, 2),
+      reasoning: {
+        effort: 'medium',
+      },
+      metadata: {
+        feature: `loopback-${kind}`,
+      },
+    });
+    return typeof result.output_text === 'string' && result.output_text.trim()
+      ? result.output_text.trim() + '\n'
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function generateTaskFilesWithOpenAi(openai, task, files) {
+  if (!openai?.completeJson || files.length === 0) {
+    return null;
+  }
+
+  try {
+    const result = await openai.completeJson({
+      instructions: [
+        'You are the dp-ring execution worker.',
+        'Return full updated contents for the provided files only.',
+        'Do not invent extra files.',
+        'Preserve valid syntax and keep changes tightly scoped to the task.',
+        'If a file needs no change, return its original content unchanged.',
+      ].join(' '),
+      input: JSON.stringify({
+        task: {
+          id: task.id,
+          name: task.data?.name ?? '',
+          description: task.data?.description ?? '',
+          acceptance_criteria: Array.isArray(task.data?.acceptance_criteria)
+            ? task.data.acceptance_criteria
+            : [],
+          scope: task.data?.scope ?? null,
+        },
+        files,
+      }, null, 2),
+      schemaName: 'ring_task_files',
+      schema: TASK_FILE_SCHEMA,
+      reasoning: {
+        effort: 'medium',
+      },
+      metadata: {
+        feature: 'loopback-worker',
+        task_id: task.id,
+      },
+    });
+
+    const generatedFiles = Array.isArray(result.parsed?.files) ? result.parsed.files : [];
+    return new Map(
+      generatedFiles
+        .filter((item) => typeof item?.path === 'string' && typeof item?.content === 'string')
+        .map((item) => [item.path.trim().replace(/\\/g, '/'), item.content]),
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function judgeTaskWithOpenAi(openai, task) {
+  if (!openai?.completeJson) {
+    return null;
+  }
+
+  try {
+    const result = await openai.completeJson({
+      instructions: [
+        'You are the dp-ring task judge.',
+        'Approve only when the task summary and acceptance criteria indicate the task is complete.',
+        'Reject when the evidence looks incomplete, ambiguous, or contradictory.',
+        'Return a short decision note.',
+      ].join(' '),
+      input: JSON.stringify({
+        task: {
+          id: task.id,
+          name: task.data?.name ?? '',
+          description: task.data?.description ?? '',
+          acceptance_criteria: task.data?.acceptance_criteria ?? [],
+          execution: task.data?.execution ?? null,
+        },
+      }, null, 2),
+      schemaName: 'ring_task_judge',
+      schema: JUDGE_SCHEMA,
+      reasoning: {
+        effort: 'medium',
+      },
+      metadata: {
+        feature: 'loopback-judge',
+        task_id: task.id,
+      },
+    });
+
+    const verdict = result.parsed?.verdict;
+    const note = typeof result.parsed?.note === 'string' ? result.parsed.note.trim() : '';
+    if (!['approved', 'rejected'].includes(verdict)) {
+      return null;
+    }
+
+    return {
+      verdict,
+      note: note || `Cloud judge returned ${verdict}.`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function decideReplanWithOpenAi(openai, task, canRedispatch, reason) {
+  if (!openai?.completeJson) {
+    return null;
+  }
+
+  try {
+    const result = await openai.completeJson({
+      instructions: [
+        'You are the dp-ring task replanner.',
+        canRedispatch
+          ? 'Choose redispatch only when the task can reasonably succeed on another attempt.'
+          : 'Redispatch is not allowed for this task, so return terminal.',
+        'Return a short decision note.',
+      ].join(' '),
+      input: JSON.stringify({
+        task: {
+          id: task.id,
+          name: task.data?.name ?? '',
+          description: task.data?.description ?? '',
+          workflow_template_id: task.data?.workflow_template_id ?? null,
+          replanning: task.data?.replanning ?? null,
+          execution: task.data?.execution ?? null,
+        },
+        reason,
+        can_redispatch: canRedispatch,
+      }, null, 2),
+      schemaName: 'ring_task_replan',
+      schema: REPLAN_SCHEMA,
+      reasoning: {
+        effort: 'medium',
+      },
+      metadata: {
+        feature: 'loopback-replan',
+        task_id: task.id,
+      },
+    });
+
+    const verdict = result.parsed?.verdict;
+    const note = typeof result.parsed?.note === 'string' ? result.parsed.note.trim() : '';
+    if (!['redispatch', 'terminal'].includes(verdict)) {
+      return null;
+    }
+
+    return {
+      verdict: canRedispatch ? verdict : 'terminal',
+      note: note || `Cloud replanner returned ${verdict}.`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function applyTaskFileChanges(repoRoot, task, openai) {
   const repoCwd = resolveTaskRepoRoot(repoRoot, task);
   const filePaths = normalizePathList(task.data.scope?.file_paths);
   const timestamp = nowIso();
+  const currentFiles = await Promise.all(
+    filePaths.map(async (relativePath) => {
+      const absolutePath = resolve(repoCwd, relativePath);
+      return {
+        path: relativePath,
+        content: await readFile(absolutePath, 'utf-8').catch(() => ''),
+      };
+    }),
+  );
+  const generatedFiles = await generateTaskFilesWithOpenAi(openai, task, currentFiles);
 
   for (const relativePath of filePaths) {
     const absolutePath = resolve(repoCwd, relativePath);
-    const currentContents = await readFile(absolutePath, 'utf-8').catch(() => '');
+    const currentContents = currentFiles.find((file) => file.path === relativePath)?.content ?? '';
+    const generatedContents = generatedFiles?.get(relativePath);
     await mkdir(dirname(absolutePath), { recursive: true });
     await writeFile(
       absolutePath,
-      nextFileContents(relativePath, currentContents, task, timestamp),
+      typeof generatedContents === 'string'
+        ? generatedContents
+        : nextFileContents(relativePath, currentContents, task, timestamp),
       'utf-8',
     );
   }
@@ -384,6 +643,7 @@ export function createLoopbackRuntime(
     orchestrator,
     sessionRunner,
     taskExecution,
+    openai = null,
   },
 ) {
   async function writeDocument(relativePath, contents) {
@@ -401,9 +661,13 @@ export function createLoopbackRuntime(
         continue;
       }
       const requirement = await ring.read('requirement', job.requirement_id);
+      const cloudContents = await draftLoopbackDocument(openai, 'requirement', {
+        requirement,
+        job,
+      });
       await writeDocument(
         job.requirement_document.document.path,
-        requirementDocument(requirement, job),
+        cloudContents ?? requirementDocument(requirement, job),
       );
       await orchestrator.reportAgent(job.id, {
         agent_id: config.writer_agent_id,
@@ -425,9 +689,13 @@ export function createLoopbackRuntime(
         continue;
       }
       const requirement = await ring.read('requirement', job.requirement_id);
+      const cloudContents = await draftLoopbackDocument(openai, 'milestone', {
+        requirement,
+        job,
+      });
       await writeDocument(
         job.milestone_plan.document.path,
-        milestonePlanDocument(requirement),
+        cloudContents ?? milestonePlanDocument(requirement),
       );
       await orchestrator.reportAgent(job.id, {
         agent_id: config.milestone_planner_agent_id,
@@ -452,9 +720,14 @@ export function createLoopbackRuntime(
       const milestones = await Promise.all(
         (job.milestone_plan.generated_milestone_ids ?? []).map((id) => ring.read('milestone', id)),
       );
+      const cloudContents = await draftLoopbackDocument(openai, 'prerequisite', {
+        requirement,
+        milestones,
+        job,
+      });
       await writeDocument(
         job.post_milestone.prerequisite_analysis.document.path,
-        prerequisiteDocument(requirement, milestones),
+        cloudContents ?? prerequisiteDocument(requirement, milestones),
       );
       await orchestrator.reportAgent(job.id, {
         agent_id: config.prerequisite_preparer_agent_id,
@@ -488,9 +761,14 @@ export function createLoopbackRuntime(
       const tasks = await Promise.all(
         waitingTasks.map((item) => ring.read('task', item.task_id)),
       );
+      const cloudContents = await draftLoopbackDocument(openai, 'workflow', {
+        requirement,
+        tasks,
+        job,
+      });
       await writeDocument(
         job.workflow_preparation.document.path,
-        workflowPlanDocument(requirement, tasks),
+        cloudContents ?? workflowPlanDocument(requirement, tasks),
       );
       await orchestrator.reportAgent(job.id, {
         agent_id: config.workflow_designer_agent_id,
@@ -562,7 +840,7 @@ export function createLoopbackRuntime(
       return false;
     }
 
-    const { repoCwd, filePaths, timestamp } = await applyTaskFileChanges(repoRoot, task);
+    const { repoCwd, filePaths, timestamp } = await applyTaskFileChanges(repoRoot, task, openai);
     if (filePaths.length === 0) {
       return false;
     }
@@ -662,10 +940,11 @@ export function createLoopbackRuntime(
         task.status === 'in_progress' &&
         task.data.execution?.review_status === 'awaiting_judgement'
       ) {
+        const cloudDecision = await judgeTaskWithOpenAi(openai, task);
         await taskExecution.judge(task.id, {
-          verdict: 'approved',
+          verdict: cloudDecision?.verdict ?? 'approved',
           judge_agent_id: config.judge_agent_id,
-          note: 'Loopback judge approved the task output.',
+          note: cloudDecision?.note ?? 'Loopback judge approved the task output.',
         });
         changed = true;
       }
@@ -812,12 +1091,18 @@ export function createLoopbackRuntime(
         depth < config.max_replan_depth &&
         ['workflow_failed', 'workflow_timeout', 'review_rejected'].includes(reason) &&
         trimString(task.data.workflow_template_id);
+      const cloudDecision = await decideReplanWithOpenAi(openai, task, canRedispatch, reason);
+      const verdict = cloudDecision?.verdict ?? (canRedispatch ? 'redispatch' : 'terminal');
+      const note = cloudDecision?.note ??
+        (canRedispatch
+          ? `Loopback replanner redispatched the task after ${reason}.`
+          : `Loopback replanner marked the task terminal after ${reason}.`);
 
-      const replannedTask = await taskExecution.replan(task.id, canRedispatch
+      const replannedTask = await taskExecution.replan(task.id, verdict === 'redispatch'
         ? {
             verdict: 'redispatch',
             replanner_agent_id: config.replanner_agent_id,
-            note: `Loopback replanner redispatched the task after ${reason}.`,
+            note,
             task: {
               workflow_template_id: task.data.workflow_template_id,
             },
@@ -825,7 +1110,7 @@ export function createLoopbackRuntime(
         : {
             verdict: 'terminal',
             replanner_agent_id: config.replanner_agent_id,
-            note: `Loopback replanner marked the task terminal after ${reason}.`,
+            note,
           });
 
       if (canRedispatch && replannedTask.data.replanning?.successor_task_id) {

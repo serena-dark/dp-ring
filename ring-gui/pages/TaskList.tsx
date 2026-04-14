@@ -6,21 +6,22 @@ import {
   tasks,
   workflows,
 } from "@ring-gui/api/client";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
-import { StatusBadge } from "@ring-gui/components/StatusBadge";
+import { PageSection } from "@ring-gui/components/PageSection";
 import {
   buildAcceptanceCriteria,
-  formatDateTime,
   sortByUpdatedAt,
   titleize,
 } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
-import { AppLink, useRouter } from "@ring-gui/lib/router";
+import { usePageQuery } from "@ring-gui/lib/page-state";
+import { useRouter } from "@ring-gui/lib/router";
+import { createTaskListTableFactory } from "@ring-gui/lib/tables/list-factories";
 import { executionModes, taskStatuses } from "@ring-gui/lib/state";
 import { useApi } from "@ring-gui/hooks/useApi";
 
 export default function TaskList() {
-  const [statusFilter, setStatusFilter] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState("");
@@ -40,6 +41,9 @@ export default function TaskList() {
 
   const { notify } = useNotifications();
   const { navigate } = useRouter();
+  const { values, setQuery } = usePageQuery();
+  const statusFilter = values.status ?? "";
+  const composeOpen = values.compose === "1";
 
   const tasksState = useApi(
     () => tasks.list(statusFilter || undefined),
@@ -177,10 +181,40 @@ export default function TaskList() {
   };
 
   const taskItems = sortByUpdatedAt(tasksState.data ?? []);
+  const taskTableFactory = createTaskListTableFactory({
+    workflowNameById,
+    sessionNameById,
+  });
+  const activeTasks = taskItems.filter((item) =>
+    ["ready", "in_progress"].includes(item.status),
+  ).length;
+  const linkedSessions = taskItems.filter((item) => item.session_id).length;
 
   return (
     <div className="page">
-      <details className="panel details-card">
+      <PageSection id="summary" label="Task summary">
+        <div className="stats-grid">
+          <article className="panel stat-card">
+            <p className="eyebrow">Total tasks</p>
+            <strong>{taskItems.length}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">Active</p>
+            <strong>{activeTasks}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">Linked sessions</p>
+            <strong>{linkedSessions}</strong>
+          </article>
+          <article className="panel stat-card">
+            <p className="eyebrow">Workflow templates</p>
+            <strong>{workflowItems.length}</strong>
+          </article>
+        </div>
+      </PageSection>
+
+      <PageSection id="create" label="Create task">
+      <details className="panel details-card" open={composeOpen || undefined}>
         <summary>
           <div className="panel-header">
             <h3>New task</h3>
@@ -377,14 +411,20 @@ export default function TaskList() {
           </form>
         </div>
       </details>
+      </PageSection>
 
+      <PageSection id="records" label="Task records">
       <section className="panel">
         <div className="panel-header">
           <h3>Tasks</h3>
           <div className="search-row">
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setQuery({
+                  status: event.target.value || null,
+                })
+              }
             >
               <option value="">All statuses</option>
               {taskStatuses.map((status) => (
@@ -402,58 +442,10 @@ export default function TaskList() {
           empty={taskItems.length === 0}
           emptyMessage="No tasks."
         >
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Task type</th>
-                  <th>Session</th>
-                  <th>Workflow</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {taskItems.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <AppLink to={`/tasks/${item.id}`} className="record-link">
-                        {item.id}
-                      </AppLink>
-                    </td>
-                    <td>{item.data.name}</td>
-                    <td>
-                      <StatusBadge value={item.status} />
-                    </td>
-                    <td>{item.data.task_type}</td>
-                    <td>
-                      {item.session_id ? (
-                        <AppLink
-                          to={`/sessions/${item.session_id}`}
-                          className="record-link"
-                        >
-                          {sessionNameById.get(item.session_id) ?? item.session_id}
-                        </AppLink>
-                      ) : (
-                        "--"
-                      )}
-                    </td>
-                    <td>
-                      {item.data.workflow_template_id
-                        ? workflowNameById.get(item.data.workflow_template_id) ??
-                          item.data.workflow_template_id
-                        : "--"}
-                    </td>
-                    <td>{formatDateTime(item.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <FactoryTable factory={taskTableFactory} rows={taskItems} />
         </DataState>
       </section>
+      </PageSection>
     </div>
   );
 }

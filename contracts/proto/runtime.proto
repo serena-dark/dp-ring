@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package dpring.v2.runtime;
+
+message WorkerEnvelope {
+  string worker_id = 1;
+  string message_type = 2;
+  string emitted_at = 3;
+  bytes payload_json = 4;
+}
+
+message LeaseOffer {
+  string execution_id = 1;
+  string work_item_id = 2;
+  string launch_spec_uri = 3;
+}
+
+message ProgressUpdate {
+  string execution_id = 1;
+  uint32 percent = 2;
+  string note = 3;
+}
+
+message ArtifactReady {
+  string execution_id = 1;
+  string kind = 2;
+  string uri = 3;
+}
+
+message CompletionReport {
+  string execution_id = 1;
+  string outcome = 2;
+  string summary = 3;
+}
+
+service RuntimeBrokerService {
+  rpc PushWorkerEnvelope(WorkerEnvelope) returns (WorkerEnvelope);
+}
