@@ -1,0 +1,407 @@
+openapi: 3.1.0
+info:
+  title: dp-ring v2 Control API
+  version: 0.1.0
+  summary: Control-plane REST and SSE surface for operator-web.
+servers:
+  - url: http://127.0.0.1:7400
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service health.
+  /api/bootstrap:
+    get:
+      operationId: getBootstrap
+      responses:
+        "200":
+          description: Viewer, navigation, status catalog, and board counters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapPayload"
+  /api/orgs:
+    get:
+      operationId: listOrgs
+      responses:
+        "200":
+          description: Organizations visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Organization"
+  /api/workspaces:
+    get:
+      operationId: listWorkspaces
+      responses:
+        "200":
+          description: Workspaces visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
+  /api/repositories:
+    get:
+      operationId: listRepositories
+      responses:
+        "200":
+          description: Repositories bound to workspaces.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repository"
+  /api/objectives:
+    get:
+      operationId: listObjectives
+      responses:
+        "200":
+          description: Objectives in the active workspace.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Objective"
+  /api/blueprints:
+    get:
+      operationId: listBlueprints
+      responses:
+        "200":
+          description: Execution blueprints for objectives.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Blueprint"
+  /api/work-items:
+    get:
+      operationId: listWorkItems
+      responses:
+        "200":
+          description: Queue and execution units.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkItem"
+  /api/executions:
+    get:
+      operationId: listExecutions
+      responses:
+        "200":
+          description: Execution attempts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Execution"
+  /api/reviews:
+    get:
+      operationId: listReviews
+      responses:
+        "200":
+          description: Pending and completed reviews.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+  /api/findings:
+    get:
+      operationId: listFindings
+      responses:
+        "200":
+          description: Findings and incidents.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Finding"
+  /api/insights:
+    get:
+      operationId: listInsights
+      responses:
+        "200":
+          description: Published learnings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Insight"
+  /api/workers:
+    get:
+      operationId: listWorkers
+      responses:
+        "200":
+          description: Registered worker daemons.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+  /api/activity:
+    get:
+      operationId: listActivity
+      responses:
+        "200":
+          description: Activity log snapshot.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityEvent"
+  /api/activity/stream:
+    get:
+      operationId: streamActivity
+      responses:
+        "200":
+          description: Server-sent event stream of domain activity.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+components:
+  schemas:
+    BootstrapPayload:
+      type: object
+      required: [viewer, navigation, status_catalog, boards]
+      properties:
+        viewer:
+          $ref: "#/components/schemas/Viewer"
+        navigation:
+          type: array
+          items:
+            $ref: "#/components/schemas/NavSurface"
+        status_catalog:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCatalog"
+        boards:
+          $ref: "#/components/schemas/Boards"
+    Viewer:
+      type: object
+      required: [id, display_name, role, organization_id, workspace_id]
+      properties:
+        id: { type: string }
+        display_name: { type: string }
+        role: { type: string }
+        organization_id: { type: string }
+        workspace_id: { type: string }
+    NavSurface:
+      type: object
+      required: [id, label, path, description]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        path: { type: string }
+        description: { type: string }
+    StatusCatalog:
+      type: object
+      required: [entity, statuses]
+      properties:
+        entity: { type: string }
+        statuses:
+          type: array
+          items: { type: string }
+    Boards:
+      type: object
+      required: [objective_board, queue_board, run_timeline, review_inbox, worker_health]
+      properties:
+        objective_board: { $ref: "#/components/schemas/CounterMap" }
+        queue_board: { $ref: "#/components/schemas/CounterMap" }
+        run_timeline: { $ref: "#/components/schemas/CounterMap" }
+        review_inbox: { $ref: "#/components/schemas/CounterMap" }
+        worker_health: { $ref: "#/components/schemas/CounterMap" }
+    CounterMap:
+      type: object
+      additionalProperties:
+        type: integer
+    Organization:
+      type: object
+      required: [id, name, slug]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+    Workspace:
+      type: object
+      required: [id, organization_id, name, slug, environment]
+      properties:
+        id: { type: string }
+        organization_id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        environment: { type: string }
+    Repository:
+      type: object
+      required: [id, workspace_id, name, default_branch, clone_url, bound_worker_ids]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        name: { type: string }
+        default_branch: { type: string }
+        clone_url: { type: string }
+        bound_worker_ids:
+          type: array
+          items: { type: string }
+    Objective:
+      type: object
+      required: [id, workspace_id, title, summary, status, priority, repository_id, blueprint_id, active_work_item_ids, updated_at]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        status: { type: string }
+        priority: { type: string }
+        repository_id: { type: string }
+        blueprint_id: { type: string }
+        active_work_item_ids:
+          type: array
+          items: { type: string }
+        updated_at: { type: string, format: date-time }
+    Blueprint:
+      type: object
+      required: [id, objective_id, status, summary, steps]
+      properties:
+        id: { type: string }
+        objective_id: { type: string }
+        status: { type: string }
+        summary: { type: string }
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/BlueprintStep"
+    BlueprintStep:
+      type: object
+      required: [id, title, summary]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        summary: { type: string }
+    WorkItem:
+      type: object
+      required: [id, objective_id, blueprint_id, title, status, owner_lane, acceptance_contract, scope]
+      properties:
+        id: { type: string }
+        objective_id: { type: string }
+        blueprint_id: { type: string }
+        title: { type: string }
+        status: { type: string }
+        owner_lane: { type: string }
+        acceptance_contract:
+          type: array
+          items: { type: string }
+        scope:
+          $ref: "#/components/schemas/ScopeContract"
+    ScopeContract:
+      type: object
+      required: [repository_id, target_path, file_allowlist, cleanup_paths]
+      properties:
+        repository_id: { type: string }
+        target_path: { type: string }
+        file_allowlist:
+          type: array
+          items: { type: string }
+        build_command:
+          type: [string, "null"]
+        cleanup_paths:
+          type: array
+          items: { type: string }
+    Execution:
+      type: object
+      required: [id, work_item_id, worker_id, status, launched_at, progress_percent, artifact_manifest]
+      properties:
+        id: { type: string }
+        work_item_id: { type: string }
+        worker_id: { type: string }
+        status: { type: string }
+        launched_at: { type: string, format: date-time }
+        completed_at:
+          type: [string, "null"]
+          format: date-time
+        progress_percent: { type: integer }
+        artifact_manifest:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtifactManifest"
+    ArtifactManifest:
+      type: object
+      required: [kind, uri]
+      properties:
+        kind: { type: string }
+        uri: { type: string }
+    Review:
+      type: object
+      required: [id, work_item_id, execution_id, status, verdict, reviewer, notes]
+      properties:
+        id: { type: string }
+        work_item_id: { type: string }
+        execution_id: { type: string }
+        status: { type: string }
+        verdict: { type: string }
+        reviewer: { type: string }
+        notes: { type: string }
+    Finding:
+      type: object
+      required: [id, workspace_id, title, status, severity, source_execution_id]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        title: { type: string }
+        status: { type: string }
+        severity: { type: string }
+        source_execution_id: { type: string }
+    Insight:
+      type: object
+      required: [id, workspace_id, title, status, category, excerpt]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        title: { type: string }
+        status: { type: string }
+        category: { type: string }
+        excerpt: { type: string }
+    Worker:
+      type: object
+      required: [id, workspace_id, display_name, status, capacity, active_executions, repository_ids, capabilities]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        display_name: { type: string }
+        status: { type: string }
+        capacity: { type: integer }
+        active_executions: { type: integer }
+        repository_ids:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+    ActivityEvent:
+      type: object
+      required: [id, timestamp, kind, title, summary, resource_type, resource_id]
+      properties:
+        id: { type: string }
+        timestamp: { type: string, format: date-time }
+        kind: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        resource_type: { type: string }
+        resource_id: { type: string }

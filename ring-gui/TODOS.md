@@ -23,7 +23,7 @@ The backend is **fully operational**. The API server runs at `http://localhost:3
 ### Backend (complete, don't touch)
 
 - `ring/server.mjs` — REST API. Start with `npm run ring:serve`.
-- `ring/API.md` — Full API documentation (routes, request/response shapes).
+- `docs/archive/legacy-adaptive-flywheel/ring/API.md` — legacy backend route documentation (historical reference).
 - `ring/cli.mjs` — CLI for the same operations (useful for testing).
 - `.ring/schemas/*.schema.json` — 10 JSON Schema definitions.
 - `.ring/config.json` — Score weights, evolution settings, gate control.
@@ -288,5 +288,5 @@ All types are defined in `ring-gui/types/api.ts`. Use them everywhere — don't 
 1. **This file** (`ring-gui/TODOS.md`) — you're here.
 2. `ring-gui/types/api.ts` — the entire data model.
 3. `ring-gui/api/client.ts` — the API client to implement.
-4. `ring/API.md` — backend route documentation.
+4. `docs/archive/legacy-adaptive-flywheel/ring/API.md` — legacy backend route documentation.
 5. `.ring/config.json` — score weights and settings the UI should reflect.

@@ -16,6 +16,7 @@
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { createRing } from './index.mjs';
+import { loadEnvFiles } from './lib/env.mjs';
 
 const PORT = parseInt(process.env.PORT ?? '3100', 10);
 
@@ -35,6 +36,8 @@ while (true) {
     repoRoot = parent;
   }
 }
+
+loadEnvFiles(repoRoot);
 
 const ring = await createRing(repoRoot);
 await ring.orchestrator.start();
@@ -155,7 +158,7 @@ async function handler(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,PATCH,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Ring-Timestamp, X-Ring-Signature, X-Ring-Key-Version, X-Ring-Worker-Id',
     });
     res.end();
@@ -225,6 +228,65 @@ async function handler(req, res) {
     if (parts[0] === 'runtime') {
       if (parts[1] === 'services' && req.method === 'GET') {
         return ok(res, await readServiceStackStatus());
+      }
+      return err(res, 404, 'Not found');
+    }
+
+    if (parts[0] === 'openai') {
+      if (!parts[1] && req.method === 'GET') {
+        return ok(res, await ring.openai.getStatus());
+      }
+      if (parts[1] === 'oauth' && parts[2] === 'start' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.startOAuthRedirect(body ?? {}));
+      }
+      if (parts[1] === 'oauth' && parts[2] === 'complete' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.completeOAuthRedirect(body ?? {}));
+      }
+      if (parts[1] === 'authorize-url' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.buildAuthorizeUrl(body ?? {}));
+      }
+      if (parts[1] === 'token' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.exchangeToken(body ?? {}));
+      }
+      if (parts[1] === 'device' && parts[2] === 'start' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.startDeviceAuthorization(body ?? {}));
+      }
+      if (parts[1] === 'device' && parts[2] === 'poll' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.pollDeviceAuthorization(body ?? {}));
+      }
+      if (parts[1] === 'refresh' && req.method === 'POST') {
+        return ok(res, await ring.openai.refreshSession());
+      }
+      if (parts[1] === 'session' && req.method === 'DELETE') {
+        return ok(res, await ring.openai.revokeSession());
+      }
+      if (parts[1] === 'responses' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.openai.createResponse(body ?? {}));
+      }
+      return err(res, 404, 'Not found');
+    }
+
+    if (parts[0] === 'ui') {
+      if (parts[1] === 'config' && req.method === 'GET') {
+        return ok(res, await ring.ui.getConfig());
+      }
+      if (parts[1] === 'config' && req.method === 'PATCH') {
+        const body = await readBody(req);
+        return ok(res, await ring.ui.updateConfig(body ?? {}));
+      }
+      if (parts[1] === 'themes' && req.method === 'GET') {
+        return ok(res, await ring.ui.getThemes());
+      }
+      if (parts[1] === 'assistant' && parts[2] === 'plan' && req.method === 'POST') {
+        const body = await readBody(req);
+        return ok(res, await ring.uiAssistant.plan(body ?? {}));
       }
       return err(res, 404, 'Not found');
     }

@@ -1,35 +1,51 @@
-# Core Value and Goals
+# Platform Value and Principles
 
-dp-ring implements an **Adaptive Flywheel** for agent development workflows: a system where each execution session is measured, its knowledge distilled, and its workflows ranked — so the next session starts from a better position.
+`dp-ring v2` is a multi-tenant control plane for human-and-agent software delivery. It treats planning, execution, review, findings, and operational insight as first-class platform resources instead of file-based artifacts scattered across ad hoc workflows.
 
-## The Three Phases
+## Core Goal
 
-1. **Puzzle Phase** — Transforms raw requirements into gate-controllable milestones with machine-evaluable prerequisites. Operates asynchronously, independent of execution.
+The platform exists to make agent delivery auditable, steerable, and reusable at the organization and workspace level.
 
-2. **Execution Phase** — Once gates pass, executes tasks through reusable workflow templates. Every step is tracked in a session record with a proper state machine.
+It does that by giving operators one control surface for:
 
-3. **Closure Protocol** — After each session (success or failure): evaluate quality across five dimensions, distill knowledge into structured artifacts, update the workflow leaderboard. This is the mechanism that makes the flywheel turn.
+- submitting and triaging delivery objectives
+- decomposing work into explicit executable units
+- leasing execution to local workers
+- reviewing outcomes with clear status transitions
+- turning incidents and repeated patterns into findings and insights
 
-## Evolution Mechanism
+## Product Model
 
-The flywheel turns through four forces:
+The current platform is organized around these domain resources:
 
-- **Variation** — Reusable workflow templates that can be applied to different tasks.
-- **Evaluation** — Five-dimension quality scoring (correctness, completeness, efficiency, adherence, reusability).
-- **Selection** — A leaderboard ranks workflows by score per task type. Better workflows get more usage.
-- **Inheritance** — Distilled knowledge (lessons, patterns, anti-patterns) is injected as context into future sessions.
+- `Organization`
+- `Workspace`
+- `Repository`
+- `Objective`
+- `Blueprint`
+- `WorkItem`
+- `Execution`
+- `Review`
+- `Finding`
+- `Insight`
+- `Worker`
+
+These resources are served by the Rust control plane and surfaced in the TypeScript operator console. The retired `requirement / session / task / workflow` vocabulary is historical context only.
 
 ## Design Principles
 
-- **Schema-first**: Every artifact is a JSON file validated against a JSON Schema. Prose docs are views, not source of truth.
-- **State machines are explicit**: All lifecycle transitions are defined in schemas and enforced by the protocol library.
-- **Machine-readable first**: Agents read JSON, not markdown. The `.ring/` directory is the interface.
-- **Repo as source, DB as cache**: Git-tracked JSON files are authoritative. An optional service can index them.
+- **Control plane first**: the live platform is the source of truth, not a repo-local JSON tree.
+- **Explicit boundaries**: `control-api`, `orchestrator`, `runtime-broker`, `knowledge-hub`, and `worker-daemon` own separate responsibilities.
+- **Event-driven coordination**: cross-service state propagation happens through contracts and events, not hidden in-process mutation.
+- **Typed contracts**: public HTTP and internal gRPC/event schemas are versioned under `contracts/`.
+- **Multi-tenant by default**: organization, workspace, repository, and RBAC are foundational, not optional extensions.
+- **Operator visibility**: the system must expose live queue, run, review, worker, and activity views for intervention.
+- **Archive legacy, do not inherit it implicitly**: old `ring` and Adaptive Flywheel material can inform history, but it does not govern current behavior.
 
-## Related Documents
+## Active References
 
+- Project entry: [README.md](./README.md)
 - Document index: [INDEX.md](./INDEX.md)
-- Core logic (legacy): [docs/core-logic.md](./docs/core-logic.md)
-- API documentation: [ring/API.md](./ring/API.md)
-- Frontend plan: [ring-gui/TODOS.md](./ring-gui/TODOS.md)
-- Schemas: `.ring/schemas/`
+- Current architecture: [docs/v2/ARCHITECTURE.md](./docs/v2/ARCHITECTURE.md)
+- Current repository structure: [docs/repository-layout.md](./docs/repository-layout.md)
+- Public HTTP contract: [contracts/openapi/openapi.yaml](./contracts/openapi/openapi.yaml)

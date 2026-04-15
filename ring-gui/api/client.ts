@@ -11,6 +11,8 @@
 
 import type {
   ArtifactType,
+  AssistantPlan,
+  AssistantPlannerRequest,
   Envelope,
   Requirement,
   Milestone,
@@ -28,11 +30,21 @@ import type {
   ApiResponse,
   OrchestratedRequirementResult,
   OrchestratedFollowupResult,
+  OpenAiAuthorizeUrlResponse,
+  OpenAiDeviceAuthorization,
+  OpenAiDevicePollResponse,
+  OpenAiResponseRequest,
+  OpenAiResponseResult,
+  OpenAiStatus,
+  OpenAiTokenExchangeResponse,
   OrchestratorAgentCard,
   OrchestratorConfig,
   OrchestratorJob,
   OrchestratorTickResult,
   ServiceStackStatus,
+  UiConfig,
+  UiConfigPatch,
+  UiThemeTemplate,
   AdaptiveBundleEnvelope,
   DispatchBundleRecord,
   DispatchProtocolDescriptor,
@@ -287,6 +299,8 @@ export const distillations = {
   list: (status?: string) =>
     listArtifacts<Distillation>("distillation", status),
   read: (id: string) => readArtifact<Distillation>("distillation", id),
+  update: (id: string, p: Parameters<typeof updateArtifact>[2]) =>
+    updateArtifact<Distillation>("distillation", id, p),
 };
 
 // ---------------------------------------------------------------------------
@@ -332,6 +346,68 @@ export function getKnowledge(
 export const runtime = {
   services: {
     read: () => get<ServiceStackStatus>(`${BASE}/runtime/services`),
+  },
+};
+
+export const openai = {
+  status: () => get<OpenAiStatus>(`${BASE}/openai`),
+  oauth: {
+    start: (body?: { prompt?: string; scope?: string; audience?: string }) =>
+      post<OpenAiAuthorizeUrlResponse>(`${BASE}/openai/oauth/start`, body ?? {}),
+    complete: (body: { code: string; state: string }) =>
+      post<OpenAiTokenExchangeResponse>(`${BASE}/openai/oauth/complete`, body),
+  },
+  authorizeUrl: (
+    body: {
+      state?: string;
+      redirect_uri?: string;
+      scope?: string;
+      audience?: string;
+      code_challenge?: string;
+      code_challenge_method?: "S256";
+      prompt?: string;
+    },
+  ) => post<OpenAiAuthorizeUrlResponse>(`${BASE}/openai/authorize-url`, body),
+  exchangeToken: (
+    body:
+      | {
+          grant_type?: "authorization_code";
+          code: string;
+          redirect_uri?: string;
+          code_verifier?: string;
+        }
+      | {
+          grant_type: "refresh_token";
+          refresh_token: string;
+        },
+  ) => post<OpenAiTokenExchangeResponse>(`${BASE}/openai/token`, body),
+  device: {
+    start: (body?: { scope?: string; audience?: string }) =>
+      post<OpenAiDeviceAuthorization>(`${BASE}/openai/device/start`, body ?? {}),
+    poll: (body: { device_code: string; interval_seconds?: number }) =>
+      post<OpenAiDevicePollResponse>(`${BASE}/openai/device/poll`, body),
+  },
+  refresh: () => post<OpenAiTokenExchangeResponse>(`${BASE}/openai/refresh`, {}),
+  disconnect: () =>
+    request<OpenAiTokenExchangeResponse>(`${BASE}/openai/session`, {
+      method: "DELETE",
+    }),
+  responses: (body: OpenAiResponseRequest) =>
+    post<OpenAiResponseResult>(`${BASE}/openai/responses`, body),
+};
+
+export const ui = {
+  config: {
+    read: () => get<UiConfig>(`${BASE}/ui/config`),
+    update: (patchBody: UiConfigPatch) =>
+      patch<UiConfig>(`${BASE}/ui/config`, patchBody),
+  },
+  themes: {
+    list: () => get<UiThemeTemplate[]>(`${BASE}/ui/themes`),
+  },
+  assistant: {
+    plan: (body: AssistantPlannerRequest) =>
+      post<AssistantPlan>(`${BASE}/ui/assistant/plan`, body),
   },
 };
 

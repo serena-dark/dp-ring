@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "theme": {
+    "mode": "system",
+    "template_id": "monochrome-launch"
+  },
+  "layout": {
+    "sidebar_width_px": 272,
+    "content_padding_px": 24,
+    "panel_radius_px": 16
+  }
+}

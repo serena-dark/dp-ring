@@ -1,150 +1,172 @@
 # 文档与注释编写规范
 
-本文档规定本仓库内 **Markdown 文档**与**代码注释**在撰写前应遵循的约定；是编写、评审任何文档或注释前的**必读依据**。需要统一口径时，其它文档可仅引用本文件而不再重复展开。
+本文档规定当前 `dp-ring v2` 仓库内 Markdown 文档与代码注释的编写口径。它负责约束“现在如何写”，而不是继续让历史原型文档承担治理职责。需要统一说法时，其它文档应引用本文，不应在多处重复定义同一规则。
 
 ---
 
-## 文档
+## 文档治理边界
 
-### 文档创建及引用规范
+### 当前权威文档
 
-**适用对象**
+当前体系只认以下几类权威来源：
 
-| 对象 | 说明 |
+| 主题 | 权威文档 |
 | --- | --- |
-| 仓库内所有 `*.md` | 含根目录、`docs/**`、`prototype/**` 等 |
+| 项目入口 | [README.md](../README.md)、[INDEX.md](../INDEX.md) |
+| 平台价值与原则 | [VALUE.md](../VALUE.md) |
+| 当前架构 | [docs/v2/ARCHITECTURE.md](./v2/ARCHITECTURE.md) |
+| 仓库结构 | [docs/repository-layout.md](./repository-layout.md) |
+| 文档规范 | 本文档 |
+| 公共 HTTP 契约 | `contracts/openapi/openapi.yaml` |
+| 内部 gRPC / 事件契约 | `contracts/proto/*.proto` |
 
-**与仓库目录总纲的关系**：文档树、目录落点仍以 [prototype/Adaptive-Flywheel.md](../prototype/Adaptive-Flywheel.md) 为准；**结构、命名、注释口径**以本文为准。
+历史文档可以保留，但**不得**继续定义当前平台结构、目录总纲或现行产品语义。
 
-**创建**
+### 当前文档与历史文档的区分
 
-- 通过 `npm run generate-markdown` 自模板创建 requirement、milestone、prerequisites、task、workflow、feedback 等 Markdown 初稿；模板在 `cli-tool/templates/`。**命令参数、`npm run … --` 写法与复制示例**见 [cli-tool/README.md](../cli-tool/README.md)；规范层面的基名与落点见下文「文档与路径命名规范」中的表。  
-- **`session_id` 字面值**的生成与代码中的同源串：**仅**按 [sessions/sessions.md](./sessions/sessions.md) 与 [specs/coding/coding-standards.md](./specs/coding/coding-standards.md)（不得手拼随机或日期片段）。  
+- **当前文档**：描述 `dp-ring v2` 现在如何工作，优先放在根目录、`docs/v2/`、`contracts/` 及与实现相邻的位置。
+- **历史文档**：描述旧 `ring / .ring / Adaptive Flywheel` 体系，可继续保留在原位置作为 archive reference，但默认不再是现行规则来源。
+- 如需引用历史概念，必须显式写明 `legacy`、`historical` 或“历史参考”，避免读者误判为当前行为。
 
-**引用**
+### 禁止事项
 
-- 统一说明「文档结构」时，可写：见 [documentation-standards.md](./documentation-standards.md) **文档 · 文档结构规范**。  
-- **`session_id`** 的语义、环节、文中标注、三段式与归档：**只引用** [sessions/sessions.md](./sessions/sessions.md)。  
-- **代码与模块**层面的格式、API 约定：**见** [specs/coding/coding-standards.md](./specs/coding/coding-standards.md)。  
-
-**新建文档的习惯做法**：除满足本文 **文档** 下各节外，仍建议增加 `> 待完善：` 引导后续补写（与历史约定一致）。
-
-**后续增补**：中英文风格、链接与锚点、drawio/外部编号对照等，宜在本文 **文档** 或 **注释** 下**增列同级小节**，并更新文末**文档引用表**；避免在散落文档中重复定义同一规则。
-
-> 待完善：中英文风格、链接与锚点约定、与 drawio/外部系统的编号对照、注释与 `TSDoc` 字段级模板。
-
----
-
-### 文档与路径命名规范
-
-与 [prototype/Adaptive-Flywheel.md](../prototype/Adaptive-Flywheel.md) 对齐时，用于 **Markdown 附件路径、目录名与相关基名**的约定分两类：**`session_id` 推荐字面值**（唯一允许「名称 + 随机 + 日期」三段式的会话主键），以及**其它文档基名**（无随机、路径中无日期）。日期与创建时间一律写在**正文**，不塞进路径或文件名。
-
-#### `session_id`
-
-语义、环节、文中标注、三段式字面值、归档路径、CLI 与 **`buildSessionArchiveBasename`** 等：**仅**在 [sessions/sessions.md](./sessions/sessions.md) 维护；代码模块约束见 [specs/coding/coding-standards.md](./specs/coding/coding-standards.md)。
-
-#### 其它文档（非 `session_id`）
-
-需求、任务、工作流、步骤、反馈包、output、procedure 等基名形式为：
-
-```text
-{prototype 约定前缀}-{name}
-```
-
-- **name**：来自人工 `--name`，最多 **5 词**，路径安全化规则与 CLI / `doc-basename` 一致。  
-- **禁止**在路径/文件名中加入 `YYYYMMDD`、`HHmmss`、随机串。需要记录时间时，写在 Markdown **正文**（如自描述段、元数据小节）。  
-
-**工具（与谁对照读）**  
-
-- **怎么用 CLI**（各子命令示例、占位符说明）：[cli-tool/README.md](../cli-tool/README.md)。  
-- **规范层面对照**：下表（`--kind`、必需参数、扫描/落点）；当场帮助：`npm run generate-doc-basename -- --help`。
-
-| `--kind` | 基名前缀示例 | 必需参数 / 约束 | 扫描 / 落点 |
-| --- | --- | --- | --- |
-| `feedback` | `f1-…` | — | `docs/feedbacks` |
-| `requirement` | `r1-…` | — | `docs/requirements` |
-| `output` | `o1-…` | — | `docs/output` |
-| `preparation` | `p1-…` | — | `docs/procedure/preparation` |
-| `distillation` | `d1-…` | — | `docs/procedure/distillation` |
-| `evolution` | `e1-…` | — | `docs/procedure/evolution` |
-| `task` | `t1-…` | — | `docs/tasks` |
-| `workflow` | `t1w1-…` | `--task <T>` | `docs/tasks/workflows`：实体为**子目录** `t{T}w{W}-…`；`W` 在本根目录下对 `t{T}w*-` **目录名**递增扫描 |
-| `step` | `t1w1s1-…` | `--task <T>`、`--workflow <W>` | `docs/tasks/workflows/<t{T}w{W}-* 工作流目录>/t{T}w{W}s{S}-<name>.md`：`S` 只在**该工作流目录内**按已有 `t{T}w{W}s*-*.md` 递增；与 `workflow` 同属 `docs/tasks/workflows` 扫描树，区别是步骤文件落在已存在的工作流子目录中，而非根目录 |
-| `milestone` | `r1m1-…` | `--requirement-package <包目录名>`，包目录名须 `r{N}-…` | `docs/requirements/<包>/milestones/` |
-
-**仅打印基名**：`npm run generate-doc-basename`（实现为 `cli-tool/lib/doc-basename.mjs`）；用法同上，**优先**对照 [cli-tool/README.md](../cli-tool/README.md)。
-
-**自模板创建 Markdown**（requirement、milestone、prerequisites、task、workflow、feedback）：`npm run generate-markdown`，模板在 `cli-tool/templates/`；示例与选项说明见 [cli-tool/README.md](../cli-tool/README.md)。**不得**在其它脚本中重复实现与上表冲突的拼名逻辑，应 `import { computeDocBasename } from '…/cli-tool/lib/doc-basename.mjs'`。
-
-历史路径若曾含日期或随机后缀，不强制批量重命名；**新建「其它文档」路径**须遵守上表；**新建 `session_id`** 遵守 [sessions/sessions.md](./sessions/sessions.md)（与 [specs/coding/coding-standards.md](./specs/coding/coding-standards.md) 中的代码约束）。
+- 不得再以 `docs/archive/legacy-adaptive-flywheel/prototype/Adaptive-Flywheel.md` 作为当前文档树总纲。
+- 不得在多个文档中各自维护同一主题的“唯一权威说明”。
+- 不得把旧 `session_id`、旧 artifact 命名、旧 `.ring/` 目录规则写成当前 v2 的现行约束。
 
 ---
 
-### 文档结构规范
+## 文档放置规则
 
-本节约定 Markdown **标题层级、自描述与分节排版**；细项只在下列子节展开一处。
+### 根目录
 
-#### 自描述段
+根目录只放项目级入口和跨仓库治理文档：
 
-每个 Markdown 文档在标题（`#`）之后、第一个次级标题（`##`）之前，**必须**有一段连续正文作为**自描述段**（可为多句，但须紧邻标题、中间不插入列表或表格）。
+- `README.md`
+- `INDEX.md`
+- `VALUE.md`
 
-自描述段**至少**交代：
+除非某份文档必须作为仓库顶层入口，否则不要继续在根目录扩张零散说明。
 
-1. **本文档是什么**（类型：规范、任务说明、需求包、会话记录等）。  
-2. **解决什么问题 / 面向谁**（读者或消费场景）。  
-3. **与其它文档的关系**（可选：上一级入口、依赖或替代阅读的链接）。
+### `docs/v2/`
 
-不要求固定句式，但评审时须能仅凭该段判断「是否应该读本文档、是否与当前工作相关」。
+`docs/v2/` 只放当前平台设计文档，例如：
 
-若同一篇**多个并列概念或子模块**须加**概念目录表**：表的位置（相对自描述段与首个 `##`）、以及并列 `##` 之间的 `---`，**只**按下文「多概念与引言表、正文分割」执行；**概念目录表不属于自描述段**，自描述段内仍不得插入列表或表格。
+- 架构
+- 领域模型
+- RBAC
+- 运行与运维
+- 数据流与活动流
 
-#### 自描述段的信息边界
+这类文档描述的是“当前系统应该如何理解和演进”。
 
-自描述段**仅用于定向**（见上文「至少交代」三条），**不得**预埋或复述**仅属于后文某一子模块**的细致约束、逐步流程、参数与取值说明、例外与 corner case 清单等。此类内容**只能**写在对应的 **`##` / `###` 子模块**（或其后小节）中；评审若见开篇大段细节与后文重复，应删并下移至子模块。
+### 与实现相邻的文档
 
-#### 多概念与引言表、正文分割
+下列信息优先贴近代码和契约：
 
-**何时需要**：同一文档并列承载**多个概念或子模块**（例如不同环节、不同能力域，或「定义 / 步骤 / 附录」等并列块）。
+- 对外 HTTP 接口：`contracts/openapi/`
+- 内部协议：`contracts/proto/`
+- 服务专项设计：必要时放在对应 `services/<name>/` 邻近位置
+- App 专项说明：必要时放在对应 `apps/<name>/` 邻近位置
 
-1. **引言**：在**自描述段之后、第一个 `##` 之前**，用 **Markdown 表格**列出各概念或子模块（列至少含**名称**与**一句话角色/边界**；可增列：对应正文章节、对外链接等）。  
-2. **正文**：每个同级子模块（通常对应一节 **`##` 标题**）与下一节之间，**必须**单独一行 **`---`**，与引言表逐项对应，避免大块粘连。
+如果文档只服务某个模块，不要把它提升成全仓库总纲。
 
-全文**只有一个主题、无并列子模块**时，**不强制**引言表与块间分割线；仍须遵守「**自描述段的信息边界**」，不得在自描述段展开细节。
+### 历史文档
+
+旧 `ring` 体系的核心 Markdown 已迁入 `docs/archive/legacy-adaptive-flywheel/`。其余 legacy 目录仍保留在仓库中，也应按“历史参考”看待：
+
+- `docs/archive/legacy-adaptive-flywheel/docs/core-logic.md`
+- `docs/archive/legacy-adaptive-flywheel/docs/sessions/sessions.md`
+- `docs/archive/legacy-adaptive-flywheel/docs/product/adaptive-flywheel.md`
+- `docs/archive/legacy-adaptive-flywheel/prototype/**`
+- `ring/**`
+- `ring-gui/**`
+- `.ring/**`
+- `cli-tool/**`
+
+新文档不应继续扩写这套历史结构，除非目标就是补历史说明。
+
+正式 archive 编目入口见 [docs/archive/legacy-adaptive-flywheel/README.md](./archive/legacy-adaptive-flywheel/README.md)。
 
 ---
 
-## 注释
+## 文档内容规则
 
-### 注释格式规范
+### 自描述段
 
-**适用对象**：代码内单行/块注释、`JSDoc`/`TSDoc` 等；**语言与工程级字段约定**以 [specs/coding/coding-standards.md](./specs/coding/coding-standards.md) 为准，注释仍须满足本节**与「说明对象」相关的**条款。
+每个 Markdown 文档在标题 `#` 之后、首个 `##` 之前，必须有一段连续正文作为自描述段。
 
-**与 Markdown 的对应关系**：注释不适用 `#` / `##` 结构；但 **注释块首句**应相当于「所注释对象的自描述」——点明**作用或约束**，避免只写实现步骤而不说明目的。
+自描述段至少说明：
 
-**跨文件引用**：若在注释中指向仓库文档，使用相对路径或可解析的仓库内路径，并保持与 [specs/coding/coding-standards.md](./specs/coding/coding-standards.md) 一致。
+1. 这份文档是什么。
+2. 面向谁、解决什么问题。
+3. 它与其它权威文档的关系。
+
+自描述段只负责定向，不负责提前塞入大量流程细节、参数表或例外列表。
+
+### 多主题文档
+
+当一篇文档并列承载多个主题时：
+
+- 自描述段之后可放概览表。
+- 并列的 `##` 章节之间使用单独一行 `---` 分隔。
+- 每个主题只解释自己的边界，不重复其它章节已经定义的规则。
+
+### 单一事实来源
+
+每个主题只保留一个主要解释位置：
+
+- 架构不要同时在 `README`、`VALUE`、`ARCHITECTURE` 三处展开到同一深度。
+- 命名规则不要同时在索引、产品文档、实现说明里重复维护。
+- 某条规则若已有权威文档，其它文档只做简述并链接过去。
+
+### 当前语义优先
+
+当前文档默认使用 v2 术语：
+
+- `Organization`
+- `Workspace`
+- `Repository`
+- `Objective`
+- `Blueprint`
+- `WorkItem`
+- `Execution`
+- `Review`
+- `Finding`
+- `Insight`
+- `Worker`
+
+若必须提及旧 `requirement / session / task / workflow`，必须明确标注它是历史术语。
+
+### 历史 `session_id`
+
+`session_id` 不是当前 v2 文档体系的核心命名规则。若某篇文档是在解释旧流程中的 `session_id`，应仅把 [docs/sessions/sessions.md](./archive/legacy-adaptive-flywheel/docs/sessions/sessions.md) 作为历史参考引用，不应把该规则扩展成当前平台通用规则。
+
+---
+
+## 注释规则
+
+### 注释目标
+
+代码注释和 `JSDoc` / `TSDoc` 应解释：
+
+- 为什么存在这段逻辑
+- 它保护了什么边界或约束
+- 调用方需要知道什么前提
+
+不要把显而易见的实现步骤逐行翻译成注释。
+
+### 跨文档引用
+
+注释中引用文档时：
+
+- 优先引用当前权威文档。
+- 若引用历史文档，注明 `legacy` 或 `historical`。
+- 保持路径可解析，避免口头化引用。
 
 ---
 
 ## 维护信息
 
-- **最后更新时间**：2026-04-02  
-- **文档引用表**（本文件出现的**外部文档/路径**及文内**核心概念**，便于检索与同步修订）：
-
-| 名称 | 路径或说明 |
-| --- | --- |
-| Adaptive Flywheel（文档树目录） | [prototype/Adaptive-Flywheel.md](../prototype/Adaptive-Flywheel.md) |
-| Sessions（`session_id` 权威） | [docs/sessions/sessions.md](./sessions/sessions.md) |
-| 编码规范（含 `session_id` 代码引用） | [docs/specs/coding/coding-standards.md](./specs/coding/coding-standards.md) |
-| CLI 工具说明 | [cli-tool/README.md](../cli-tool/README.md) |
-| `doc-basename.mjs` | `cli-tool/lib/doc-basename.mjs` |
-| `session-id.mjs` | `cli-tool/lib/session-id.mjs` |
-| Markdown 模板目录 | `cli-tool/templates/` |
-| **自描述段** | `#` 后、`##` 前连续正文；不得插入列表/表格 |
-| **概念目录表** | 多主题时，置于自描述段之后、首个 `##` 之前 |
-| **正文分割** | 并列 `##` 之间单独一行 `---` |
-| **`session_id` / `buildSessionArchiveBasename`** | 见 [sessions/sessions.md](./sessions/sessions.md) |
-| **`computeDocBasename`** | 非 session 文档基名；见上文命名规范 |
-| **`npm run generate-markdown`** | 自模板创建 Markdown |
-| **`npm run generate-doc-basename`** | 打印规范化基名 |
-| **`npm run generate-session-id`** | 生成 `session_id` 推荐字面值（详见 sessions） |
-| **`npm test` / `run-tests.mjs`** | 汇总运行 `tests/**/*.test.mjs`；见 [cli-tool/run-tests.mjs](../cli-tool/run-tests.mjs) |
+- **最后更新时间**：2026-04-15
+- **当前治理原则**：当前平台文档与历史文档必须分层；历史文档保留但不再拥有现行治理权。

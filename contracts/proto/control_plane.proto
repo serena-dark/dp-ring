@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package dpring.v2.controlplane;
+
+message CommandReceipt {
+  string command_id = 1;
+  string status = 2;
+  string accepted_at = 3;
+}
+
+message ObjectiveRef {
+  string objective_id = 1;
+}
+
+message BlueprintRef {
+  string blueprint_id = 1;
+}
+
+message WorkItemRef {
+  string work_item_id = 1;
+}
+
+message ReviewRef {
+  string review_id = 1;
+}
+
+message SubmitObjectiveRequest {
+  string organization_id = 1;
+  string workspace_id = 2;
+  string repository_id = 3;
+  string title = 4;
+  string summary = 5;
+  string priority = 6;
+}
+
+message ApproveBlueprintRequest {
+  string blueprint_id = 1;
+  string approved_by = 2;
+}
+
+message QueueWorkItemRequest {
+  string blueprint_id = 1;
+  string objective_id = 2;
+  string title = 3;
+  string repository_id = 4;
+  string target_path = 5;
+  repeated string file_allowlist = 6;
+}
+
+message CompleteReviewRequest {
+  string review_id = 1;
+  string verdict = 2;
+  string notes = 3;
+}
+
+service OrchestratorService {
+  rpc SubmitObjective(SubmitObjectiveRequest) returns (CommandReceipt);
+  rpc ApproveBlueprint(ApproveBlueprintRequest) returns (CommandReceipt);
+  rpc QueueWorkItem(QueueWorkItemRequest) returns (CommandReceipt);
+  rpc CompleteReview(CompleteReviewRequest) returns (CommandReceipt);
+}

@@ -1,16 +1,16 @@
-import { useState } from "react";
 import { getRankings, getLeaderboard, tasks, workflows } from "@ring-gui/api/client";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
-import {
-  formatDateTime,
-  formatPercent,
-  titleize,
-} from "@ring-gui/lib/format";
+import { PageSection } from "@ring-gui/components/PageSection";
+import { titleize } from "@ring-gui/lib/format";
+import { usePageQuery } from "@ring-gui/lib/page-state";
 import { AppLink } from "@ring-gui/lib/router";
+import { createLeaderboardTableFactory } from "@ring-gui/lib/tables/list-factories";
 import { useApi } from "@ring-gui/hooks/useApi";
 
 export default function Leaderboard() {
-  const [selectedTaskType, setSelectedTaskType] = useState("");
+  const { values, setQuery } = usePageQuery();
+  const selectedTaskType = values.task_type ?? "";
 
   const leaderboardState = useApi(() => getLeaderboard(), []);
   const tasksState = useApi(() => tasks.list(), []);
@@ -46,70 +46,61 @@ export default function Leaderboard() {
     (workflowsState.data ?? []).map((item) => [item.id, item.data.name]),
   );
   const rankingItems = rankingState.data ?? [];
+  const leaderboardTableFactory = createLeaderboardTableFactory({
+    workflowNameById,
+  });
 
   return (
     <div className="page">
-      <section className="panel">
-        <div className="panel-header">
-          <h3>Leaderboard</h3>
-          <div className="search-row">
-            <select
-              value={activeTaskType}
-              onChange={(event) => setSelectedTaskType(event.target.value)}
-            >
-              {knownTaskTypes.length === 0 ? (
-                <option value="">No task types yet</option>
-              ) : null}
-              {knownTaskTypes.map((item) => (
-                <option key={item} value={item}>
-                  {titleize(item)}
-                </option>
-              ))}
-            </select>
+      <PageSection id="filters" label="Ranking filters">
+        <section className="panel">
+          <div className="panel-header">
+            <h3>Ranking</h3>
+            <div className="panel-header-actions">
+              <AppLink
+                to={{ path: "/workflows", hash: "summary" }}
+                className="button button-ghost button-small"
+              >
+                Workflows
+              </AppLink>
+              <div className="search-row">
+                <select
+                  value={activeTaskType}
+                  onChange={(event) =>
+                    setQuery({
+                      task_type: event.target.value || null,
+                    })
+                  }
+                >
+                  {knownTaskTypes.length === 0 ? (
+                    <option value="">No task types yet</option>
+                  ) : null}
+                  {knownTaskTypes.map((item) => (
+                    <option key={item} value={item}>
+                      {titleize(item)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
+      </PageSection>
 
-        <DataState
-          loading={loading}
-          error={error}
-          empty={!activeTaskType || rankingItems.length === 0}
-          emptyMessage={
-            activeTaskType ? "No rankings." : "No task types."
-          }
-        >
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Workflow</th>
-                  <th>Average score</th>
-                  <th>Usage count</th>
-                  <th>Last used</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rankingItems.map((item, index) => (
-                  <tr key={item.workflow_id}>
-                    <td>#{index + 1}</td>
-                    <td>
-                      <AppLink
-                        to={`/workflows/${item.workflow_id}`}
-                        className="record-link"
-                      >
-                        {workflowNameById.get(item.workflow_id) ?? item.workflow_id}
-                      </AppLink>
-                    </td>
-                    <td>{formatPercent(item.avg_score)}</td>
-                    <td>{item.usage_count}</td>
-                    <td>{formatDateTime(item.last_used)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </DataState>
-      </section>
+      <PageSection id="records" label="Rankings">
+        <section className="panel">
+          <DataState
+            loading={loading}
+            error={error}
+            empty={!activeTaskType || rankingItems.length === 0}
+            emptyMessage={
+              activeTaskType ? "No rankings." : "No task types."
+            }
+          >
+            <FactoryTable factory={leaderboardTableFactory} rows={rankingItems} />
+          </DataState>
+        </section>
+      </PageSection>
     </div>
   );
 }

@@ -416,6 +416,249 @@ export interface ServiceStackStatus {
   frontend_log_path: string | null;
 }
 
+export interface UiConfig {
+  schema_version: number;
+  theme: {
+    mode: "system" | "light" | "dark";
+    template_id: string;
+  };
+  layout: {
+    sidebar_width_px: number;
+    content_padding_px: number;
+    panel_radius_px: number;
+  };
+}
+
+export interface UiConfigPatch {
+  theme?: Partial<UiConfig["theme"]>;
+  layout?: Partial<UiConfig["layout"]>;
+}
+
+export interface UiThemeTemplate {
+  id: string;
+  label: string;
+  description: string;
+  tokens: {
+    light: Record<string, string>;
+    dark: Record<string, string>;
+  };
+}
+
+export interface AssistantPageSection {
+  id: string;
+  label: string;
+}
+
+export interface AssistantPageDescriptor {
+  route_key: string;
+  path: string;
+  title: string;
+  default_section_id: string | null;
+  sections: AssistantPageSection[];
+}
+
+export interface AssistantPlannerRouteContext {
+  path: string;
+  title: string | null;
+  search: string;
+  hash: string | null;
+}
+
+export interface AssistantPlannerRequest {
+  prompt: string;
+  current_route: AssistantPlannerRouteContext;
+  pages: AssistantPageDescriptor[];
+}
+
+export interface NavigationTarget {
+  path: string;
+  query?: Record<string, string | null | undefined>;
+  section_id?: string | null;
+  source: "assistant" | "navigation" | "manual";
+}
+
+export interface PageAdjustment {
+  key: string;
+  value: string;
+  scope: "query";
+}
+
+export interface AssistantActionTarget {
+  artifact_type: ArtifactType;
+  artifact_id: string;
+}
+
+export interface AssistantCreateRequirementPayload {
+  name: string;
+  description: string;
+  priority: "critical" | "high" | "medium" | "low";
+  acceptance_criteria: AcceptanceCriterion[];
+}
+
+export interface AssistantCreateSessionPayload {
+  name: string;
+  requirement_id: string;
+  milestone_id: string;
+  task_ids: string[];
+}
+
+export interface AssistantCreateFeedbackPayload {
+  severity: "critical" | "major" | "minor" | "info";
+  category:
+    | "requirement_gap"
+    | "implementation_bug"
+    | "workflow_flaw"
+    | "tooling_issue"
+    | "process_issue";
+  target: {
+    type: ArtifactType;
+    id: string;
+    field: string | null;
+  };
+  description: string;
+  proposed_action: string | null;
+  source_session_id: string | null;
+}
+
+export interface AssistantTransitionPayload {
+  artifact_type: ArtifactType;
+  artifact_id: string;
+  next_status: string;
+}
+
+export interface AssistantProposedAction {
+  kind:
+    | "create-requirement"
+    | "create-session"
+    | "create-feedback"
+    | "transition-artifact";
+  title: string;
+  description: string;
+  ready: boolean;
+  confirmation_required: boolean;
+  missing_inputs: string[];
+  target?: AssistantActionTarget | null;
+  payload?:
+    | AssistantCreateRequirementPayload
+    | AssistantCreateSessionPayload
+    | AssistantCreateFeedbackPayload
+    | AssistantTransitionPayload
+    | null;
+}
+
+export interface AssistantPlanBase {
+  mode: "read" | "mutate";
+  answer: string;
+  confidence: number;
+  navigation: NavigationTarget | null;
+  page_adjustments: PageAdjustment[];
+}
+
+export interface AssistantReadPlan extends AssistantPlanBase {
+  mode: "read";
+  proposed_action: null;
+}
+
+export interface AssistantMutationPlan extends AssistantPlanBase {
+  mode: "mutate";
+  proposed_action: AssistantProposedAction;
+}
+
+export type AssistantPlan = AssistantReadPlan | AssistantMutationPlan;
+
+export interface OpenAiSessionSummary {
+  connected: boolean;
+  expires_at: string | null;
+  updated_at: string | null;
+  scope: string[];
+  token_type: string;
+  user: {
+    sub: string | null;
+    email: string | null;
+    name: string | null;
+    preferred_username: string | null;
+  };
+}
+
+export interface OpenAiStatus {
+  provider: "openai";
+  discovery: {
+    issuer: string;
+    authorization_endpoint: string;
+    token_endpoint: string;
+    device_authorization_endpoint: string;
+    revocation_endpoint: string;
+    userinfo_endpoint: string;
+    jwks_uri: string;
+    response_types_supported: string[];
+    grant_types_supported: string[];
+    code_challenge_methods_supported: string[];
+    token_endpoint_auth_methods_supported: string[];
+  };
+  oauth: {
+    configured: boolean;
+    client_id_present: boolean;
+    redirect_uri: string | null;
+    scopes: string[];
+    audience: string;
+  };
+  responses: {
+    api_base_url: string;
+    default_model: string;
+    auth_mode: "oauth" | "api_key" | "none";
+    available: boolean;
+  };
+  session: OpenAiSessionSummary;
+}
+
+export interface OpenAiAuthorizeUrlResponse {
+  authorize_url: string;
+}
+
+export interface OpenAiTokenExchangeResponse {
+  provider: "openai";
+  session: OpenAiSessionSummary;
+}
+
+export interface OpenAiDeviceAuthorization {
+  provider: "openai";
+  status: "pending";
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string | null;
+  expires_at: string | null;
+  interval_seconds: number;
+}
+
+export interface OpenAiDevicePollResponse {
+  provider: "openai";
+  status: "pending" | "slow_down" | "completed" | "expired";
+  session?: OpenAiSessionSummary;
+  retry_after_seconds?: number | null;
+  error?: string | null;
+}
+
+export interface OpenAiResponseRequest {
+  model?: string;
+  instructions?: string;
+  input?: unknown;
+  text?: unknown;
+  reasoning?: {
+    effort?: "minimal" | "low" | "medium" | "high";
+  };
+  metadata?: Record<string, string>;
+}
+
+export interface OpenAiResponseResult {
+  provider: "openai";
+  auth_mode: "oauth" | "api_key";
+  id: string | null;
+  model: string | null;
+  output_text: string;
+  response: unknown;
+}
+
 // ---------------------------------------------------------------------------
 // Orchestrator / dispatch center
 // ---------------------------------------------------------------------------

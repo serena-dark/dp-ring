@@ -9,16 +9,21 @@ import {
   workflows,
   workflowRuns,
 } from "@ring-gui/api/client";
+import { ArtifactCard } from "@ring-gui/components/ArtifactCard";
 import { DataState } from "@ring-gui/components/DataState";
+import { DetailGrid } from "@ring-gui/components/DetailGrid";
 import { EvaluationCard } from "@ring-gui/components/EvaluationCard";
+import { PageSection } from "@ring-gui/components/PageSection";
+import { PageHero } from "@ring-gui/components/PageHero";
+import { PanelSection } from "@ring-gui/components/PanelSection";
 import { StateActions } from "@ring-gui/components/StateActions";
 import { StatusBadge } from "@ring-gui/components/StatusBadge";
 import { TimelineLog } from "@ring-gui/components/TimelineLog";
 import {
-  formatDateTime,
   safeJson,
   titleize,
 } from "@ring-gui/lib/format";
+import { formatDateTime } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
 import { AppLink } from "@ring-gui/lib/router";
 import { useApi } from "@ring-gui/hooks/useApi";
@@ -108,6 +113,8 @@ export default function SessionDetail({ id }: { id: string }) {
     await sessionState.reload();
   };
 
+  const milestoneNames = linkedMilestones.map((item) => item.data.name);
+
   const loadContext = async () => {
     setContextLoading(true);
     setContextError(null);
@@ -130,48 +137,44 @@ export default function SessionDetail({ id }: { id: string }) {
       loading={loading}
       error={error}
       empty={!session}
-      emptyMessage={`Session ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {session ? (
         <div className="page">
-          <section className="page-hero">
-            <div>
-              <p className="eyebrow">Session</p>
-              <h3>{session.id}</h3>
-              <div className="badge-list">
-                <StatusBadge value={session.status} />
-              </div>
-            </div>
-            <StateActions
-              type="session"
-              status={session.status}
-              pendingStatus={pendingStatus}
-              onTransition={handleTransition}
+          <PageSection id="summary" label="Session summary">
+            <PageHero
+              title={session.id}
+              badges={[<StatusBadge key="status" value={session.status} />]}
+              actions={
+                <StateActions
+                  type="session"
+                  status={session.status}
+                  pendingStatus={pendingStatus}
+                  onTransition={handleTransition}
+                />
+              }
             />
-          </section>
+          </PageSection>
 
           <section className="split-grid">
-            <div className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Overview</p>
-                    <h3>Execution summary</h3>
-                  </div>
-                </div>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(session.created_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(session.updated_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Requirement</dt>
-                    <dd>
-                      {requirement ? (
+            <PageSection id="execution" label="Session execution" className="page">
+              <PanelSection title="Summary">
+                <DetailGrid
+                  items={[
+                    {
+                      key: "created",
+                      label: "Created",
+                      value: formatDateTime(session.created_at),
+                    },
+                    {
+                      key: "updated",
+                      label: "Updated",
+                      value: formatDateTime(session.updated_at),
+                    },
+                    {
+                      key: "requirement",
+                      label: "Requirement",
+                      value: requirement ? (
                         <AppLink
                           to={`/requirements/${requirement.id}`}
                           className="record-link"
@@ -180,91 +183,64 @@ export default function SessionDetail({ id }: { id: string }) {
                         </AppLink>
                       ) : (
                         session.data.requirement_id
-                      )}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Milestones</dt>
-                    <dd>
-                      {linkedMilestones.length > 0
-                        ? linkedMilestones.map((item) => item.data.name).join(", ")
-                        : milestoneIds.join(", ")}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Tasks</dt>
-                    <dd>{session.data.task_ids.length}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Workflow runs</dt>
-                    <dd>{session.data.workflow_run_ids.length}</dd>
-                  </div>
-                </div>
-              </article>
+                      ),
+                    },
+                    {
+                      key: "milestones",
+                      label: "Milestones",
+                      value:
+                        milestoneNames.length > 0
+                          ? milestoneNames.join(", ")
+                          : milestoneIds.join(", "),
+                    },
+                    {
+                      key: "tasks",
+                      label: "Tasks",
+                      value: session.data.task_ids.length,
+                    },
+                    {
+                      key: "workflow-runs",
+                      label: "Workflow runs",
+                      value: session.data.workflow_run_ids.length,
+                    },
+                  ]}
+                />
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Timeline</p>
-                    <h3>Execution log</h3>
-                  </div>
-                </div>
+              <PanelSection title="Timeline">
                 <TimelineLog entries={session.data.execution_log} />
-              </article>
+              </PanelSection>
 
               <EvaluationCard evaluation={evaluationState.data} />
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Distillation</p>
-                    <h3>Knowledge extracted</h3>
-                  </div>
-                </div>
+              <PanelSection title="Distillation">
                 {distillationState.data ? (
                   <div className="panel-grid">
                     {distillationState.data.data.artifacts.map((artifact, index) => (
-                      <div key={`${artifact.kind}-${index}`} className="panel">
-                        <div className="badge-list">
-                          <StatusBadge value={artifact.kind} />
-                          <StatusBadge
-                            value={
-                              artifact.confidence >= 0.8
-                                ? "high"
-                                : artifact.confidence >= 0.5
-                                  ? "medium"
-                                  : "low"
-                            }
-                            kind="priority"
-                          />
-                        </div>
-                        <h3>{artifact.summary}</h3>
-                        <p className="subtle">{artifact.context}</p>
-                        <p>{artifact.applicable_when}</p>
-                      </div>
+                      <ArtifactCard
+                        key={`${artifact.kind}-${index}`}
+                        kind={artifact.kind}
+                        confidence={artifact.confidence}
+                        summary={artifact.summary}
+                        context={artifact.context}
+                        applicableWhen={artifact.applicable_when}
+                      />
                     ))}
                   </div>
                 ) : (
-                  <p className="subtle">
-                    No distillation artifact is linked to this session.
-                  </p>
+                  <p className="subtle">No distillation.</p>
                 )}
-              </article>
-            </div>
+              </PanelSection>
+            </PageSection>
 
-            <aside className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Context injected</p>
-                    <h3>Selection inputs</h3>
-                  </div>
-                </div>
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Workflow template</dt>
-                    <dd>
-                      {workflowTemplate ? (
+            <PageSection id="related" label="Session related records" className="page">
+              <PanelSection title="Context">
+                <DetailGrid
+                  items={[
+                    {
+                      key: "workflow-template",
+                      label: "Workflow template",
+                      value: workflowTemplate ? (
                         <AppLink
                           to={`/workflows/${workflowTemplate.id}`}
                           className="record-link"
@@ -273,40 +249,30 @@ export default function SessionDetail({ id }: { id: string }) {
                         </AppLink>
                       ) : (
                         session.data.context_injected?.workflow_template ?? "--"
-                      )}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Distillations applied</dt>
-                    <dd>
-                      {session.data.context_injected?.distillations_applied
-                        .length
-                        ? session.data.context_injected?.distillations_applied.join(
-                            ", ",
-                          )
-                        : "--"}
-                    </dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Registry rank at selection</dt>
-                    <dd>
-                      {session.data.context_injected?.registry_rank_at_selection ??
-                        "--"}
-                    </dd>
-                  </div>
-                </div>
-              </article>
+                      ),
+                    },
+                    {
+                      key: "distillations-applied",
+                      label: "Distillations applied",
+                      value: session.data.context_injected?.distillations_applied.length
+                        ? session.data.context_injected?.distillations_applied.join(", ")
+                        : "--",
+                    },
+                    {
+                      key: "registry-rank",
+                      label: "Registry rank at selection",
+                      value:
+                        session.data.context_injected?.registry_rank_at_selection ??
+                        "--",
+                    },
+                  ]}
+                />
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Links</p>
-                    <h3>Related records</h3>
-                  </div>
-                </div>
+              <PanelSection title="Links">
                 <div className="panel-grid">
                   <div className="panel">
-                    <p className="eyebrow">Tasks</p>
+                    <strong>Tasks</strong>
                     {linkedTasks.length > 0 ? (
                       <div className="inline-list">
                         {linkedTasks.map((task) => (
@@ -320,12 +286,12 @@ export default function SessionDetail({ id }: { id: string }) {
                         ))}
                       </div>
                     ) : (
-                      <p className="empty-line">No linked tasks.</p>
+                      <p className="empty-line">No tasks.</p>
                     )}
                   </div>
 
                   <div className="panel">
-                    <p className="eyebrow">Workflow runs</p>
+                    <strong>Workflow runs</strong>
                     {linkedWorkflowRuns.length > 0 ? (
                       linkedWorkflowRuns.map((run) => (
                         <div key={run.id}>
@@ -337,27 +303,25 @@ export default function SessionDetail({ id }: { id: string }) {
                         </div>
                       ))
                     ) : (
-                      <p className="empty-line">No workflow runs attached.</p>
+                      <p className="empty-line">No runs.</p>
                     )}
                   </div>
                 </div>
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Agent startup</p>
-                    <h3>Context bundle</h3>
-                  </div>
+              <PanelSection
+                title="Bundle"
+                actions={
                   <button
                     type="button"
                     className="button button-secondary button-small"
                     onClick={loadContext}
                     disabled={contextLoading}
                   >
-                    {contextLoading ? "Loading..." : "Get Agent Context"}
+                    {contextLoading ? "Loading..." : "Load"}
                   </button>
-                </div>
+                }
+              >
                 {contextError ? (
                   <p className="subtle" style={{ color: "var(--danger)" }}>
                     {contextError}
@@ -366,21 +330,12 @@ export default function SessionDetail({ id }: { id: string }) {
                 {contextJson ? (
                   <pre className="code-block">{contextJson}</pre>
                 ) : (
-                  <p className="subtle">
-                    Fetches the full startup bundle including tasks, workflow
-                    templates, knowledge items, and blocking feedback.
-                  </p>
+                  <p className="subtle">No bundle.</p>
                 )}
-              </article>
+              </PanelSection>
 
               {linkedWorkflowRuns.length > 0 ? (
-                <article className="panel">
-                  <div className="panel-header">
-                    <div>
-                      <p className="eyebrow">Workflow run detail</p>
-                      <h3>Step progress</h3>
-                    </div>
-                  </div>
+                <PanelSection title="Run detail">
                   <div className="panel-grid">
                     {linkedWorkflowRuns.map((run) => (
                       <div key={run.id} className="panel">
@@ -398,9 +353,9 @@ export default function SessionDetail({ id }: { id: string }) {
                       </div>
                     ))}
                   </div>
-                </article>
+                </PanelSection>
               ) : null}
-            </aside>
+            </PageSection>
           </section>
         </div>
       ) : null}

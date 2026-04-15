@@ -1,6 +1,8 @@
 # cli-tool · 仓库命令行工具
 
-本目录存放与本仓库运维、文档工作流相关的**独立命令行工具**说明；面向需要在本地生成规范化路径名与 Markdown 初稿的开发者。**`session_id` 语义**见 [docs/sessions/sessions.md](../docs/sessions/sessions.md)；命名与 Markdown 规则见 [documentation-standards.md](../docs/documentation-standards.md)。**新增或修改工具前须阅读下文「治理原则」并完成自检。**
+> Archived: 本目录主要服务旧 Adaptive Flywheel / `ring` 文档工作流。当前 `dp-ring v2` 不再把它作为主文档治理入口。
+
+本目录存放与旧仓库运维、旧文档工作流相关的**独立命令行工具**说明；面向需要在本地生成 legacy 路径名与 Markdown 初稿的开发者。旧 **`session_id` 语义**见 [docs/sessions/sessions.md](../docs/archive/legacy-adaptive-flywheel/docs/sessions/sessions.md)；当前文档治理规则见 [documentation-standards.md](../docs/documentation-standards.md)。如需维护这套 legacy 工具，先阅读下文「治理原则」并完成自检。
 
 ---
 
@@ -60,4 +62,4 @@ npm test
 
 模板占位符：`{{TITLE}}`、`{{BASE_NAME}}`、`{{NAME_SLUG}}`、`{{DATE_ISO}}`、`{{REQUIREMENT_PACKAGE}}`、`{{TASK_NUM}}`、`{{WORKFLOW_NUM}}`。
 
-命名细则：`session_id` 见 [sessions.md](../docs/sessions/sessions.md)；其它基名见 [documentation-standards.md](../docs/documentation-standards.md) **文档 · 文档与路径命名规范**。
+命名细则：`session_id` 见 [sessions.md](../docs/archive/legacy-adaptive-flywheel/docs/sessions/sessions.md)；其它基名见 [documentation-standards.md](../docs/documentation-standards.md)。

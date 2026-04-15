@@ -1,58 +1,100 @@
-# dp-ring
+# dp-ring v2
 
-Adaptive Flywheel for agent development workflows. Each session's output is measured, ranked, and distilled so the next session performs better.
+dp-ring v2 is a fresh control-plane rebuild for agent delivery workflows.
 
-## Architecture
+The repository now contains a new platform shape:
 
-```
-.ring/          Machine-readable state (JSON, schemas, config, leaderboard)
-ring/           Protocol library + CLI + REST API server (Node.js)
-ring-gui/       Dashboard frontend (React + TypeScript + Vite)
-docs/           Human-readable documentation
-cli-tool/       Legacy CLI for doc/session naming conventions
-```
+- `apps/operator-web`
+  TypeScript operator console built with React, TanStack Router, and TanStack Query.
+- `services/control-api`
+  Rust REST + SSE gateway for viewer bootstrap, resource collections, and live activity.
+- `services/orchestrator`
+  Rust command-side scaffold for Objectives, Blueprints, WorkItems, and Reviews.
+- `services/runtime-broker`
+  Rust runtime scaffold for worker connectivity, leases, and execution reporting.
+- `services/knowledge-hub`
+  Rust knowledge service scaffold for Findings and Insights.
+- `agents/worker-daemon`
+  Rust local worker scaffold.
+- `contracts/openapi`
+  Public control-plane HTTP contract.
+- `contracts/proto`
+  Internal gRPC and event message contracts.
+- `infra/compose`
+  Postgres, NATS JetStream, MinIO, and Keycloak for local platform bootstrapping.
 
-## Quick Start
+## Current state
 
-```bash
-npm ci
+This turn implements:
 
-# Recommended: build, start backend + preview, then verify both health checks
-npm run stack:start       # frontend http://127.0.0.1:4174, backend http://127.0.0.1:3100
+- a Rust workspace skeleton for all planned services
+- shared domain/read-model types under `crates/platform-types`
+- a functional `control-api` scaffold with REST collection endpoints and an SSE activity stream
+- a new operator console under `apps/operator-web`
+- local infrastructure compose definitions
+- v2 contracts and architecture docs
 
-# Inspect or stop the managed services
-npm run stack:status
-npm run stack:stop
-```
+Rust is not installed in the current execution environment, so the Rust services were scaffolded but not compiled here.
 
-## Scripts
-
-| Command | Purpose |
-|---|---|
-| `npm run dev` | Vite frontend dev server |
-| `npm run build` | Production build (outputs `dist/`) |
-| `npm run stack:start` | Build frontend, start backend + preview, and verify frontend/backend/proxy health |
-| `npm run stack:status` | Show managed service PIDs and current health |
-| `npm run stack:stop` | Stop the managed backend + preview services |
-| `npm run stack:restart` | Restart the managed backend + preview services |
-| `npm run ring:serve` | Ring REST API server (port 3100) |
-| `npm run ring -- <cmd>` | Ring CLI (create, read, list, update, validate, gate, rank, new-id, knowledge, context) |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint |
-| `npm test` | Run all tests (`tests/**/*.test.mjs`) |
-
-## Container (static site)
+## Operator web
 
 ```bash
-docker build -t dp-ring .
-docker run --rm -p 8080:80 dp-ring
+npm --prefix apps/operator-web install
+npm --prefix apps/operator-web run dev
 ```
+
+Useful root shortcuts:
+
+```bash
+npm run v2:web:dev
+npm run v2:web:build
+npm run v2:web:typecheck
+```
+
+The console builds successfully in this repository today.
+
+## Control API
+
+The intended local endpoint is:
+
+```text
+http://127.0.0.1:7400
+```
+
+Implemented routes in the scaffold:
+
+- `GET /healthz`
+- `GET /api/bootstrap`
+- `GET /api/orgs`
+- `GET /api/workspaces`
+- `GET /api/repositories`
+- `GET /api/objectives`
+- `GET /api/blueprints`
+- `GET /api/work-items`
+- `GET /api/executions`
+- `GET /api/reviews`
+- `GET /api/findings`
+- `GET /api/insights`
+- `GET /api/workers`
+- `GET /api/activity`
+- `GET /api/activity/stream`
+
+## Local platform infrastructure
+
+```bash
+docker compose -f infra/compose/docker-compose.yml up -d
+```
+
+Services:
+
+- Postgres on `5432`
+- NATS JetStream on `4222`
+- NATS monitor on `8222`
+- MinIO on `9000` and console on `9001`
+- Keycloak on `8080`
 
 ## Documentation
 
-- [INDEX.md](./INDEX.md) — Document index
-- [VALUE.md](./VALUE.md) — Core value and goals
-- [ring/API.md](./ring/API.md) — REST API documentation
-- [ring-gui/TODOS.md](./ring-gui/TODOS.md) — Frontend implementation plan
-
-Requires Node **>=22.19.0** (see `package.json` engines).
+- [docs/v2/ARCHITECTURE.md](./docs/v2/ARCHITECTURE.md)
+- [contracts/openapi/openapi.yaml](./contracts/openapi/openapi.yaml)
+- [contracts/proto/control_plane.proto](./contracts/proto/control_plane.proto)

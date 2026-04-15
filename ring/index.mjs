@@ -28,6 +28,9 @@ import { createOrchestrator } from './lib/orchestrator.mjs';
 import { createSessionRunner } from './lib/session-runner.mjs';
 import { createTaskExecution } from './lib/task-execution.mjs';
 import { createLoopbackRuntime } from './lib/loopback-runtime.mjs';
+import { createOpenAiGateway } from './lib/openai-gateway.mjs';
+import { createUiConfig } from './lib/ui-config.mjs';
+import { createUiAssistant } from './lib/ui-assistant.mjs';
 import { checkTransition, validNextStatuses, extractStateMachine } from './lib/state-machine.mjs';
 import { computeComposite, buildEvaluation, computeEfficiency } from './lib/evaluator.mjs';
 import { generateId } from './lib/id.mjs';
@@ -52,6 +55,13 @@ export async function createRing(repoRoot) {
   const validator = await createValidator(ringDir);
   const store     = createStore(ringDir, validator, config);
   const registry  = createRegistry(ringDir, config);
+  const ui = await createUiConfig(root);
+  const openai = createOpenAiGateway(root);
+  const uiAssistant = createUiAssistant({
+    list: (type) => store.list(type),
+    registry,
+    openai,
+  });
 
   // --- Public API ---
 
@@ -214,6 +224,7 @@ export async function createRing(repoRoot) {
       orchestrator,
       sessionRunner,
       taskExecution,
+      openai,
     },
   );
   orchestrator.registerTickHook(() => sessionRunner.tick());
@@ -232,6 +243,8 @@ export async function createRing(repoRoot) {
 
     // Registry / Leaderboard
     registry,
+    ui,
+    openai,
 
     // Evaluation helpers
     evaluate: { computeComposite, buildEvaluation, computeEfficiency },
@@ -271,6 +284,7 @@ export async function createRing(repoRoot) {
 
     // Config
     config,
+    uiAssistant,
     ringDir,
     repoRoot: root,
   };

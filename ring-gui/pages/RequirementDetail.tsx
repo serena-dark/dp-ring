@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { checkGate, milestones, requirements, tasks } from "@ring-gui/api/client";
 import { DataState } from "@ring-gui/components/DataState";
+import { DetailGrid } from "@ring-gui/components/DetailGrid";
+import { PageSection } from "@ring-gui/components/PageSection";
+import { PageHero } from "@ring-gui/components/PageHero";
+import { PanelSection } from "@ring-gui/components/PanelSection";
 import { StateActions } from "@ring-gui/components/StateActions";
 import { StatusBadge } from "@ring-gui/components/StatusBadge";
 import { formatDateTime, titleize } from "@ring-gui/lib/format";
@@ -71,65 +75,64 @@ export default function RequirementDetail({ id }: { id: string }) {
       loading={loading}
       error={error}
       empty={!requirement}
-      emptyMessage={`Requirement ${id} was not found.`}
+      emptyMessage="Not found."
     >
       {requirement ? (
         <div className="page">
-          <section className="page-hero">
-            <div>
-              <p className="eyebrow">Requirement</p>
-              <h3>{requirement.data.name}</h3>
-              <div className="badge-list">
-                <StatusBadge value={requirement.status} />
-                <StatusBadge value={requirement.data.priority} kind="priority" />
-              </div>
-            </div>
-            <StateActions
-              type="requirement"
-              status={requirement.status}
-              pendingStatus={pendingStatus}
-              onTransition={handleTransition}
+          <PageSection id="summary" label="Requirement summary">
+            <PageHero
+              title={requirement.data.name}
+              badges={[
+                <StatusBadge key="status" value={requirement.status} />,
+                <StatusBadge
+                  key="priority"
+                  value={requirement.data.priority}
+                  kind="priority"
+                />,
+              ]}
+              actions={
+                <StateActions
+                  type="requirement"
+                  status={requirement.status}
+                  pendingStatus={pendingStatus}
+                  onTransition={handleTransition}
+                />
+              }
             />
-          </section>
+          </PageSection>
 
           <section className="split-grid">
-            <div className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Description</p>
-                    <h3>Scope and intent</h3>
-                  </div>
-                </div>
+            <PageSection id="acceptance" label="Requirement acceptance" className="page">
+              <PanelSection title="Summary">
                 <p>{requirement.data.description}</p>
                 <div className="divider" />
-                <div className="detail-grid">
-                  <div className="detail-item">
-                    <dt>Created</dt>
-                    <dd>{formatDateTime(requirement.created_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Updated</dt>
-                    <dd>{formatDateTime(requirement.updated_at)}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Milestones</dt>
-                    <dd>{linkedMilestones.length}</dd>
-                  </div>
-                  <div className="detail-item">
-                    <dt>Tasks</dt>
-                    <dd>{linkedTasks.length}</dd>
-                  </div>
-                </div>
-              </article>
+                <DetailGrid
+                  items={[
+                    {
+                      key: "created",
+                      label: "Created",
+                      value: formatDateTime(requirement.created_at),
+                    },
+                    {
+                      key: "updated",
+                      label: "Updated",
+                      value: formatDateTime(requirement.updated_at),
+                    },
+                    {
+                      key: "milestones",
+                      label: "Milestones",
+                      value: linkedMilestones.length,
+                    },
+                    {
+                      key: "tasks",
+                      label: "Tasks",
+                      value: linkedTasks.length,
+                    },
+                  ]}
+                />
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Acceptance</p>
-                    <h3>Criteria</h3>
-                  </div>
-                </div>
+              <PanelSection title="Acceptance">
                 <div className="panel-grid">
                   {requirement.data.acceptance_criteria.map((criterion) => (
                     <div key={criterion.id} className="panel">
@@ -143,15 +146,9 @@ export default function RequirementDetail({ id }: { id: string }) {
                     </div>
                   ))}
                 </div>
-              </article>
+              </PanelSection>
 
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Milestones</p>
-                    <h3>Gate-driven delivery</h3>
-                  </div>
-                </div>
+              <PanelSection title="Milestones">
                 <div className="panel-grid">
                   {linkedMilestones.length > 0 ? (
                     linkedMilestones.map((milestone) => {
@@ -169,22 +166,24 @@ export default function RequirementDetail({ id }: { id: string }) {
                           <p>{milestone.data.description}</p>
                           <div className="divider" />
 
-                          <div className="detail-grid">
-                            <div className="detail-item">
-                              <dt>Acceptance checks</dt>
-                              <dd>
-                                {milestone.data.acceptance_checks?.length ?? 0}
-                              </dd>
-                            </div>
-                            <div className="detail-item">
-                              <dt>Prerequisites</dt>
-                              <dd>{milestone.data.prerequisites.length}</dd>
-                            </div>
-                          </div>
+                          <DetailGrid
+                            items={[
+                              {
+                                key: "acceptance-checks",
+                                label: "Acceptance checks",
+                                value: milestone.data.acceptance_checks?.length ?? 0,
+                              },
+                              {
+                                key: "prerequisites",
+                                label: "Prerequisites",
+                                value: milestone.data.prerequisites.length,
+                              },
+                            ]}
+                          />
 
                           <div className="divider" />
 
-                          <p className="eyebrow">Prerequisites</p>
+                          <strong>Prerequisites</strong>
                           <div className="panel-grid">
                             {milestone.data.prerequisites.map((prerequisite) => (
                               <div key={prerequisite.id} className="panel">
@@ -209,7 +208,7 @@ export default function RequirementDetail({ id }: { id: string }) {
                             >
                               {gatePendingId === milestone.id
                                 ? "Checking..."
-                                : "Check Gate"}
+                                : "Gate"}
                             </button>
                           </div>
 
@@ -260,17 +259,11 @@ export default function RequirementDetail({ id }: { id: string }) {
                     <p className="empty-line">No milestones.</p>
                   )}
                 </div>
-              </article>
-            </div>
+              </PanelSection>
+            </PageSection>
 
-            <aside className="page">
-              <article className="panel">
-                <div className="panel-header">
-                  <div>
-                    <p className="eyebrow">Tasks</p>
-                    <h3>Execution units</h3>
-                  </div>
-                </div>
+            <PageSection id="related" label="Requirement related records" className="page">
+              <PanelSection title="Tasks">
                 {linkedTasks.length > 0 ? (
                   <div className="panel-grid">
                     {linkedTasks.map((task) => (
@@ -290,8 +283,8 @@ export default function RequirementDetail({ id }: { id: string }) {
                 ) : (
                   <p className="empty-line">No tasks.</p>
                 )}
-              </article>
-            </aside>
+              </PanelSection>
+            </PageSection>
           </section>
         </div>
       ) : null}
