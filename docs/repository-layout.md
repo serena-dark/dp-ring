@@ -14,7 +14,7 @@ This document describes the active `dp-ring v2` repository layout. It is the cur
 | `infra/` | Local infrastructure definitions and deployment helpers |
 | `docs/` | Current platform docs plus retained legacy material |
 | `tests/` | Cross-service, contract, and app-level tests |
-| `package.json` | Root JavaScript scripts, including operator-web bootstrap/build/typecheck shortcuts |
+| `package.json` | Root JavaScript scripts, including operator-web bootstrap/build/typecheck shortcuts and the managed local stack workflow |
 | `apps/operator-web/package-lock.json` | Locked frontend dependency graph for `npm run v2:web:install` |
 | `Cargo.toml` | Rust workspace manifest |
 
@@ -70,7 +70,7 @@ The following directories remain in the repository but should be treated as hist
 
 | Path | Historical Role |
 |---|---|
-| `.ring/` | Legacy JSON state tree |
+| `.ring/` | Legacy JSON state tree plus `.ring/runtime/` logs/state for the managed local stack |
 | `ring/` | Legacy Node protocol implementation |
 | `ring-gui/` | Legacy artifact-centric frontend |
 | `cli-tool/` | Legacy markdown generation and naming tooling |
