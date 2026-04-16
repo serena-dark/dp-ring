@@ -23,6 +23,7 @@ const steps = [
   ['Lint frontend/backend sources', 'npm', ['run', 'lint']],
   ['Typecheck frontend TypeScript', 'npm', ['run', 'typecheck']],
   ['Typecheck the v2 operator console', 'npm', ['run', 'v2:web:typecheck']],
+  ['Build the v2 operator console', 'npm', ['run', 'v2:web:build']],
   ['Run backend and CLI tests', 'npm', ['run', 'test:backend']],
   ['Run frontend state regression tests', 'npm', ['run', 'test:frontend']],
 ];

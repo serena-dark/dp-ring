@@ -61,7 +61,7 @@ npm run v2:web:build
 npm run v2:web:typecheck
 ```
 
-The root regression suite now includes `npm run v2:web:typecheck`, so a green `npm test` also confirms the dedicated operator-web typecheck entrypoint. The operator-web build flow remains an active maintenance surface, so run `npm run v2:web:install` before `npm run v2:web:build` or other app-local commands while the v2 console continues to mature.
+The root regression suite now includes both `npm run v2:web:typecheck` and `npm run v2:web:build`, so a green `npm test` confirms the dedicated operator-web typecheck and production build entrypoints. Run `npm run v2:web:install` before app-local commands if the operator-web dependencies are not installed yet.
 
 ## Control API
 
