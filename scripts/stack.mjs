@@ -14,8 +14,8 @@ import { promisify } from 'node:util';
 import { loadEnvFiles } from '../ring/lib/env.mjs';
 
 const execFile = promisify(rawExecFile);
-
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const entryPath = fileURLToPath(import.meta.url);
+const repoRoot = resolve(dirname(entryPath), '..');
 loadEnvFiles(repoRoot);
 const runtimeDir = join(repoRoot, '.ring', 'runtime');
 const statePath = join(runtimeDir, 'service-stack.json');
@@ -103,16 +103,40 @@ async function processCommand(pid) {
   }
 }
 
+export function parsePidList(output) {
+  return output
+    .split('\n')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
+
+export function parseSsPidOutput(output) {
+  const matches = output.matchAll(/pid=(\d+)/g);
+  return [...new Set(
+    Array.from(matches, (match) => Number(match[1]))
+      .filter((value) => Number.isInteger(value) && value > 0),
+  )];
+}
+
 async function pidsListeningOnPort(port) {
   try {
     const { stdout } = await execFile('lsof', ['-nP', '-t', `-iTCP:${port}`, '-sTCP:LISTEN'], {
       cwd: repoRoot,
       encoding: 'utf-8',
     });
-    return stdout
-      .split('\n')
-      .map((value) => Number(value.trim()))
-      .filter((value) => Number.isInteger(value) && value > 0);
+    return parsePidList(stdout);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      return [];
+    }
+  }
+
+  try {
+    const { stdout } = await execFile('ss', ['-ltnp', `sport = :${port}`], {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+    });
+    return parseSsPidOutput(stdout);
   } catch {
     return [];
   }
@@ -424,9 +448,11 @@ async function main() {
   process.exit(1);
 }
 
-try {
-  await main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+if (process.argv[1] && resolve(process.argv[1]) === entryPath) {
+  try {
+    await main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
