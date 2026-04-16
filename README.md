@@ -34,6 +34,13 @@ This turn implements:
 - local infrastructure compose definitions
 - v2 contracts and architecture docs
 
+Current maturity notes:
+
+- `services/control-api` is the most functional Rust surface today, but it still serves seeded `demo_snapshot()` read models from `crates/platform-types` rather than a live projection pipeline.
+- `services/orchestrator` and `services/knowledge-hub` still boot from the same seeded snapshot data and currently act as service-shape scaffolds rather than independent persistent services.
+- `services/runtime-broker` currently proves the runtime process shape and health endpoint, but not the full end-to-end control-plane flow.
+- The managed local stack (`npm run stack:verified-restart`) remains the practical integration path for day-to-day development while the Rust services continue to mature.
+
 Rust is not installed in the current execution environment, so the Rust services were scaffolded but not compiled here.
 
 ## Operator web
@@ -84,7 +91,7 @@ Backend:  http://127.0.0.1:3100/
 Proxy:    http://127.0.0.1:4174/api/orchestrator/workers
 ```
 
-This managed stack is the practical local integration path today. The Rust `services/control-api` scaffold below remains the longer-term v2 target surface.
+This managed stack is the practical local integration path today. The Rust `services/control-api` scaffold below remains the longer-term v2 target surface, and its current responses still come from seeded snapshot data rather than live service-backed projections.
 
 ## Control API
 

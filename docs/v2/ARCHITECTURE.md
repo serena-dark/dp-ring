@@ -42,5 +42,12 @@ This repository now contains:
 - A functional `control-api` scaffold with REST collection routes and SSE activity feed
 - A new React operator console under `apps/operator-web`
 
+Current maturity notes:
+
+- `services/control-api` is the most complete v2 Rust service today, but it currently serves seeded `demo_snapshot()` data from `crates/platform-types` instead of live database-backed projections.
+- `services/orchestrator` and `services/knowledge-hub` still read from the same seeded snapshot and currently demonstrate ownership boundaries more than independent runtime behavior.
+- `services/runtime-broker` validates the runtime service shape and health surface, but it is not yet wired into a full control-plane execution path.
+- The managed Node-based stack at the repository root remains the practical integration surface while these Rust services are hardened.
+
 The Rust toolchain is not installed in the current execution environment, so the
 Rust services are scaffolded but not compiled in this turn.
