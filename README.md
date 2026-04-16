@@ -38,20 +38,30 @@ Rust is not installed in the current execution environment, so the Rust services
 
 ## Operator web
 
+Bootstrap the app-local frontend dependencies before running the operator console commands:
+
 ```bash
-npm --prefix apps/operator-web install
+npm run v2:web:install
+npm run v2:web:dev
+```
+
+Equivalent direct commands:
+
+```bash
+npm --prefix apps/operator-web ci
 npm --prefix apps/operator-web run dev
 ```
 
 Useful root shortcuts:
 
 ```bash
+npm run v2:web:install
 npm run v2:web:dev
 npm run v2:web:build
 npm run v2:web:typecheck
 ```
 
-The console builds successfully in this repository today.
+The root regression suite is green today. The dedicated operator-web typecheck/build flow is still an active maintenance surface, so run `npm run v2:web:install` before those commands and expect additional TypeScript cleanup work while the v2 console matures.
 
 ## Control API
 

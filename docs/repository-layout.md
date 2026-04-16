@@ -14,7 +14,8 @@ This document describes the active `dp-ring v2` repository layout. It is the cur
 | `infra/` | Local infrastructure definitions and deployment helpers |
 | `docs/` | Current platform docs plus retained legacy material |
 | `tests/` | Cross-service, contract, and app-level tests |
-| `package.json` | Workspace-level JavaScript scripts for the operator web |
+| `package.json` | Root JavaScript scripts, including operator-web bootstrap/build/typecheck shortcuts |
+| `apps/operator-web/package-lock.json` | Locked frontend dependency graph for `npm run v2:web:install` |
 | `Cargo.toml` | Rust workspace manifest |
 
 ## Applications

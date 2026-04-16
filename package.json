@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "v2:web:install": "npm --prefix apps/operator-web ci",
     "v2:web:dev": "npm --prefix apps/operator-web run dev",
     "v2:web:build": "npm --prefix apps/operator-web run build",
     "v2:web:preview": "npm --prefix apps/operator-web run preview",
