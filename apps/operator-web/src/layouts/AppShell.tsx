@@ -6,6 +6,22 @@ import { initials } from "../lib/format";
 import type { ActivityEvent } from "../lib/types";
 import { TimelineRail } from "../components/TimelineRail";
 
+const EMPTY_EVENTS: ActivityEvent[] = [];
+const EMPTY_COLLECTION: never[] = [];
+const LIVE_EVENT_LIMIT = 16;
+
+function mergeActivityEvents(baseEvents: ActivityEvent[], streamedEvents: ActivityEvent[]) {
+  const merged = [...streamedEvents, ...baseEvents];
+  const seen = new Set<string>();
+  return merged.filter((event) => {
+    if (seen.has(event.id)) {
+      return false;
+    }
+    seen.add(event.id);
+    return true;
+  }).slice(0, LIVE_EVENT_LIMIT);
+}
+
 export function AppShell() {
   const location = useLocation();
   const bootstrapQuery = useQuery({
@@ -16,21 +32,21 @@ export function AppShell() {
     queryKey: ["activity"],
     queryFn: listActivity,
   });
-  const [liveEvents, setLiveEvents] = useState<ActivityEvent[]>([]);
-
-  useEffect(() => {
-    setLiveEvents(activityQuery.data ?? []);
-  }, [activityQuery.data]);
+  const [streamedEvents, setStreamedEvents] = useState<ActivityEvent[]>(EMPTY_EVENTS);
 
   useEffect(() => {
     return streamActivity((event) => {
-      setLiveEvents((current) => [event, ...current].slice(0, 16));
+      setStreamedEvents((current) => mergeActivityEvents(EMPTY_EVENTS, [event, ...current]));
     });
   }, []);
 
   const viewer = bootstrapQuery.data?.viewer;
-  const navigation = bootstrapQuery.data?.navigation ?? [];
-  const statusCatalog = bootstrapQuery.data?.status_catalog ?? [];
+  const navigation = bootstrapQuery.data?.navigation ?? EMPTY_COLLECTION;
+  const statusCatalog = bootstrapQuery.data?.status_catalog ?? EMPTY_COLLECTION;
+  const liveEvents = useMemo(
+    () => mergeActivityEvents(activityQuery.data ?? EMPTY_EVENTS, streamedEvents),
+    [activityQuery.data, streamedEvents],
+  );
 
   const activeLabel = useMemo(() => {
     return navigation.find((item) => item.path === location.pathname)?.label ?? "Operator";

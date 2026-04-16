@@ -3049,6 +3049,36 @@ export async function createOrchestrator(repoRoot, ring) {
         encoding: 'utf-8',
       });
     } catch (error) {
+      if (error?.code === 'ENOENT') {
+        try {
+          await execFileAsync(
+            'python3',
+            [
+              '-c',
+              [
+                'import sys, zipfile',
+                'archive_path, target_dir = sys.argv[1:3]',
+                'with zipfile.ZipFile(archive_path) as zf:',
+                '    zf.extractall(target_dir)',
+              ].join('\n'),
+              archivePath,
+              targetDir,
+            ],
+            {
+              encoding: 'utf-8',
+            },
+          );
+          return;
+        } catch (fallbackError) {
+          throw new DispatchBundleError(
+            `Failed to extract zip material ${material.material_id}.`,
+            {
+              code: 'material_extract_failed',
+              details: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+            },
+          );
+        }
+      }
       throw new DispatchBundleError(
         `Failed to extract zip material ${material.material_id}.`,
         {

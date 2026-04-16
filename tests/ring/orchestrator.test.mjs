@@ -26,10 +26,36 @@ async function createZipFixture(rootDir, name, files) {
     await writeFile(join(sourceDir, relativePath), contents, 'utf-8');
   }
 
-  await execFileAsync('zip', ['-rq', zipPath, '.'], {
-    cwd: sourceDir,
-    encoding: 'utf-8',
-  });
+  try {
+    await execFileAsync('zip', ['-rq', zipPath, '.'], {
+      cwd: sourceDir,
+      encoding: 'utf-8',
+    });
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+    await execFileAsync(
+      'python3',
+      [
+        '-c',
+        [
+          'import os, sys, zipfile',
+          'source_dir, zip_path = sys.argv[1:3]',
+          'with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:',
+          '    for root, _, files in os.walk(source_dir):',
+          '        for name in files:',
+          '            path = os.path.join(root, name)',
+          '            zf.write(path, os.path.relpath(path, source_dir))',
+        ].join('\n'),
+        sourceDir,
+        zipPath,
+      ],
+      {
+        encoding: 'utf-8',
+      },
+    );
+  }
   const buffer = await readFile(zipPath);
   await rm(sourceDir, { recursive: true, force: true });
   await rm(outputDir, { recursive: true, force: true });
