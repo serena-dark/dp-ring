@@ -33,6 +33,13 @@ This document describes the active `dp-ring v2` repository layout. It is the cur
 | `services/runtime-broker/` | Execution runtime, worker sessions, leases, artifact manifests, timeouts |
 | `services/knowledge-hub/` | Findings, Insights, and knowledge-side aggregation |
 
+Current maturity notes for the `services/` tree:
+
+- `services/control-api/` is the most functional Rust service today, but its REST and SSE payloads still come from seeded `demo_snapshot()` data in `crates/platform-types`.
+- `services/orchestrator/` and `services/knowledge-hub/` currently advertise service boundaries while still booting from the same seeded snapshot source.
+- `services/runtime-broker/` currently proves the service/process shape and health handling, not the full end-to-end v2 execution loop.
+- For day-to-day local integration, prefer the managed root stack scripts documented in `README.md` until the Rust services replace the snapshot-backed path.
+
 ## Agents
 
 | Path | Purpose |
