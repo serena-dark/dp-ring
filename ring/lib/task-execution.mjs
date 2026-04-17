@@ -89,6 +89,41 @@ function taskReplanning(task) {
   };
 }
 
+function nonEmptyString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+async function semanticCheckpointGovernanceContext(ring, task, reasonCode) {
+  const workflowRunId = nonEmptyString(task?.data?.workflow_run_id);
+  if (reasonCode !== 'workflow_timeout' || !workflowRunId) {
+    return {
+      workflowRunId,
+      checkpointCount: 0,
+      replayStatus: 'idle',
+      sawProgressReport: false,
+      explicitWorkflowReuseRequired: false,
+    };
+  }
+
+  const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
+  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
+  const replayStatus = nonEmptyString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
+  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
+    && workflowRun.data.reports.some((report) => report?.status === 'progress');
+
+  return {
+    workflowRunId,
+    checkpointCount,
+    replayStatus,
+    sawProgressReport,
+    explicitWorkflowReuseRequired: sawProgressReport && checkpointCount > 2 && replayStatus === 'requested',
+  };
+}
+
 async function runGit(repoCwd, args) {
   const { stdout } = await execFileAsync('git', ['-C', repoCwd, ...args], {
     encoding: 'utf-8',
@@ -134,7 +169,13 @@ function buildReviewPacket(task, execution, summaryPath, config) {
   };
 }
 
-function buildReplanPacket(task, execution, replanning, config) {
+function buildReplanPacket(task, execution, replanning, config, governance = null) {
+  const lineageGuidance = governance?.explicitWorkflowReuseRequired
+    ? [
+        '',
+        `Governance note: workflow run ${governance.workflowRunId} already established semantic checkpoint lineage (${governance.checkpointCount} checkpoints, replay ${governance.replayStatus}), so any redispatch requires an explicit workflow reuse choice instead of silently inheriting the previous workflow template.`,
+      ]
+    : [];
   return {
     agent_id: replanning.replanner_agent_id ?? config.task_replanner_agent_id,
     subject: `Decide whether failed task ${task.id} should be redispatched`,
@@ -149,6 +190,7 @@ function buildReplanPacket(task, execution, replanning, config) {
       '- Choose "redispatch" if the failure can be converted into a new smallest executable task.',
       '- Choose "terminal" if the failure should stay as feedback only.',
       '- If redispatching, provide a revised task scope, exact file list, and optional workflow reuse choice.',
+      ...lineageGuidance,
     ].join('\n'),
     dispatched_at: nowIso(),
   };
@@ -405,11 +447,13 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
     execution.failure_feedback_id = failureArtifacts.feedback_id;
     execution.failure_distillation_id = failureArtifacts.distillation_id;
     execution.last_error = detail;
+    const governance = await semanticCheckpointGovernanceContext(ring, task, reasonCode);
     replanning.packet = buildReplanPacket(
       task,
       execution,
       replanning,
       config,
+      governance,
     );
 
     const nextTask = await writeTask(
@@ -622,6 +666,7 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
     if (!['redispatch', 'terminal'].includes(payload.verdict)) {
       throw new Error('verdict must be "redispatch" or "terminal".');
     }
+    const governance = await semanticCheckpointGovernanceContext(ring, task, replanning.source_failure);
 
     const nextReplanning = {
       ...replanning,
@@ -668,7 +713,9 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
     );
     const workflowTemplateId =
       revision.workflow_template_id === undefined
-        ? task.data.workflow_template_id ?? null
+        ? governance.explicitWorkflowReuseRequired
+          ? null
+          : task.data.workflow_template_id ?? null
         : revision.workflow_template_id;
     const executionMode =
       revision.execution_mode ?? task.data.execution_mode ?? null;

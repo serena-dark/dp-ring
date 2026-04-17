@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -268,6 +269,145 @@ describe('task execution', async () => {
 
     const successorDoc = join(tempDir, 'docs', 'tasks', successorTask.id, `${successorTask.id}.md`);
     await access(successorDoc);
+  });
+
+  it('requires an explicit workflow reuse choice when semantic checkpoint lineage already requested replay', async () => {
+    const runId = 'run-lineage-aware-redispatch';
+    const fixture = await createExecutionFixture('Lineage aware redispatch', {
+      workflow_run_id: runId,
+    });
+
+    const workflowRun = await ring.create('workflow-run', {
+      id: runId,
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-17T00:00:00Z',
+      updated_at: '2026-04-17T00:01:00Z',
+      created_by: 'session-runner',
+      session_id: fixture.session.id,
+      status: 'failed',
+      data: {
+        workflow_template_id: fixture.workflow.id,
+        workflow_template_version: 1,
+        task_id: fixture.task.id,
+        current_step_index: 1,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+          token: 'token-lineage-aware',
+          signing_secret: 'signing-secret-lineage-aware',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'timed_out',
+          issued_at: '2026-04-17T00:00:00Z',
+          prepared_at: '2026-04-17T00:00:05Z',
+          last_report_at: '2026-04-17T00:00:40Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 3,
+          retry_count: 1,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-17T00:05:00Z',
+          packet_path: `.ring/orchestrator/runner/sessions/${fixture.session.id}/${runId}.json`,
+          allowed_worker_ids: ['worker-1'],
+          accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+          last_worker_id: 'worker-1',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: 'Timed out after progress was already reported.',
+        },
+        reports: [
+          {
+            at: '2026-04-17T00:00:40Z',
+            status: 'progress',
+            actor: 'worker-1',
+            step_id: 'execute',
+            note: 'Semantic progress advanced the checkpoint lineage before timeout.',
+            commit_sha: null,
+            worker_id: 'worker-1',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Execution made semantic progress.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-lineage-aware',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-lineage-2',
+          checkpoint_ids: ['cp-root', 'cp-lineage-1', 'cp-lineage-2'],
+          branch_event_ids: ['be-lineage-1', 'be-lineage-2'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-lineage-aware',
+            runtime_status: 'recovering',
+            current_checkpoint_id: 'cp-lineage-2',
+            replay: {
+              status: 'requested',
+              requested_at: '2026-04-17T00:00:45Z',
+              completed_at: null,
+              requested_by: 'session-runner',
+              reason: 'workflow_timeout',
+              source_checkpoint_id: 'cp-lineage-2',
+              target_checkpoint_id: 'cp-lineage-2',
+              cursor: { phase: 'execute', step_id: 'execute' },
+              journal_state: {
+                mode: 'semantic',
+                last_applied_entry_id: 'journal-1',
+                pending_entry_ids: ['journal-2'],
+              },
+            },
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-17T00:00:10Z',
+            ended_at: '2026-04-17T00:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'execute',
+            status: 'failed',
+            started_at: '2026-04-17T00:00:21Z',
+            ended_at: '2026-04-17T00:01:00Z',
+            outputs: {},
+            notes: 'Timed out after semantic progress.',
+          },
+        ],
+      },
+    });
+    assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+
+    const failedTask = await ring.taskExecution.fail(fixture.task.id, {
+      reason_code: 'workflow_timeout',
+      note: 'Warm timeout should require an explicit workflow governance decision.',
+    });
+    assert.equal(failedTask.data.replanning.status, 'awaiting_replan');
+    assert.match(failedTask.data.replanning.packet.body, /explicit workflow reuse choice/i);
+
+    const replannedTask = await ring.taskExecution.replan(fixture.task.id, {
+      verdict: 'redispatch',
+      replanner_agent_id: 'task-replanner',
+      note: 'Create a governed follow-up task without blindly reusing the old workflow.',
+      task: {
+        name: 'Lineage-aware governed follow-up',
+        target_type: 'file',
+        target_path: 'src/feature.txt',
+        repo_root: '.',
+        file_paths: ['src/feature.txt'],
+        execution_mode: 'serial',
+        acceptance_criteria: [{ description: 'Follow semantic checkpoint lineage during replanning.' }],
+      },
+    });
+
+    const successorTask = await ring.read('task', replannedTask.data.replanning.successor_task_id);
+    assert.equal(successorTask.status, 'pending');
+    assert.equal(successorTask.data.workflow_template_id, null);
   });
 
   it('verifies a scoped commit, writes a summary, and lets the judge approve completion', async () => {
