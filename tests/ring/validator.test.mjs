@@ -2,8 +2,111 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { createValidator } from '../../ring/lib/validator.mjs';
+import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
+
+function buildWorkflowRunDoc() {
+  return {
+    id: 'run-1-test',
+    type: 'workflow-run',
+    version: 1,
+    created_at: '2026-04-17T00:00:00Z',
+    updated_at: '2026-04-17T00:00:30Z',
+    created_by: 'session-runner',
+    session_id: 's1-test',
+    status: 'running',
+    data: {
+      workflow_template_id: 'wf-1-test',
+      workflow_template_version: 1,
+      task_id: 't1-test',
+      current_step_index: 0,
+      callback: {
+        auth_scheme: 'bearer',
+        report_url: 'http://127.0.0.1:3100/api/workflow-run/run-1-test/report',
+        token: 'token-123',
+        signing_secret: 'signing-secret',
+        signature_algorithm: 'hmac-sha256',
+        key_version: 1,
+        status: 'active',
+        issued_at: '2026-04-17T00:00:00Z',
+        prepared_at: '2026-04-17T00:00:05Z',
+        last_report_at: '2026-04-17T00:00:30Z',
+        last_retry_at: null,
+        last_rotated_at: null,
+        next_retry_at: null,
+        report_timeout_ms: 300000,
+        max_retries: 3,
+        retry_count: 0,
+        retry_backoff_ms: 1000,
+        signature_ttl_ms: 60000,
+        timeout_at: '2026-04-17T00:05:00Z',
+        packet_path: '.ring/orchestrator/runner/sessions/s1-test/run-1-test.json',
+        allowed_worker_ids: ['worker-1'],
+        accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+        last_worker_id: 'worker-1',
+        last_protocol: 'ring.workflow-run-report.v1',
+        last_error: null,
+      },
+      reports: [
+        {
+          at: '2026-04-17T00:00:30Z',
+          status: 'running',
+          actor: 'worker-1',
+          step_id: 'execute',
+          note: 'Checkpointed the execution capsule.',
+          commit_sha: null,
+          worker_id: 'worker-1',
+          protocol: 'ring.workflow-run-report.v1',
+          authenticated: true,
+          outputs: {
+            summary: 'Execution is still running.',
+          },
+        },
+      ],
+      node_execution: {
+        node_id: 'n1-runner',
+        branch_id: 'main',
+        active_checkpoint_id: 'cp-root',
+        checkpoint_ids: ['cp-root'],
+        branch_event_ids: ['be-1'],
+        capsule_state: createEmptyCapsuleState({
+          node_id: 'n1-runner',
+          runtime_status: 'leased',
+          current_checkpoint_id: 'cp-root',
+          last_accepted_evidence_refs: [
+            { kind: 'summary', ref: 'docs/tasks/reviews/t1-test.md', digest: null },
+          ],
+          replay: {
+            status: 'requested',
+            requested_at: '2026-04-17T00:00:25Z',
+            completed_at: null,
+            requested_by: 'session-runner',
+            reason: 'worker_timeout',
+            source_checkpoint_id: 'cp-root',
+            target_checkpoint_id: 'cp-root',
+            cursor: { phase: 'execute', step_id: 'execute' },
+            journal_state: {
+              mode: 'semantic',
+              last_applied_entry_id: 'journal-1',
+              pending_entry_ids: ['journal-2'],
+            },
+          },
+        }),
+      },
+      steps: [
+        {
+          step_id: 'execute',
+          status: 'running',
+          started_at: '2026-04-17T00:00:10Z',
+          ended_at: null,
+          outputs: {},
+          notes: null,
+        },
+      ],
+    },
+  };
+}
 
 describe('validator', async () => {
   const validator = await createValidator(ringDir);
@@ -91,6 +194,12 @@ describe('validator', async () => {
         },
       };
       const { valid, errors } = validator.validate('task', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a valid workflow-run with node execution capsule state', () => {
+      const doc = buildWorkflowRunDoc();
+      const { valid, errors } = validator.validate('workflow-run', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
 
@@ -308,6 +417,13 @@ describe('validator', async () => {
         },
       };
       const { valid } = validator.validate('evaluation', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a workflow-run without node execution capsule state', () => {
+      const doc = buildWorkflowRunDoc();
+      delete doc.data.node_execution.capsule_state;
+      const { valid } = validator.validate('workflow-run', doc);
       assert.equal(valid, false);
     });
 
