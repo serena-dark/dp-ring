@@ -15,6 +15,9 @@ paths:
   /api/bootstrap:
     get:
       operationId: getBootstrap
+      parameters:
+        - $ref: "#/components/parameters/DpUserHeader"
+        - $ref: "#/components/parameters/DpRoleHeader"
       responses:
         "200":
           description: Viewer, navigation, status catalog, and board counters.
@@ -34,6 +37,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Organization"
+  /api/orgs/{id}:
+    get:
+      operationId: readOrganization
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual organization identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/workspaces:
     get:
       operationId: listWorkspaces
@@ -46,6 +63,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Workspace"
+  /api/workspaces/{id}:
+    get:
+      operationId: readWorkspace
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual workspace identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/repositories:
     get:
       operationId: listRepositories
@@ -58,6 +89,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Repository"
+  /api/repositories/{id}:
+    get:
+      operationId: readRepository
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual repository identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/objectives:
     get:
       operationId: listObjectives
@@ -70,6 +115,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Objective"
+  /api/objectives/{id}:
+    get:
+      operationId: readObjective
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual objective identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Objective"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/blueprints:
     get:
       operationId: listBlueprints
@@ -82,6 +141,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Blueprint"
+  /api/blueprints/{id}:
+    get:
+      operationId: readBlueprint
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual blueprint identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Blueprint"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/work-items:
     get:
       operationId: listWorkItems
@@ -94,6 +167,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/WorkItem"
+  /api/work-items/{id}:
+    get:
+      operationId: readWorkItem
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual work item identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkItem"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/executions:
     get:
       operationId: listExecutions
@@ -106,6 +193,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Execution"
+  /api/executions/{id}:
+    get:
+      operationId: readExecution
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual execution identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Execution"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/reviews:
     get:
       operationId: listReviews
@@ -118,6 +219,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Review"
+  /api/reviews/{id}:
+    get:
+      operationId: readReview
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual review identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/findings:
     get:
       operationId: listFindings
@@ -130,6 +245,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Finding"
+  /api/findings/{id}:
+    get:
+      operationId: readFinding
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual finding identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Finding"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/insights:
     get:
       operationId: listInsights
@@ -142,6 +271,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Insight"
+  /api/insights/{id}:
+    get:
+      operationId: readInsight
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual insight identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Insight"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/workers:
     get:
       operationId: listWorkers
@@ -154,6 +297,20 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Worker"
+  /api/workers/{id}:
+    get:
+      operationId: readWorker
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual worker identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Worker"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/activity:
     get:
       operationId: listActivity
@@ -177,6 +334,36 @@ paths:
               schema:
                 type: string
 components:
+  parameters:
+    DpUserHeader:
+      name: x-dp-user
+      in: header
+      required: false
+      description: Optional viewer display-name override applied to the bootstrap payload.
+      schema:
+        type: string
+    DpRoleHeader:
+      name: x-dp-role
+      in: header
+      required: false
+      description: Optional viewer role override for the bootstrap payload. Unknown values fall back to admin.
+      schema:
+        type: string
+        enum: [admin, operator, reviewer, worker]
+    ResourceIdPath:
+      name: id
+      in: path
+      required: true
+      description: Stable resource identifier from the seeded platform snapshot.
+      schema:
+        type: string
+  responses:
+    ResourceNotFound:
+      description: No snapshot-backed resource matched the supplied id.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotFoundError"
   schemas:
     BootstrapPayload:
       type: object
@@ -232,6 +419,15 @@ components:
       type: object
       additionalProperties:
         type: integer
+    NotFoundError:
+      type: object
+      required: [error, resource_id]
+      properties:
+        error:
+          type: string
+          enum: [resource_not_found]
+        resource_id:
+          type: string
     Organization:
       type: object
       required: [id, name, slug]
