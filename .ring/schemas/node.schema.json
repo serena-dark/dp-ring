@@ -156,6 +156,101 @@
                 "index_ref": { "type": ["string", "null"] }
               },
               "description": "Boundary metadata for RAG-capable nodes only. Retrieval implementation remains outside this contract."
+            },
+            "capsule_state": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": [
+                "schema_version",
+                "node_id",
+                "lease",
+                "heartbeat",
+                "runtime_status",
+                "current_checkpoint_id",
+                "last_checkpoint_at",
+                "last_evidence_at",
+                "last_accepted_evidence_refs",
+                "replay",
+                "journal"
+              ],
+              "properties": {
+                "schema_version": { "type": "string", "minLength": 1 },
+                "node_id": { "type": ["string", "null"] },
+                "lease": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["holder", "expires_at", "acquired_at", "renewed_at", "released_at", "fence_token"],
+                  "properties": {
+                    "holder": { "type": ["string", "null"] },
+                    "expires_at": { "type": ["string", "null"], "format": "date-time" },
+                    "acquired_at": { "type": ["string", "null"], "format": "date-time" },
+                    "renewed_at": { "type": ["string", "null"], "format": "date-time" },
+                    "released_at": { "type": ["string", "null"], "format": "date-time" },
+                    "fence_token": { "type": "integer", "minimum": 0 }
+                  }
+                },
+                "heartbeat": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["recorded_at", "detail"],
+                  "properties": {
+                    "recorded_at": { "type": ["string", "null"], "format": "date-time" },
+                    "detail": { "type": ["object", "null"] }
+                  }
+                },
+                "runtime_status": { "type": "string", "minLength": 1 },
+                "current_checkpoint_id": { "type": ["string", "null"] },
+                "last_checkpoint_at": { "type": ["string", "null"], "format": "date-time" },
+                "last_evidence_at": { "type": ["string", "null"], "format": "date-time" },
+                "last_accepted_evidence_refs": { "type": "array", "items": { "type": ["object", "string"] } },
+                "replay": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "requested_at",
+                    "completed_at",
+                    "requested_by",
+                    "reason",
+                    "source_checkpoint_id",
+                    "target_checkpoint_id",
+                    "cursor",
+                    "journal_state"
+                  ],
+                  "properties": {
+                    "status": { "type": "string", "enum": ["idle", "requested", "replaying", "completed"] },
+                    "requested_at": { "type": ["string", "null"], "format": "date-time" },
+                    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+                    "requested_by": { "type": ["string", "null"] },
+                    "reason": { "type": ["string", "null"] },
+                    "source_checkpoint_id": { "type": ["string", "null"] },
+                    "target_checkpoint_id": { "type": ["string", "null"] },
+                    "cursor": { "type": ["object", "string", "null"] },
+                    "journal_state": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["mode", "last_applied_entry_id", "pending_entry_ids"],
+                      "properties": {
+                        "mode": { "type": "string", "minLength": 1 },
+                        "last_applied_entry_id": { "type": ["string", "null"] },
+                        "pending_entry_ids": { "type": "array", "items": { "type": "string" } }
+                      }
+                    }
+                  }
+                },
+                "journal": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["timestamp", "event"],
+                    "additionalProperties": true,
+                    "properties": {
+                      "timestamp": { "type": "string", "format": "date-time" },
+                      "event": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                }
+              }
             }
           }
         }

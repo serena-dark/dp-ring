@@ -88,12 +88,26 @@
         "replay_state": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "cursor", "replayable"],
+          "required": ["status", "requested_at", "completed_at", "requested_by", "reason", "source_checkpoint_id", "target_checkpoint_id", "cursor", "journal_state"],
           "properties": {
             "status": { "type": "string", "enum": ["idle", "requested", "replaying", "completed"] },
-            "cursor": { "type": ["string", "null"] },
-            "replayable": { "type": "boolean" },
-            "last_replayed_at": { "type": ["string", "null"], "format": "date-time" }
+            "requested_at": { "type": ["string", "null"], "format": "date-time" },
+            "completed_at": { "type": ["string", "null"], "format": "date-time" },
+            "requested_by": { "type": ["string", "null"] },
+            "reason": { "type": ["string", "null"] },
+            "source_checkpoint_id": { "type": ["string", "null"] },
+            "target_checkpoint_id": { "type": ["string", "null"] },
+            "cursor": { "type": ["object", "string", "null"] },
+            "journal_state": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["mode", "last_applied_entry_id", "pending_entry_ids"],
+              "properties": {
+                "mode": { "type": "string", "minLength": 1 },
+                "last_applied_entry_id": { "type": ["string", "null"] },
+                "pending_entry_ids": { "type": "array", "items": { "type": "string" } }
+              }
+            }
           }
         },
         "synthesis_inputs": {
