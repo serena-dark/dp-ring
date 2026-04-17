@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -903,6 +904,206 @@ Split milestone prerequisites into ready and blocked sets.
       launchedSession.data.task_ids,
       bundle.planning.planned_task_ids,
     );
+  });
+
+  it('avoids automatic workflow reuse when the latest template run already has warm semantic lineage', async () => {
+    const reusableWorkflow = await ring.create('workflow', {
+      id: 'wf-bugfix-lineage-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Bugfix Warm Lineage Template',
+        description: 'Reusable workflow for bug-fix tasks that should require explicit reuse once warm timeout lineage exists.',
+        applicable_to: ['bug-fix'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the failing path.' },
+          { id: 's2', name: 'patch', description: 'Patch the regression.' },
+          { id: 's3', name: 'verify', description: 'Verify the regression fix.' },
+        ],
+      },
+    });
+    assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
+    await ring.registry.recordScore('bug-fix', 'wf-bugfix-lineage-hold', 0.99);
+
+    const warmLineageRun = await ring.create('workflow-run', {
+      id: 'run-bugfix-lineage-hold',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-17T00:00:00Z',
+      updated_at: '2026-04-17T00:01:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-bugfix-lineage-hold',
+      status: 'failed',
+      data: {
+        workflow_template_id: 'wf-bugfix-lineage-hold',
+        workflow_template_version: 1,
+        task_id: 'task-bugfix-lineage-hold',
+        current_step_index: 1,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: 'http://127.0.0.1:3100/api/workflow-run/run-bugfix-lineage-hold/report',
+          token: 'token-bugfix-lineage-hold',
+          signing_secret: 'signing-secret-bugfix-lineage-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'timed_out',
+          issued_at: '2026-04-17T00:00:00Z',
+          prepared_at: '2026-04-17T00:00:05Z',
+          last_report_at: '2026-04-17T00:00:40Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 3,
+          retry_count: 1,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-17T00:05:00Z',
+          packet_path: '.ring/orchestrator/runner/sessions/session-bugfix-lineage-hold/run-bugfix-lineage-hold.json',
+          allowed_worker_ids: ['worker-1'],
+          accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+          last_worker_id: 'worker-1',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: 'Timed out after progress was already reported.',
+        },
+        reports: [
+          {
+            at: '2026-04-17T00:00:40Z',
+            status: 'progress',
+            actor: 'worker-1',
+            step_id: 'patch',
+            note: 'Semantic progress advanced the checkpoint lineage before timeout.',
+            commit_sha: null,
+            worker_id: 'worker-1',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Execution made semantic progress.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-bugfix-lineage-hold',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-lineage-2',
+          checkpoint_ids: ['cp-root', 'cp-lineage-1', 'cp-lineage-2'],
+          branch_event_ids: ['be-lineage-1', 'be-lineage-2'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-bugfix-lineage-hold',
+            runtime_status: 'recovering',
+            current_checkpoint_id: 'cp-lineage-2',
+            replay: {
+              status: 'requested',
+              requested_at: '2026-04-17T00:00:45Z',
+              completed_at: null,
+              requested_by: 'session-runner',
+              reason: 'workflow_timeout',
+              source_checkpoint_id: 'cp-lineage-2',
+              target_checkpoint_id: 'cp-lineage-2',
+              cursor: { phase: 'execute', step_id: 'patch' },
+              journal_state: {
+                mode: 'semantic',
+                last_applied_entry_id: 'journal-1',
+                pending_entry_ids: ['journal-2'],
+              },
+            },
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-17T00:00:10Z',
+            ended_at: '2026-04-17T00:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'patch',
+            status: 'failed',
+            started_at: '2026-04-17T00:00:21Z',
+            ended_at: '2026-04-17T00:01:00Z',
+            outputs: {},
+            notes: 'Timed out after semantic progress.',
+          },
+        ],
+      },
+    });
+    assert.equal(warmLineageRun.ok, true, JSON.stringify(warmLineageRun.errors));
+
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'bundle-test',
+      payload: {
+        goal: {
+          title: 'Regression fix after warm lineage timeout',
+          description:
+            'Fix the failing regression and avoid blindly reusing a workflow template that already timed out after semantic progress.',
+          acceptance_criteria: [
+            'A task is created',
+            'Warm-lineage workflow reuse is not automatic',
+          ],
+        },
+        environment: {
+          project_id: 'bundle-project-warm-lineage',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['src/regression.js'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'mat-warm-lineage',
+            kind: 'preparation_package',
+            uri: null,
+            format: 'json',
+            mount_to: 'workspace/lineage',
+            required: true,
+            inline_data: '{"lineageAware":true}',
+          },
+        ],
+        context: {
+          artifact_refs: [],
+          brief_ref: null,
+        },
+      },
+    });
+
+    assert.equal(bundle.status, 'ready_queued');
+    assert.equal(bundle.planning.planned_task_ids.length, 1);
+    assert.equal(bundle.workflows.reused_workflow_ids.length, 0);
+    assert.equal(bundle.workflows.generated_workflow_ids.length, 1);
+    assert.equal(bundle.workflows.waiting_tasks.length, 1);
+    assert.equal(bundle.workflows.waiting_tasks[0].workflow_source, 'custom_generated');
+    assert.notEqual(bundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-bugfix-lineage-hold');
+
+    const queuedTask = await ring.read('task', bundle.planning.planned_task_ids[0]);
+    assert.equal(queuedTask.data.task_type, 'bug-fix');
+    assert.equal(queuedTask.data.workflow_template_id, bundle.workflows.generated_workflow_ids[0]);
+    assert.notEqual(queuedTask.data.workflow_template_id, 'wf-bugfix-lineage-hold');
+
+    const generatedWorkflow = await ring.read('workflow', bundle.workflows.generated_workflow_ids[0]);
+    assert.equal(generatedWorkflow.status, 'active');
+    assert.match(generatedWorkflow.data.description, /Generated workflow for task/);
+
+    const archivedReusable = await ring.update('workflow', 'wf-bugfix-lineage-hold', {
+      status: 'archived',
+    });
+    assert.equal(archivedReusable.ok, true, JSON.stringify(archivedReusable.errors));
+
+    const archivedGenerated = await ring.update('workflow', bundle.workflows.generated_workflow_ids[0], {
+      status: 'archived',
+    });
+    assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
   });
 
   it('normalizes an A2A bundle into the same canonical goal shape as ring.goal', async () => {
