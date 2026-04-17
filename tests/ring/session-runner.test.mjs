@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +40,111 @@ function signedHeaders(
         ? { 'x-ring-key-version': String(workflowRun.data.callback.key_version) }
         : {}),
     },
+  };
+}
+
+async function createRedispatchSession(ring, task, workflow) {
+  const sessionId = await ring.newId('session', {
+    name: `${task.data.name} governed redispatch`,
+  });
+  const runId = await ring.newId('workflow-run', {
+    name: `${task.id} ${workflow.data.name} governed redispatch`,
+  });
+
+  const sessionResult = await ring.create('session', {
+    id: sessionId,
+    status: 'preparing',
+    created_by: 'session-runner-test',
+    session_id: sessionId,
+    data: {
+      requirement_id: task.data.requirement_id,
+      milestone_id: task.data.milestone_id,
+      milestone_ids: [task.data.milestone_id],
+      task_ids: [task.id],
+      workflow_run_ids: [runId],
+      evaluation_id: null,
+      distillation_id: null,
+      context_injected: {
+        workflow_template: workflow.id,
+        distillations_applied: [],
+        registry_rank_at_selection: null,
+      },
+      execution_log: [],
+    },
+  });
+  assert.equal(sessionResult.ok, true, JSON.stringify(sessionResult.errors));
+
+  const taskUpdate = await ring.update('task', task.id, {
+    session_id: sessionId,
+    status: 'in_progress',
+  });
+  assert.equal(taskUpdate.ok, true, JSON.stringify(taskUpdate.errors));
+
+  const workflowRunResult = await ring.create('workflow-run', {
+    id: runId,
+    status: 'pending',
+    created_by: 'session-runner-test',
+    session_id: sessionId,
+    data: {
+      workflow_template_id: workflow.id,
+      workflow_template_version: workflow.version,
+      task_id: task.id,
+      current_step_index: 0,
+      callback: {
+        auth_scheme: 'bearer',
+        report_url: null,
+        token: null,
+        signing_secret: null,
+        signature_algorithm: 'hmac-sha256',
+        key_version: 1,
+        status: 'pending',
+        issued_at: null,
+        prepared_at: null,
+        last_report_at: null,
+        last_retry_at: null,
+        last_rotated_at: null,
+        next_retry_at: null,
+        report_timeout_ms: 120_000,
+        max_retries: 2,
+        retry_count: 0,
+        retry_backoff_ms: 30_000,
+        signature_ttl_ms: 300_000,
+        timeout_at: null,
+        packet_path: null,
+        allowed_worker_ids: [],
+        accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+        last_worker_id: null,
+        last_protocol: null,
+        last_error: null,
+      },
+      reports: [],
+      steps: workflow.data.steps.map((step) => ({
+        step_id: step.id,
+        status: 'pending',
+        started_at: null,
+        ended_at: null,
+        outputs: {},
+        notes: null,
+      })),
+      node_execution: {
+        node_id: null,
+        branch_id: 'main',
+        active_checkpoint_id: null,
+        checkpoint_ids: [],
+        branch_event_ids: [],
+        capsule_state: createEmptyCapsuleState({
+          node_id: null,
+          runtime_status: 'idle',
+          current_checkpoint_id: null,
+        }),
+      },
+    },
+  });
+  assert.equal(workflowRunResult.ok, true, JSON.stringify(workflowRunResult.errors));
+
+  return {
+    sessionId,
+    runId,
   };
 }
 
@@ -469,6 +575,165 @@ describe('session runner', async () => {
     assert.equal(recovered.capsule_state.replay.status, 'requested');
     assert.ok(recovered.lineage.length >= 3);
     assert.ok(recovered.branch_events.some((item) => item.data.event_type === 'recovery_triggered'));
+  });
+
+  it('tightens callback dispatch policy when a warm-lineage timeout is explicitly redispatched', async () => {
+    await ring.orchestrator.updateConfig({
+      automation: {
+        enabled: false,
+      },
+      session_runner: {
+        report_timeout_ms: 10,
+        max_report_retries: 3,
+        retry_backoff_ms: 10,
+        signature_ttl_ms: 300_000,
+      },
+    });
+
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-lineage-governed-redispatch',
+      payload: {
+        goal: {
+          title: 'Governed Warm-Lineage Redispatch',
+          description: 'Explicit workflow reuse after warm semantic checkpoint lineage should tighten the next dispatch contract.',
+          acceptance_criteria: ['Redispatched execution uses a tighter callback governance profile'],
+        },
+        environment: {
+          project_id: 'runner-lineage-governed-redispatch',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['README.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-lineage-governed-redispatch-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-lineage-governed-redispatch',
+            required: true,
+            inline_data: '{"stage":"governed-redispatch"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const originalSessionId = launched.batching.session_id;
+    const originalSession = await ring.read('session', originalSessionId);
+    const originalTaskId = originalSession.data.task_ids[0];
+    const originalRunId = originalSession.data.workflow_run_ids[0];
+    const preparedRun = await ring.read('workflow-run', originalRunId);
+    const progressPayload = {
+      status: 'progress',
+      actor: 'worker-agent',
+      note: 'Warm semantic checkpoint lineage established before timeout.',
+    };
+
+    await ring.sessionRunner.reportWorkflowRun(
+      originalRunId,
+      progressPayload,
+      signedHeaders(preparedRun, progressPayload, {
+        workerId: 'worker-agent',
+        includeKeyVersion: true,
+      }),
+    );
+
+    const progressedRun = await ring.read('workflow-run', originalRunId);
+    const expired = await ring.update('workflow-run', originalRunId, {
+      data: {
+        callback: {
+          ...progressedRun.data.callback,
+          timeout_at: '2000-01-01T00:00:00Z',
+        },
+      },
+    });
+    assert.equal(expired.ok, true, JSON.stringify(expired.errors));
+
+    await ring.sessionRunner.tick();
+
+    const failedTask = await ring.read('task', originalTaskId);
+    assert.equal(failedTask.status, 'failed');
+    assert.equal(failedTask.data.replanning.status, 'awaiting_replan');
+
+    const replannedTask = await ring.taskExecution.replan(originalTaskId, {
+      verdict: 'redispatch',
+      replanner_agent_id: 'task-replanner',
+      note: 'Explicitly reuse the existing workflow template under tighter governance.',
+      task: {
+        workflow_template_id: failedTask.data.workflow_template_id,
+      },
+    });
+    assert.equal(replannedTask.data.replanning.status, 'redispatched');
+
+    const successorTask = await ring.read('task', replannedTask.data.replanning.successor_task_id);
+    assert.equal(successorTask.status, 'ready');
+    assert.equal(successorTask.data.workflow_template_id, failedTask.data.workflow_template_id);
+
+    const workflow = await ring.read('workflow', successorTask.data.workflow_template_id);
+    const { sessionId, runId } = await createRedispatchSession(ring, successorTask, workflow);
+
+    await ring.sessionRunner.tick();
+
+    const governedSession = await ring.read('session', sessionId);
+    const governedRun = await ring.read('workflow-run', runId);
+    assert.equal(governedSession.status, 'executing');
+    assert.equal(governedRun.status, 'running');
+    assert.deepEqual(governedRun.data.callback.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(governedRun.data.callback.allowed_worker_ids, ['worker-agent']);
+    assert.equal(governedRun.data.callback.max_retries, 0);
+
+    const packetPath = join(tempDir, governedRun.data.steps[0].outputs.execution_packet_path);
+    const packet = JSON.parse(await readFile(packetPath, 'utf-8'));
+    assert.deepEqual(packet.callbacks.workflow_run_report.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(packet.callbacks.workflow_run_report.worker_identity.allowed_worker_ids, ['worker-agent']);
+    assert.equal(packet.callbacks.workflow_run_report.retry_policy.max_retries, 0);
+
+    const checkpoint = await ring.read('checkpoint', governedRun.data.node_execution.active_checkpoint_id);
+    assert.equal(checkpoint.data.policy_snapshot.workflow_tightness, 'tight');
+    assert.equal(checkpoint.data.policy_snapshot.oversight_strength, 'strong');
+    assert.equal(checkpoint.data.policy_snapshot.branch_budget, 0);
+    assert.match(checkpoint.data.policy_snapshot.notes ?? '', new RegExp(originalRunId));
+
+    await writeFile(join(tempDir, 'README.md'), '# Governed Warm-Lineage Redispatch\n', 'utf-8');
+    await run('git', ['add', 'README.md'], tempDir);
+    await run('git', ['commit', '-m', 'governed redispatch'], tempDir);
+    const commitSha = (await run('git', ['rev-parse', 'HEAD'], tempDir)).stdout.trim();
+    const completionPayload = {
+      status: 'completed',
+      commit_sha: commitSha,
+      actor: 'worker-agent',
+      note: 'Governed redispatch completed under tighter callback policy.',
+    };
+    await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      completionPayload,
+      signedHeaders(governedRun, completionPayload, {
+        workerId: 'worker-agent',
+        includeKeyVersion: true,
+      }),
+    );
+    await ring.sessionRunner.tick();
+    await ring.taskExecution.judge(successorTask.id, {
+      verdict: 'approved',
+      judge_agent_id: 'task-judge',
+      note: 'Governed redispatch looks correct.',
+    });
+    await ring.sessionRunner.tick();
+    await ring.sessionRunner.tick();
+    const closedSession = await ring.read('session', sessionId);
+    assert.equal(closedSession.status, 'closed');
   });
 
   it('accepts A2A-style workflow-run envelopes from registered workers', async () => {
