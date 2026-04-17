@@ -55,6 +55,14 @@ function uniqueStrings(values) {
   return [...new Set((values ?? []).filter((value) => typeof value === 'string' && value.trim()))];
 }
 
+function trimString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 function normalizeRunnerConfig(config = {}) {
   return {
     ...DEFAULT_RUNNER_CONFIG,
@@ -99,6 +107,10 @@ function callbackSecret() {
 
 function activeWorkers(workers = []) {
   return workers.filter((worker) => (worker?.status ?? 'active') === 'active');
+}
+
+function workerSupportsProtocol(worker, protocol) {
+  return Array.isArray(worker?.callback_protocols) && worker.callback_protocols.includes(protocol);
 }
 
 function mapWorkerReportStatus(value) {
@@ -429,12 +441,100 @@ function workflowRunNodeArtifact(nodeId, sessionId, run, task, workflow, now) {
   };
 }
 
-function workflowRunPolicySnapshot(task) {
+function workflowRunPolicySnapshot(task, governance = null) {
+  if (governance?.tightenedDispatch) {
+    return {
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 0,
+      notes: `Tightened dispatch after warm semantic checkpoint lineage on ${governance.workflowRunId}.`,
+    };
+  }
   return {
     workflow_tightness: task.data.execution_mode === 'parallel' ? 'loose' : 'balanced',
     oversight_strength: 'normal',
     branch_budget: null,
     notes: null,
+  };
+}
+
+async function semanticCheckpointDispatchGovernanceContext(ring, task) {
+  const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
+  if (!parentTaskId) {
+    return {
+      parentTaskId: null,
+      workflowRunId: null,
+      checkpointCount: 0,
+      replayStatus: 'idle',
+      sawProgressReport: false,
+      tightenedDispatch: false,
+    };
+  }
+
+  const parentTask = await ring.read('task', parentTaskId).catch(() => null);
+  const workflowRunId = trimString(parentTask?.data?.workflow_run_id);
+  if (parentTask?.data?.replanning?.source_failure !== 'workflow_timeout' || !workflowRunId) {
+    return {
+      parentTaskId,
+      workflowRunId,
+      checkpointCount: 0,
+      replayStatus: 'idle',
+      sawProgressReport: false,
+      tightenedDispatch: false,
+    };
+  }
+
+  const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
+  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
+  const replayStatus = trimString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
+  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
+    && workflowRun.data.reports.some((report) => report?.status === 'progress');
+
+  return {
+    parentTaskId,
+    workflowRunId,
+    checkpointCount,
+    replayStatus,
+    sawProgressReport,
+    tightenedDispatch: sawProgressReport && checkpointCount > 2 && replayStatus === 'requested',
+  };
+}
+
+function applyGovernanceDispatchPolicy(callback, workers, automationConfig = {}, governance = null) {
+  if (!governance?.tightenedDispatch) {
+    return callback;
+  }
+
+  const preferredProtocol =
+    trimString(automationConfig.default_callback_protocol) ?? RING_REPORT_PROTOCOL;
+  const preferredWorkerId = trimString(automationConfig.worker_id);
+
+  let eligibleWorkers = workers.filter((worker) => workerSupportsProtocol(worker, preferredProtocol));
+  if (preferredWorkerId) {
+    const preferredWorker = eligibleWorkers.find((worker) => worker.id === preferredWorkerId) ?? null;
+    if (preferredWorker) {
+      eligibleWorkers = [preferredWorker];
+    }
+  }
+
+  const acceptedProtocols = [preferredProtocol];
+  if (eligibleWorkers.length === 0) {
+    eligibleWorkers = workers.filter((worker) => workerSupportsProtocol(worker, RING_REPORT_PROTOCOL));
+    acceptedProtocols[0] = RING_REPORT_PROTOCOL;
+  }
+
+  if (eligibleWorkers.length === 0) {
+    return {
+      ...callback,
+      max_retries: 0,
+    };
+  }
+
+  return {
+    ...callback,
+    allowed_worker_ids: eligibleWorkers.map((worker) => worker.id),
+    accepted_protocols: acceptedProtocols,
+    max_retries: 0,
   };
 }
 
@@ -549,12 +649,19 @@ export function createSessionRunner(
     return bundleIndex ?? listBundlesIndexedByTaskId();
   }
 
-  function createCallbackState(workflowRun, runnerConfig, preparedAt, workers = []) {
+  function createCallbackState(
+    workflowRun,
+    runnerConfig,
+    preparedAt,
+    workers = [],
+    automationConfig = {},
+    governance = null,
+  ) {
     const active = activeWorkers(workers);
     const acceptedProtocols = uniqueStrings(
       active.flatMap((worker) => worker.callback_protocols ?? []),
     );
-    return {
+    const callback = {
       ...emptyCallbackState(runnerConfig),
       report_url: `/api/workflow-run/${workflowRun.id}/report`,
       token: callbackToken(),
@@ -566,6 +673,7 @@ export function createSessionRunner(
       accepted_protocols: acceptedProtocols.length > 0 ? acceptedProtocols : [RING_REPORT_PROTOCOL],
       timeout_at: plusMs(preparedAt, runnerConfig.report_timeout_ms),
     };
+    return applyGovernanceDispatchPolicy(callback, active, automationConfig, governance);
   }
 
   function rotateCallbackState(callback, rotatedAt) {
@@ -578,7 +686,7 @@ export function createSessionRunner(
     };
   }
 
-  async function bindWorkflowRunNodeExecution(session, workflowRun, task, workflow, preparedAt) {
+  async function bindWorkflowRunNodeExecution(session, workflowRun, task, workflow, preparedAt, governance = null) {
     const existing = workflowRun.data.node_execution ?? workflowRunNodeExecution();
     if (existing.node_id && existing.active_checkpoint_id) {
       return {
@@ -602,7 +710,7 @@ export function createSessionRunner(
       branch_id: existing.branch_id ?? 'main',
       node_id: nodeId,
       scope_ref: { kind: 'workflow-run', id: workflowRun.id, path: null },
-      policy_snapshot: workflowRunPolicySnapshot(task),
+      policy_snapshot: workflowRunPolicySnapshot(task, governance),
       execution_cursor: {
         phase: 'prepared',
         step_id: workflowRun.data.steps[Math.min(1, (workflowRun.data.steps ?? []).length - 1)]?.step_id ?? null,
@@ -926,7 +1034,8 @@ export function createSessionRunner(
       return session;
     }
 
-    const runnerConfig = normalizeRunnerConfig(await orchestrator.getConfig());
+    const orchestratorConfig = await orchestrator.getConfig();
+    const runnerConfig = normalizeRunnerConfig(orchestratorConfig);
     const workers = await orchestrator.getWorkers();
     const bundlesByTaskId = bundleIndex ?? await listBundlesIndexedByTaskId();
     const workflowRuns = await Promise.all(
@@ -948,7 +1057,15 @@ export function createSessionRunner(
       const workflow = await ring.read('workflow', run.data.workflow_template_id);
       const bundle = bundlesByTaskId.get(task.id) ?? null;
       const preparedAt = nowIso();
-      const callback = createCallbackState(run, runnerConfig, preparedAt, workers);
+      const governance = await semanticCheckpointDispatchGovernanceContext(ring, task);
+      const callback = createCallbackState(
+        run,
+        runnerConfig,
+        preparedAt,
+        workers,
+        orchestratorConfig.automation ?? {},
+        governance,
+      );
       let nextRun = {
         ...run,
         data: {
@@ -967,7 +1084,14 @@ export function createSessionRunner(
       );
       const steps = clone(run.data.steps ?? []);
       nextRun.data.callback.packet_path = executionPacket.packet_path;
-      const nodeBinding = await bindWorkflowRunNodeExecution(session, nextRun, task, workflow, preparedAt);
+      const nodeBinding = await bindWorkflowRunNodeExecution(
+        session,
+        nextRun,
+        task,
+        workflow,
+        preparedAt,
+        governance,
+      );
       nextRun = nodeBinding.workflowRun;
       executionPacket = await buildExecutionPacket(
         session,
