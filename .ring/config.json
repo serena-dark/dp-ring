@@ -26,7 +26,10 @@
     "session",
     "evaluation",
     "feedback",
-    "distillation"
+    "distillation",
+    "node",
+    "checkpoint",
+    "branch-event"
   ],
   "artifact_directories": {
     "requirement":  "requirements",
@@ -37,6 +40,9 @@
     "session":      "sessions",
     "evaluation":   "evaluations",
     "feedback":     "feedback",
-    "distillation": "distillations"
+    "distillation": "distillations",
+    "node":         "nodes",
+    "checkpoint":   "checkpoints",
+    "branch-event": "branch-events"
   }
 }

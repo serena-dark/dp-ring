@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "branch-event.schema.json",
+  "title": "Branch Event",
+  "description": "Append-only event capturing checkpoint-tree and branch lineage operations.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^be-" },
+    "type": { "const": "branch-event" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": { "type": "string", "enum": ["recorded"] },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_type", "branch_id", "checkpoint_id", "actor", "occurred_at", "details"],
+      "properties": {
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "checkpoint_created",
+            "checkpoint_continued",
+            "branch_forked",
+            "branch_adopted",
+            "branch_discarded",
+            "checkpoint_synthesized",
+            "recovery_triggered",
+            "recovery_completed"
+          ]
+        },
+        "branch_id": { "type": "string", "minLength": 1 },
+        "checkpoint_id": { "type": "string", "minLength": 1 },
+        "actor": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "details": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "parent_checkpoint_id": { "type": ["string", "null"] },
+            "synthesis_inputs": { "type": "array", "items": { "type": "string" } },
+            "reason": { "type": ["string", "null"] }
+          }
+        }
+      }
+    }
+  }
+}

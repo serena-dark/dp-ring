@@ -1,6 +1,6 @@
 /**
  * ID generation for ring artifacts.
- * Prefixes follow schema conventions (s1-, t1-, r1-, eval-, run-, fb-, dist-, r1m1-).
+ * Prefixes follow schema conventions (s1-, t1-, r1-, eval-, run-, fb-, dist-, n1-, cp-, be-).
  * Random suffix ensures uniqueness.
  */
 
@@ -65,7 +65,7 @@ export function nextIndex(existingIds, prefix) {
 /**
  * Generate an artifact ID.
  *
- * @param {"session"|"requirement"|"milestone"|"task"|"workflow"|"workflow-run"|"evaluation"|"feedback"|"distillation"} type
+ * @param {"session"|"requirement"|"milestone"|"task"|"workflow"|"workflow-run"|"evaluation"|"feedback"|"distillation"|"node"|"checkpoint"|"branch-event"} type
  * @param {object} opts
  * @param {string} opts.name       Human-readable name (max 5 words).
  * @param {string[]} [opts.existingIds]  Existing IDs in the directory (for auto-numbering).
@@ -115,6 +115,16 @@ export function generateId(type, opts) {
     }
     case 'distillation': {
       return `dist-${slug}-${rs}${ds}`;
+    }
+    case 'node': {
+      const n = opts.index ?? nextIndex(opts.existingIds ?? [], 'n');
+      return `n${n}-${slug}`;
+    }
+    case 'checkpoint': {
+      return `cp-${slug}-${rs}${ds}`;
+    }
+    case 'branch-event': {
+      return `be-${slug}-${rs}${ds}`;
     }
     default:
       throw new Error(`Unknown artifact type for ID generation: "${type}"`);

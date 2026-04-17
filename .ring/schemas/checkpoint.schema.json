@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "checkpoint.schema.json",
+  "title": "Checkpoint",
+  "description": "A semantic execution checkpoint in a tree-first governance lineage.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^cp-" },
+    "type": { "const": "checkpoint" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["candidate", "mainline", "discarded", "synthesized", "archived"]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_checkpoint_id",
+        "branch_id",
+        "node_id",
+        "scope_ref",
+        "policy_snapshot",
+        "execution_cursor",
+        "evidence_refs",
+        "adoption_status",
+        "replay_state",
+        "synthesis_inputs"
+      ],
+      "properties": {
+        "parent_checkpoint_id": { "type": ["string", "null"] },
+        "branch_id": { "type": "string", "minLength": 1 },
+        "node_id": { "type": "string", "minLength": 1 },
+        "scope_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["task", "workflow-run", "session", "workflow", "node"] },
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": ["string", "null"] }
+          }
+        },
+        "policy_snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workflow_tightness", "oversight_strength"],
+          "properties": {
+            "workflow_tightness": { "type": "string", "enum": ["loose", "balanced", "tight"] },
+            "oversight_strength": { "type": "string", "enum": ["weak", "normal", "strong"] },
+            "branch_budget": { "type": ["integer", "null"], "minimum": 0 },
+            "notes": { "type": ["string", "null"] }
+          }
+        },
+        "execution_cursor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["phase", "step_id"],
+          "properties": {
+            "phase": { "type": "string", "minLength": 1 },
+            "step_id": { "type": ["string", "null"] },
+            "ordinal": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "ref"],
+            "properties": {
+              "kind": { "type": "string", "minLength": 1 },
+              "ref": { "type": "string", "minLength": 1 },
+              "digest": { "type": ["string", "null"] }
+            }
+          }
+        },
+        "adoption_status": {
+          "type": "string",
+          "enum": ["candidate", "mainline", "discarded", "synthesized"]
+        },
+        "replay_state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "cursor", "replayable"],
+          "properties": {
+            "status": { "type": "string", "enum": ["idle", "requested", "replaying", "completed"] },
+            "cursor": { "type": ["string", "null"] },
+            "replayable": { "type": "boolean" },
+            "last_replayed_at": { "type": ["string", "null"], "format": "date-time" }
+          }
+        },
+        "synthesis_inputs": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "candidate": ["mainline", "discarded", "synthesized", "archived"],
+      "mainline": ["archived"],
+      "discarded": ["archived"],
+      "synthesized": ["mainline", "archived"],
+      "archived": []
+    }
+  }
+}

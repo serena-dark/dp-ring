@@ -1,0 +1,188 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "node.schema.json",
+  "title": "Node",
+  "description": "A first-class node artifact with a stable tree-facing contract and an explicit runtime boundary for richer local implementations.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^n\\d+-" },
+    "type": { "const": "node" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "active", "paused", "deprecated", "retired"]
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "node_type",
+        "interface_version",
+        "input_schema",
+        "output_schema",
+        "evidence_schema",
+        "capability_summary",
+        "governance_profile",
+        "checkpoint_policy",
+        "runtime"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "node_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable semantic category for the node. RAG is a valid node profile, not a required global architecture."
+        },
+        "interface_version": {
+          "type": "string",
+          "pattern": "^node\\.interface\\.v\\d+$"
+        },
+        "input_schema": { "$ref": "#/definitions/contract_schema_descriptor" },
+        "output_schema": { "$ref": "#/definitions/contract_schema_descriptor" },
+        "evidence_schema": { "$ref": "#/definitions/contract_schema_descriptor" },
+        "capability_summary": {
+          "type": "object",
+          "required": ["purpose", "responsibilities", "limits"],
+          "additionalProperties": false,
+          "properties": {
+            "purpose": { "type": "string", "minLength": 1 },
+            "responsibilities": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            },
+            "limits": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "governance_profile": {
+          "type": "object",
+          "required": ["owner", "decision_policy", "change_control"],
+          "additionalProperties": false,
+          "properties": {
+            "owner": { "type": "string", "minLength": 1 },
+            "decision_policy": { "type": "string", "minLength": 1 },
+            "escalation_policy": { "type": ["string", "null"] },
+            "change_control": {
+              "type": "object",
+              "required": ["requires_review", "allows_internal_heterogeneity"],
+              "additionalProperties": false,
+              "properties": {
+                "requires_review": { "type": "boolean" },
+                "allows_internal_heterogeneity": { "type": "boolean" }
+              }
+            }
+          }
+        },
+        "checkpoint_policy": {
+          "type": "object",
+          "required": ["strategy", "retention", "evidence_binding"],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": {
+              "type": "string",
+              "enum": ["manual", "on_change", "on_decision", "stage_boundary"]
+            },
+            "retention": {
+              "type": "string",
+              "enum": ["latest", "rolling", "full_history"]
+            },
+            "evidence_binding": {
+              "type": "string",
+              "enum": ["required", "best_effort", "none"]
+            },
+            "max_snapshots": { "type": ["integer", "null"], "minimum": 1 }
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "required": ["boundary_mode", "tree_projection", "internals"],
+          "additionalProperties": false,
+          "properties": {
+            "boundary_mode": {
+              "type": "string",
+              "enum": ["strict_contract", "contract_projection", "opaque_boundary"],
+              "description": "contract_projection explicitly allows richer local node internals than the external governance tree sees."
+            },
+            "tree_projection": {
+              "type": "string",
+              "enum": ["external_contract_only", "contract_plus_summary"]
+            },
+            "internals": {
+              "type": "object",
+              "required": ["visibility", "heterogeneous"],
+              "additionalProperties": false,
+              "properties": {
+                "visibility": {
+                  "type": "string",
+                  "enum": ["hidden", "summarized", "explicit"]
+                },
+                "heterogeneous": { "type": "boolean" }
+              }
+            },
+            "rag_profile": {
+              "type": ["object", "null"],
+              "additionalProperties": false,
+              "required": [
+                "mode",
+                "knowledge_scope",
+                "retrieval_boundary",
+                "citation_policy",
+                "freshness_policy",
+                "index_ref"
+              ],
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": ["disabled", "advisory", "primary"]
+                },
+                "knowledge_scope": { "type": "string", "minLength": 1 },
+                "retrieval_boundary": {
+                  "type": "string",
+                  "enum": ["metadata_only", "external_service", "local_index"]
+                },
+                "citation_policy": {
+                  "type": "string",
+                  "enum": ["required", "optional", "none"]
+                },
+                "freshness_policy": { "type": "string", "minLength": 1 },
+                "index_ref": { "type": ["string", "null"] }
+              },
+              "description": "Boundary metadata for RAG-capable nodes only. Retrieval implementation remains outside this contract."
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "contract_schema_descriptor": {
+      "type": "object",
+      "required": ["kind", "schema"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "json_schema" },
+        "schema": { "type": "object" },
+        "description": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "draft": ["active", "deprecated"],
+      "active": ["paused", "deprecated", "retired"],
+      "paused": ["active", "deprecated", "retired"],
+      "deprecated": ["retired"],
+      "retired": []
+    }
+  }
+}

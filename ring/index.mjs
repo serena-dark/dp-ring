@@ -36,6 +36,28 @@ import { computeComposite, buildEvaluation, computeEfficiency } from './lib/eval
 import { generateId } from './lib/id.mjs';
 import { filterByField, filterByFieldIn, sortByField, relevantKnowledge, blockingFeedback } from './lib/query.mjs';
 import { evaluateGate } from './lib/gate.mjs';
+import { validateNodeContract, normalizeNodeContract, assertNodeContract } from './lib/node-contract.mjs';
+import {
+  createCheckpoint,
+  continueFromCheckpoint,
+  forkCheckpoint,
+  adoptBranch,
+  discardBranch,
+  synthesizeCheckpoint,
+  lineageForCheckpoint,
+} from './lib/checkpoint-tree.mjs';
+import {
+  createEmptyCapsuleState,
+  recordCheckpoint,
+  acquireLease,
+  renewLease,
+  leaseExpired,
+  expireLease,
+  recordHeartbeat,
+  attachEvidence,
+  requestReplay,
+  completeReplay,
+} from './lib/node-capsule.mjs';
 
 /**
  * Initialise a Ring instance rooted at a repository directory.
@@ -281,6 +303,30 @@ export async function createRing(repoRoot) {
 
     // Query utilities
     query_utils: { filterByField, filterByFieldIn, sortByField, relevantKnowledge, blockingFeedback },
+
+    // Node-centered governance helpers
+    nodeContract: { validateNodeContract, normalizeNodeContract, assertNodeContract },
+    checkpointTree: {
+      createCheckpoint,
+      continueFromCheckpoint,
+      forkCheckpoint,
+      adoptBranch,
+      discardBranch,
+      synthesizeCheckpoint,
+      lineageForCheckpoint,
+    },
+    nodeCapsule: {
+      createEmptyCapsuleState,
+      recordCheckpoint,
+      acquireLease,
+      renewLease,
+      leaseExpired,
+      expireLease,
+      recordHeartbeat,
+      attachEvidence,
+      requestReplay,
+      completeReplay,
+    },
 
     // Config
     config,

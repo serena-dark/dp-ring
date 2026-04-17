@@ -78,6 +78,107 @@ describe('store', async () => {
       assert.equal(task.id, 't1-read-test');
       assert.equal(task.data.name, 'Read Test');
     });
+
+    it('creates and reads a node artifact through the configured store mapping', async () => {
+      const result = await store.create('node', {
+        id: 'n1-store-test',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          node_type: 'semantic-router',
+          interface_version: 'node.interface.v1',
+          input_schema: {
+            kind: 'json_schema',
+            schema: { type: 'object', properties: { prompt: { type: 'string' } } },
+            description: null,
+            notes: null,
+          },
+          output_schema: {
+            kind: 'json_schema',
+            schema: { type: 'object', properties: { decision: { type: 'string' } } },
+            description: null,
+            notes: null,
+          },
+          evidence_schema: {
+            kind: 'json_schema',
+            schema: { type: 'object', properties: { events: { type: 'array' } } },
+            description: null,
+            notes: null,
+          },
+          capability_summary: {
+            purpose: 'Store-level node smoke test',
+            responsibilities: ['Accept input'],
+            limits: ['No internal leakage'],
+          },
+          governance_profile: {
+            owner: 'test',
+            decision_policy: 'manual',
+            escalation_policy: 'manual',
+            change_control: {
+              requires_review: true,
+              allows_internal_heterogeneity: true,
+            },
+          },
+          checkpoint_policy: {
+            strategy: 'on_decision',
+            retention: 'rolling',
+            evidence_binding: 'required',
+            max_snapshots: 2,
+          },
+          runtime: {
+            boundary_mode: 'contract_projection',
+            tree_projection: 'external_contract_only',
+            internals: {
+              visibility: 'hidden',
+              heterogeneous: true,
+            },
+            rag_profile: null,
+          },
+        },
+      });
+      assert.equal(result.ok, true, JSON.stringify(result.errors));
+      const node = await store.read('node', 'n1-store-test');
+      assert.equal(node.type, 'node');
+      assert.equal(node.data.node_type, 'semantic-router');
+    });
+
+    it('creates and reads a checkpoint artifact through the configured store mapping', async () => {
+      const result = await store.create('checkpoint', {
+        id: 'cp-store-test',
+        status: 'candidate',
+        created_by: 'test',
+        data: {
+          parent_checkpoint_id: null,
+          branch_id: 'main',
+          node_id: 'n1-store-test',
+          scope_ref: { kind: 'task', id: 't1-read-test', path: null },
+          policy_snapshot: {
+            workflow_tightness: 'balanced',
+            oversight_strength: 'normal',
+            branch_budget: null,
+            notes: null,
+          },
+          execution_cursor: {
+            phase: 'dispatch',
+            step_id: 'dispatch-1',
+            ordinal: 0,
+          },
+          evidence_refs: [],
+          adoption_status: 'candidate',
+          replay_state: {
+            status: 'idle',
+            cursor: null,
+            replayable: true,
+            last_replayed_at: null,
+          },
+          synthesis_inputs: [],
+        },
+      });
+      assert.equal(result.ok, true, JSON.stringify(result.errors));
+      const checkpoint = await store.read('checkpoint', 'cp-store-test');
+      assert.equal(checkpoint.type, 'checkpoint');
+      assert.equal(checkpoint.data.branch_id, 'main');
+    });
   });
 
   describe('update()', () => {

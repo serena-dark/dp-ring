@@ -70,5 +70,20 @@ describe('id', () => {
       const id1 = generateId('session', { name: 'First', existingIds: ['s1-xxx', 's2-yyy'] });
       assert.ok(id1.startsWith('s3-'));
     });
+
+    it('generates node ids with n-prefix and index', () => {
+      const id = generateId('node', { name: 'semantic router', existingIds: ['n1-old'] });
+      assert.equal(id, 'n2-semantic-router');
+    });
+
+    it('generates checkpoint ids with cp- prefix', () => {
+      const id = generateId('checkpoint', { name: 'mainline root' });
+      assert.ok(id.startsWith('cp-mainline-root-'), `Expected cp-mainline-root- prefix but got: ${id}`);
+    });
+
+    it('generates branch-event ids with be- prefix', () => {
+      const id = generateId('branch-event', { name: 'checkpoint created' });
+      assert.ok(id.startsWith('be-checkpoint-created-'), `Expected be-checkpoint-created- prefix but got: ${id}`);
+    });
   });
 });
