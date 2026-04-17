@@ -12,7 +12,6 @@ export function Layout({
 }) {
   const { href } = useRouter();
   const primaryNavItems = NAV_ITEMS.filter((item) => item.tier === "primary");
-  const secondaryNavItems = NAV_ITEMS.filter((item) => item.tier === "secondary");
 
   return (
     <div className="app-shell">
@@ -41,20 +40,6 @@ export function Layout({
           })}
         </nav>
 
-        <div className="nav-group">
-          <p className="nav-group-label">Operational</p>
-          <nav className="nav-list" aria-label="Secondary navigation">
-            {secondaryNavItems.map((item) => (
-              <AppLink
-                key={item.path}
-                to={item.path}
-                className="nav-link nav-link-secondary"
-              >
-                <strong>{item.label}</strong>
-              </AppLink>
-            ))}
-          </nav>
-        </div>
       </aside>
 
       <div className="content-shell">
