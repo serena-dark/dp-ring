@@ -9,6 +9,11 @@ import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import {
+  createCheckpoint,
+  forkCheckpoint,
+  synthesizeCheckpoint,
+} from '../../ring/lib/checkpoint-tree.mjs';
 import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -61,6 +66,19 @@ async function createZipFixture(rootDir, name, files) {
   await rm(sourceDir, { recursive: true, force: true });
   await rm(outputDir, { recursive: true, force: true });
   return buffer;
+}
+
+function createWorkflowRunCheckpoint(overrides = {}) {
+  return createCheckpoint({
+    id: 'cp-workflow-root',
+    created_by: 'test-agent',
+    branch_id: 'main',
+    node_id: 'n-workflow-checkpoint',
+    scope_ref: { kind: 'workflow-run', id: 'run-workflow', path: null },
+    execution_cursor: { phase: 'prepared', step_id: 'inspect', ordinal: 0 },
+    evidence_refs: [],
+    ...overrides,
+  });
 }
 
 describe('orchestrator', async () => {
@@ -1104,6 +1122,270 @@ Split milestone prerequisites into ready and blocked sets.
       status: 'archived',
     });
     assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+  });
+
+  it('only auto-reuses a template again after synthesized checkpoint lineage is adopted into mainline', async () => {
+    const reusableWorkflow = await ring.create('workflow', {
+      id: 'wf-docs-synth-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Docs Synth Lineage Template',
+        description: 'Reusable workflow for testing tasks that should stay governance-blocked until synthesized checkpoint lineage is adopted into mainline.',
+        applicable_to: ['testing'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the regression context.' },
+          { id: 's2', name: 'qa', description: 'Run the focused verification path.' },
+          { id: 's3', name: 'verify', description: 'Verify the regression result.' },
+        ],
+      },
+    });
+    assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
+    await ring.registry.recordScore('testing', 'wf-docs-synth-hold', 9.97);
+
+    const rootCheckpoint = createWorkflowRunCheckpoint({
+      id: 'cp-docs-synth-root',
+      created_by: 'session-runner',
+      node_id: 'n-docs-synth-hold',
+      scope_ref: { kind: 'workflow-run', id: 'run-docs-synth-hold', path: null },
+      execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+    });
+    const leftCheckpoint = forkCheckpoint(rootCheckpoint, {
+      id: 'cp-docs-synth-left',
+      created_by: 'review-left',
+      branch_id: 'docs.left',
+      execution_cursor: { phase: 'review', step_id: 'verify', ordinal: 2 },
+      evidence_refs: [{ kind: 'doc', ref: 'docs:left', digest: 'left1' }],
+    });
+    const rightCheckpoint = forkCheckpoint(rootCheckpoint, {
+      id: 'cp-docs-synth-right',
+      created_by: 'review-right',
+      branch_id: 'docs.right',
+      execution_cursor: { phase: 'review', step_id: 'verify', ordinal: 2 },
+      evidence_refs: [{ kind: 'doc', ref: 'docs:right', digest: 'right2' }],
+    });
+    const synthesizedCheckpoint = synthesizeCheckpoint([leftCheckpoint, rightCheckpoint], {
+      id: 'cp-docs-synth-active',
+      created_by: 'judge-agent',
+      branch_id: 'docs.synth',
+      node_id: 'n-docs-synth-hold',
+      scope_ref: { kind: 'workflow-run', id: 'run-docs-synth-hold', path: null },
+      execution_cursor: { phase: 'synthesize', step_id: 'merge', ordinal: 3 },
+    });
+
+    for (const checkpoint of [
+      rootCheckpoint,
+      leftCheckpoint,
+      rightCheckpoint,
+      synthesizedCheckpoint,
+    ]) {
+      const checkpointResult = await ring.create('checkpoint', {
+        id: checkpoint.id,
+        status: checkpoint.status,
+        created_by: checkpoint.created_by,
+        session_id: checkpoint.session_id,
+        data: checkpoint.data,
+      });
+      assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+    }
+
+    const synthesizedRun = await ring.create('workflow-run', {
+      id: 'run-docs-synth-hold',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-18T00:00:00Z',
+      updated_at: '2026-04-18T00:01:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-docs-synth-hold',
+      status: 'completed',
+      data: {
+        workflow_template_id: 'wf-docs-synth-hold',
+        workflow_template_version: 1,
+        task_id: 'task-docs-synth-hold',
+        current_step_index: 2,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: 'http://127.0.0.1:3100/api/workflow-run/run-docs-synth-hold/report',
+          token: 'token-docs-synth-hold',
+          signing_secret: 'signing-secret-docs-synth-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'completed',
+          issued_at: '2026-04-18T00:00:00Z',
+          prepared_at: '2026-04-18T00:00:05Z',
+          last_report_at: '2026-04-18T00:00:50Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 2,
+          retry_count: 0,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-18T00:05:00Z',
+          packet_path: '.ring/orchestrator/runner/sessions/session-docs-synth-hold/run-docs-synth-hold.json',
+          allowed_worker_ids: ['worker-docs'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-docs',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: null,
+        },
+        reports: [
+          {
+            at: '2026-04-18T00:00:50Z',
+            status: 'completed',
+            actor: 'worker-docs',
+            step_id: 'verify',
+            note: 'The regression branch was synthesized for review but has not been adopted into mainline yet.',
+            commit_sha: null,
+            worker_id: 'worker-docs',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Regression fix completed and synthesized.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-docs-synth-hold',
+          branch_id: 'docs.synth',
+          active_checkpoint_id: 'cp-docs-synth-active',
+          checkpoint_ids: [
+            'cp-docs-synth-root',
+            'cp-docs-synth-left',
+            'cp-docs-synth-right',
+            'cp-docs-synth-active',
+          ],
+          branch_event_ids: ['be-docs-synth-1'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-docs-synth-hold',
+            runtime_status: 'completed',
+            current_checkpoint_id: 'cp-docs-synth-active',
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-18T00:00:10Z',
+            ended_at: '2026-04-18T00:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'qa',
+            status: 'completed',
+            started_at: '2026-04-18T00:00:21Z',
+            ended_at: '2026-04-18T00:00:35Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'verify',
+            status: 'completed',
+            started_at: '2026-04-18T00:00:36Z',
+            ended_at: '2026-04-18T00:00:50Z',
+            outputs: {},
+            notes: 'Completed on synthesized lineage pending adoption.',
+          },
+        ],
+      },
+    });
+    assert.equal(synthesizedRun.ok, true, JSON.stringify(synthesizedRun.errors));
+
+    const submitDocsBundle = (projectId, title) => ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'bundle-test',
+      payload: {
+        goal: {
+          title,
+          description:
+            'Verify the regression without blindly reusing a workflow whose latest checkpoint lineage is not yet mainline.',
+          acceptance_criteria: [
+            'A testing task is created',
+            'Checkpoint adoption influences workflow reuse',
+          ],
+        },
+        environment: {
+          project_id: projectId,
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['src/regression.js'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: `${projectId}-docs`,
+            kind: 'preparation_package',
+            uri: null,
+            format: 'json',
+            mount_to: 'workspace/bugfix',
+            required: true,
+            inline_data: '{"bugfix":true}',
+          },
+        ],
+        context: {
+          artifact_refs: [],
+          brief_ref: null,
+        },
+      },
+    });
+
+    const blockedBundle = await submitDocsBundle(
+      'bundle-project-synth-lineage-blocked',
+      'Regression verification after synthesized lineage',
+    );
+
+    assert.equal(blockedBundle.status, 'ready_queued');
+    assert.equal(
+      blockedBundle.workflows.reused_workflow_ids.includes('wf-docs-synth-hold'),
+      false,
+    );
+    assert.equal(
+      blockedBundle.workflows.generated_workflow_ids.includes('wf-docs-synth-hold'),
+      false,
+    );
+    assert.notEqual(blockedBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-synth-hold');
+
+    const adoptedCheckpoint = await ring.update('checkpoint', 'cp-docs-synth-active', {
+      status: 'mainline',
+      data: {
+        adoption_status: 'mainline',
+      },
+    });
+    assert.equal(adoptedCheckpoint.ok, true, JSON.stringify(adoptedCheckpoint.errors));
+
+    const adoptedBundle = await submitDocsBundle(
+      'bundle-project-synth-lineage-adopted',
+      'Regression verification after mainline adoption',
+    );
+
+    assert.equal(adoptedBundle.status, 'ready_queued');
+    assert.deepEqual(adoptedBundle.workflows.reused_workflow_ids, ['wf-docs-synth-hold']);
+    assert.equal(adoptedBundle.workflows.generated_workflow_ids.length, 0);
+    assert.equal(adoptedBundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+    assert.equal(adoptedBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-synth-hold');
+
+    const archivedReusable = await ring.update('workflow', 'wf-docs-synth-hold', {
+      status: 'archived',
+    });
+    assert.equal(archivedReusable.ok, true, JSON.stringify(archivedReusable.errors));
+
+    if (blockedBundle.workflows.generated_workflow_ids[0]) {
+      const archivedGenerated = await ring.update('workflow', blockedBundle.workflows.generated_workflow_ids[0], {
+        status: 'archived',
+      });
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
   });
 
   it('normalizes an A2A bundle into the same canonical goal shape as ring.goal', async () => {
