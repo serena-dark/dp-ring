@@ -303,6 +303,227 @@ describe('session runner', async () => {
     assert.match(stagedMaterial, /runner/);
   });
 
+  it('tightens governed fallback sessions when automatic workflow reuse was blocked by warm lineage', async () => {
+    const governedWorkflow = await ring.create('workflow', {
+      id: 'wf-runner-fallback-lineage-hold',
+      status: 'active',
+      created_by: 'session-runner-test',
+      data: {
+        name: 'Runner Governed Fallback Hold',
+        description: 'Reusable bug-fix workflow whose latest run already established warm semantic lineage.',
+        applicable_to: ['bug-fix'],
+        steps: [
+          { id: 'inspect', name: 'Inspect', description: 'Inspect the regression context.' },
+          { id: 'execute', name: 'Execute', description: 'Execute the fix.' },
+          { id: 'verify', name: 'Verify', description: 'Verify the result.' },
+        ],
+      },
+    });
+    assert.equal(governedWorkflow.ok, true, JSON.stringify(governedWorkflow.errors));
+    await ring.registry.recordScore('bug-fix', 'wf-runner-fallback-lineage-hold', 9.99);
+
+    const warmLineageRun = await ring.create('workflow-run', {
+      id: 'run-runner-fallback-lineage-hold',
+      status: 'failed',
+      created_by: 'session-runner',
+      session_id: 'session-runner-fallback-lineage-hold',
+      data: {
+        workflow_template_id: 'wf-runner-fallback-lineage-hold',
+        workflow_template_version: 1,
+        task_id: 'task-runner-fallback-lineage-hold',
+        current_step_index: 1,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: '/api/workflow-run/run-runner-fallback-lineage-hold/report',
+          token: 'token-runner-fallback-lineage-hold',
+          signing_secret: 'secret-runner-fallback-lineage-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'timed_out',
+          issued_at: '2026-04-18T03:00:00Z',
+          prepared_at: '2026-04-18T03:00:05Z',
+          last_report_at: '2026-04-18T03:00:40Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 120000,
+          max_retries: 2,
+          retry_count: 1,
+          retry_backoff_ms: 30000,
+          signature_ttl_ms: 300000,
+          timeout_at: '2026-04-18T03:02:05Z',
+          packet_path: '.ring/orchestrator/runner/sessions/session-runner-fallback-lineage-hold/run-runner-fallback-lineage-hold.json',
+          allowed_worker_ids: ['worker-agent'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-agent',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: 'Timed out after semantic progress already advanced checkpoint lineage.',
+        },
+        reports: [
+          {
+            at: '2026-04-18T03:00:40Z',
+            status: 'progress',
+            actor: 'worker-agent',
+            step_id: 'execute',
+            note: 'Warm semantic checkpoint lineage exists before timeout.',
+            commit_sha: null,
+            worker_id: 'worker-agent',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Semantic progress exists.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-runner-fallback-lineage-hold',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-runner-fallback-lineage-2',
+          checkpoint_ids: [
+            'cp-runner-fallback-root',
+            'cp-runner-fallback-lineage-1',
+            'cp-runner-fallback-lineage-2',
+          ],
+          branch_event_ids: ['be-runner-fallback-lineage-1'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-runner-fallback-lineage-hold',
+            runtime_status: 'recovering',
+            current_checkpoint_id: 'cp-runner-fallback-lineage-2',
+            replay: {
+              status: 'requested',
+              requested_at: '2026-04-18T03:00:45Z',
+              completed_at: null,
+              requested_by: 'session-runner',
+              reason: 'workflow_timeout',
+              source_checkpoint_id: 'cp-runner-fallback-lineage-2',
+              target_checkpoint_id: 'cp-runner-fallback-lineage-2',
+              cursor: { phase: 'execute', step_id: 'execute' },
+              journal_state: {
+                mode: 'semantic',
+                last_applied_entry_id: 'journal-runner-fallback-1',
+                pending_entry_ids: ['journal-runner-fallback-2'],
+              },
+            },
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-18T03:00:10Z',
+            ended_at: '2026-04-18T03:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'execute',
+            status: 'failed',
+            started_at: '2026-04-18T03:00:21Z',
+            ended_at: '2026-04-18T03:01:00Z',
+            outputs: {},
+            notes: 'Timed out after semantic progress.',
+          },
+          {
+            step_id: 'verify',
+            status: 'pending',
+            started_at: null,
+            ended_at: null,
+            outputs: {},
+            notes: null,
+          },
+        ],
+      },
+    });
+    assert.equal(warmLineageRun.ok, true, JSON.stringify(warmLineageRun.errors));
+
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-governed-fallback',
+      payload: {
+        goal: {
+          title: 'Governed fallback session launch',
+          description: 'Fix the governed failure with a fallback workflow after semantic timeout lineage.',
+          acceptance_criteria: ['The replacement workflow starts under tighter oversight.'],
+        },
+        environment: {
+          project_id: 'runner-governed-fallback-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['tests/governed-fallback.test.mjs'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-governed-fallback-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/governed-fallback',
+            required: true,
+            inline_data: '{"mode":"governed-fallback"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    assert.equal(launched.status, 'session_launched');
+    assert.equal(launched.workflows.waiting_tasks[0].workflow_source, 'custom_generated');
+    assert.equal(launched.workflows.waiting_tasks[0].governance_blocked_reuse.length, 1);
+    assert.equal(
+      launched.workflows.waiting_tasks[0].governance_blocked_reuse[0].reason,
+      'warm_semantic_lineage',
+    );
+
+    const session = await ring.read('session', launched.batching.session_id);
+    const workflowRun = await ring.read('workflow-run', session.data.workflow_run_ids[0]);
+    assert.equal(session.status, 'executing');
+    assert.deepEqual(session.data.governance_context?.reasons, ['warm_semantic_lineage']);
+    assert.equal(workflowRun.status, 'running');
+    assert.deepEqual(workflowRun.data.callback.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(workflowRun.data.callback.allowed_worker_ids, ['worker-agent']);
+    assert.equal(workflowRun.data.callback.max_retries, 0);
+
+    const checkpoint = await ring.read('checkpoint', workflowRun.data.node_execution.active_checkpoint_id);
+    assert.equal(checkpoint.data.policy_snapshot.workflow_tightness, 'tight');
+    assert.equal(checkpoint.data.policy_snapshot.oversight_strength, 'strong');
+    assert.equal(checkpoint.data.policy_snapshot.branch_budget, null);
+    assert.match(checkpoint.data.policy_snapshot.notes ?? '', /governance-blocked fallback session/i);
+    assert.match(checkpoint.data.policy_snapshot.notes ?? '', /warm_semantic_lineage/i);
+
+    const packetPath = join(tempDir, workflowRun.data.steps[0].outputs.execution_packet_path);
+    const packet = JSON.parse(await readFile(packetPath, 'utf-8'));
+    assert.deepEqual(packet.callbacks.workflow_run_report.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(packet.callbacks.workflow_run_report.worker_identity.allowed_worker_ids, ['worker-agent']);
+    assert.equal(packet.callbacks.workflow_run_report.retry_policy.max_retries, 0);
+
+    const archivedGoverned = await ring.update('workflow', 'wf-runner-fallback-lineage-hold', {
+      status: 'archived',
+    });
+    assert.equal(archivedGoverned.ok, true, JSON.stringify(archivedGoverned.errors));
+
+    if (launched.workflows.generated_workflow_ids[0]) {
+      const archivedGenerated = await ring.update(
+        'workflow',
+        launched.workflows.generated_workflow_ids[0],
+        {
+          status: 'archived',
+        },
+      );
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+  });
+
   it('accepts workflow-run completion reports, finalizes tasks, and closes the session after judgement', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
@@ -928,7 +1149,22 @@ describe('session runner', async () => {
     await run('git', ['commit', '-m', 'runner a2a update'], tempDir);
     const commitSha = (await run('git', ['rev-parse', 'HEAD'], tempDir)).stdout.trim();
     const workflowRun = await ring.read('workflow-run', runId);
-    const currentStepId = workflowRun.data.steps[workflowRun.data.current_step_index].step_id;
+    const a2aReady = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...workflowRun.data.callback,
+          accepted_protocols: [
+            ...new Set([...(workflowRun.data.callback.accepted_protocols ?? []), 'a2a.task-status.v1']),
+          ],
+          allowed_worker_ids: [
+            ...new Set([...(workflowRun.data.callback.allowed_worker_ids ?? []), 'a2a-worker']),
+          ],
+        },
+      },
+    });
+    assert.equal(a2aReady.ok, true, JSON.stringify(a2aReady.errors));
+    const a2aWorkflowRun = await ring.read('workflow-run', runId);
+    const currentStepId = a2aWorkflowRun.data.steps[a2aWorkflowRun.data.current_step_index].step_id;
     const payload = {
       protocol: 'a2a.task-status.v1',
       worker: {
@@ -965,7 +1201,7 @@ describe('session runner', async () => {
     const reported = await ring.sessionRunner.reportWorkflowRun(
       runId,
       payload,
-      signedHeaders(workflowRun, payload, {
+      signedHeaders(a2aWorkflowRun, payload, {
         workerId: 'a2a-worker',
         includeKeyVersion: true,
       }),
