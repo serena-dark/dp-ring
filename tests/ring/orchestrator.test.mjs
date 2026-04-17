@@ -847,6 +847,320 @@ Split milestone prerequisites into ready and blocked sets.
     );
   });
 
+  it('surfaces warm-lineage governance reasons when workflow preparation is retried', async () => {
+    const result = await ring.orchestrator.createRequirementDispatch({
+      name: 'Workflow Guidance Warm Lineage',
+      description:
+        'Workflow preparation guidance should explain why a reusable template is governance-blocked.',
+      priority: 'high',
+      acceptance_criteria: [
+        { id: 'ac1', description: 'Guidance exposes governance reasons', satisfied: false },
+      ],
+      created_by: 'test',
+    });
+
+    await writeFile(
+      join(tempDir, result.job.requirement_document.document.path),
+      `# Workflow Guidance Warm Lineage
+
+## Goal
+
+This requirement document is complete and ready for milestone planning. It is
+explicit enough that prerequisites and early tasks can be split once the
+milestones are generated.
+
+## Acceptance Criteria
+
+- Guidance explains governance-blocked workflow reuse
+- Ready tasks can still reuse healthy templates
+`,
+      'utf-8',
+    );
+
+    const milestonePlanning = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'writer-agent',
+      status: 'completed',
+      note: 'Requirement doc complete.',
+    });
+
+    await writeFile(
+      join(tempDir, milestonePlanning.milestone_plan.document.path),
+      `# Workflow Guidance Warm Lineage Milestone Plan
+
+## Planning Context
+
+Split the work into a foundation phase and an execution phase.
+
+## Milestone 1: Foundation
+
+Set up the project baseline and approvals.
+
+### Acceptance Checks
+
+- Baseline is documented
+
+### Prerequisites
+
+- [human] Stakeholder approval is confirmed
+- [reference] API contract is published
+
+## Milestone 2: Execution
+
+Implement the dispatchable work once dependencies are ready.
+
+### Acceptance Checks
+
+- Dispatchable work is identified
+
+### Prerequisites
+
+- [automated] Integration test harness is green
+`,
+      'utf-8',
+    );
+
+    const postMilestone = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'milestone-planner',
+      status: 'completed',
+      note: 'Milestones complete.',
+    });
+
+    await writeFile(
+      join(tempDir, postMilestone.post_milestone.prerequisite_analysis.document.path),
+      `# Workflow Guidance Warm Lineage Prerequisite Analysis
+
+## Goal
+
+Split milestone prerequisites into ready and blocked sets.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder approval is confirmed
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: API review has not finished
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
+
+### Ready Now
+
+- [automated] Integration test harness is green
+
+### Blocked / Missing
+
+- [human] Ops rollout window is scheduled | reason: rollout calendar is still pending
+`,
+      'utf-8',
+    );
+
+    const reusableWorkflow = await ring.create('workflow', {
+      id: 'wf-guidance-docs-template',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Guidance Docs Template',
+        description: 'Reusable workflow for documentation tasks with a healthy latest run.',
+        applicable_to: ['documentation'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+          { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+          { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+        ],
+      },
+    });
+    assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
+    await ring.registry.recordScore('documentation', 'wf-guidance-docs-template', 0.92);
+
+    const blockedWorkflow = await ring.create('workflow', {
+      id: 'wf-guidance-docs-lineage-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Guidance Docs Warm Lineage Template',
+        description:
+          'Reusable workflow for documentation tasks that should be withheld once warm timeout lineage exists.',
+        applicable_to: ['documentation'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+          { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+          { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+        ],
+      },
+    });
+    assert.equal(blockedWorkflow.ok, true, JSON.stringify(blockedWorkflow.errors));
+    await ring.registry.recordScore('documentation', 'wf-guidance-docs-lineage-hold', 0.99);
+
+    const warmLineageRun = await ring.create('workflow-run', {
+      id: 'run-guidance-docs-lineage-hold',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-17T00:00:00Z',
+      updated_at: '2026-04-17T00:01:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-guidance-docs-lineage-hold',
+      status: 'failed',
+      data: {
+        workflow_template_id: 'wf-guidance-docs-lineage-hold',
+        workflow_template_version: 1,
+        task_id: 'task-guidance-docs-lineage-hold',
+        current_step_index: 1,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url:
+            'http://127.0.0.1:3100/api/workflow-run/run-guidance-docs-lineage-hold/report',
+          token: 'token-guidance-docs-lineage-hold',
+          signing_secret: 'signing-secret-guidance-docs-lineage-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'timed_out',
+          issued_at: '2026-04-17T00:00:00Z',
+          prepared_at: '2026-04-17T00:00:05Z',
+          last_report_at: '2026-04-17T00:00:40Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 3,
+          retry_count: 1,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-17T00:05:00Z',
+          packet_path:
+            '.ring/orchestrator/runner/sessions/session-guidance-docs-lineage-hold/run-guidance-docs-lineage-hold.json',
+          allowed_worker_ids: ['worker-guidance'],
+          accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+          last_worker_id: 'worker-guidance',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: 'Timed out after progress was already reported.',
+        },
+        reports: [
+          {
+            at: '2026-04-17T00:00:40Z',
+            status: 'progress',
+            actor: 'worker-guidance',
+            step_id: 'draft',
+            note: 'Semantic progress advanced the checkpoint lineage before timeout.',
+            commit_sha: null,
+            worker_id: 'worker-guidance',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Execution made semantic progress.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-guidance-docs-lineage-hold',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-guidance-docs-lineage-2',
+          checkpoint_ids: [
+            'cp-guidance-docs-root',
+            'cp-guidance-docs-lineage-1',
+            'cp-guidance-docs-lineage-2',
+          ],
+          branch_event_ids: ['be-guidance-docs-lineage-1', 'be-guidance-docs-lineage-2'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-guidance-docs-lineage-hold',
+            runtime_status: 'recovering',
+            current_checkpoint_id: 'cp-guidance-docs-lineage-2',
+            replay: {
+              status: 'requested',
+              requested_at: '2026-04-17T00:00:45Z',
+              completed_at: null,
+              requested_by: 'session-runner',
+              reason: 'workflow_timeout',
+              source_checkpoint_id: 'cp-guidance-docs-lineage-2',
+              target_checkpoint_id: 'cp-guidance-docs-lineage-2',
+              cursor: { phase: 'execute', step_id: 'draft' },
+              journal_state: {
+                mode: 'semantic',
+                last_applied_entry_id: 'journal-guidance-1',
+                pending_entry_ids: ['journal-guidance-2'],
+              },
+            },
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-17T00:00:10Z',
+            ended_at: '2026-04-17T00:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'draft',
+            status: 'failed',
+            started_at: '2026-04-17T00:00:21Z',
+            ended_at: '2026-04-17T00:01:00Z',
+            outputs: {},
+            notes: 'Timed out after semantic progress.',
+          },
+        ],
+      },
+    });
+    assert.equal(warmLineageRun.ok, true, JSON.stringify(warmLineageRun.errors));
+
+    const prerequisiteCompleted = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'prerequisite-preparer',
+      status: 'completed',
+      note: 'Prerequisite split complete.',
+    });
+
+    assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
+    assert.equal(
+      prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+        'wf-guidance-docs-template',
+      ),
+      true,
+    );
+    assert.equal(
+      prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+        'wf-guidance-docs-lineage-hold',
+      ),
+      false,
+    );
+
+    const jobPath = join(
+      tempDir,
+      '.ring',
+      'orchestrator',
+      'jobs',
+      `${result.job.id}.json`,
+    );
+    const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+    jobRecord.status = 'workflow_rework_required';
+    jobRecord.current_stage = 'workflow_preparation';
+    jobRecord.workflow_preparation.status = 'rework_required';
+    jobRecord.workflow_preparation.parse_error =
+      'Retry requested so the workflow planner can review governance guidance.';
+    jobRecord.workflow_preparation.completed_at = null;
+    await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+    const retried = await ring.orchestrator.retryJob(result.job.id);
+    assert.equal(retried.status, 'workflow_dispatched');
+    assert.equal(retried.current_stage, 'workflow_preparation');
+    assert.equal(retried.workflow_preparation.status, 'planning');
+    assert.ok(retried.workflow_preparation.dispatch.packet);
+
+    const scaffold = await readFile(
+      join(tempDir, retried.workflow_preparation.document.path),
+      'utf-8',
+    );
+    assert.match(
+      scaffold,
+      /Governance-blocked reuse: wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+    );
+    assert.match(
+      retried.workflow_preparation.dispatch.packet.body,
+      /governance_blocked_reuse: wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+    );
+  });
+
   it('ingests a ring.goal bundle and launches it through the adaptive dispatcher', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
