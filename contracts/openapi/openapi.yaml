@@ -333,6 +333,16 @@ paths:
             text/event-stream:
               schema:
                 type: string
+                description: |
+                  Each emitted server-sent event frame is generated from an `ActivityEvent`.
+                  - `id:` mirrors `ActivityEvent.id`
+                  - `event:` mirrors `ActivityEvent.kind`
+                  - `data:` contains the JSON-serialized `ActivityEvent` payload
+                example: |-
+                  id: evt_001
+                  event: objective.submitted.v1
+                  data: {"id":"evt_001","timestamp":"2026-04-17T00:00:00Z","kind":"objective.submitted.v1","title":"Objective submitted","summary":"Rebuild operator inbox entered triage.","resource_type":"objective","resource_id":"obj_inbox_rebuild"}
+              x-dp-keepalive-seconds: 10
 components:
   parameters:
     DpUserHeader:

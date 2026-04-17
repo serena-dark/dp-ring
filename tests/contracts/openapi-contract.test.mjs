@@ -37,4 +37,16 @@ describe('control-api OpenAPI contract', () => {
     assert.match(openapi, /NotFoundError:/);
     assert.match(openapi, /enum: \[resource_not_found\]/);
   });
+
+  it('documents activity stream event envelope semantics', () => {
+    assert.match(controlApiSource, /\.event\(event\.kind\.clone\(\)\)/);
+    assert.match(controlApiSource, /\.id\(event\.id\.clone\(\)\)/);
+    assert.match(controlApiSource, /keep_alive\(KeepAlive::new\(\)\.interval\(Duration::from_secs\(10\)\)\)/);
+
+    assert.match(openapi, /\/api\/activity\/stream:[\s\S]*ActivityEvent\.id/);
+    assert.match(openapi, /\/api\/activity\/stream:[\s\S]*ActivityEvent\.kind/);
+    assert.match(openapi, /\/api\/activity\/stream:[\s\S]*JSON-serialized `ActivityEvent` payload/);
+    assert.match(openapi, /\/api\/activity\/stream:[\s\S]*id: evt_001[\s\S]*event: objective\.submitted\.v1/);
+    assert.match(openapi, /\/api\/activity\/stream:[\s\S]*x-dp-keepalive-seconds: 10/);
+  });
 });
