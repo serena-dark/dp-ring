@@ -407,6 +407,54 @@ function governanceBatchSignature(waitingTasks = []) {
   return reasons.length > 0 ? reasons.join('+') : null;
 }
 
+function buildSessionGovernanceContext(waitingTasks = []) {
+  const blockedReuse = waitingTasks.flatMap((item) => {
+    const taskId = trimString(item?.task_id);
+    const taskName = trimString(item?.task_name) || null;
+    if (!taskId || !Array.isArray(item?.governance_blocked_reuse)) {
+      return [];
+    }
+    return item.governance_blocked_reuse
+      .map((candidate) => {
+        const workflowTemplateId = trimString(candidate?.id);
+        const workflowName = trimString(candidate?.name);
+        const reason = trimString(candidate?.reason);
+        if (!workflowTemplateId || !workflowName || !reason) {
+          return null;
+        }
+        return {
+          task_id: taskId,
+          task_name: taskName,
+          workflow_template_id: workflowTemplateId,
+          workflow_name: workflowName,
+          reason,
+          checkpoint_id: trimString(candidate?.checkpoint_id) || null,
+          adoption_status: trimString(candidate?.adoption_status) || null,
+          branch_budget:
+            typeof candidate?.branch_budget === 'number' && Number.isFinite(candidate.branch_budget)
+              ? candidate.branch_budget
+              : null,
+          workflow_tightness: trimString(candidate?.workflow_tightness) || null,
+          oversight_strength: trimString(candidate?.oversight_strength) || null,
+          detail: describeWorkflowGovernanceBlock(candidate),
+        };
+      })
+      .filter(Boolean);
+  });
+
+  if (blockedReuse.length === 0) {
+    return null;
+  }
+
+  return {
+    source: 'governance_blocked_reuse',
+    isolated_batch: true,
+    batch_signature: governanceBatchSignature(waitingTasks),
+    reasons: [...new Set(blockedReuse.map((item) => item.reason))].sort(),
+    blocked_reuse: blockedReuse,
+  };
+}
+
 function normalizeAcceptanceCriteria(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -5055,6 +5103,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${job.requirement_name} dispatch batch`,
       });
       const workflowRunIds = [];
+      const governanceContext = buildSessionGovernanceContext(readyTasks);
       const singleWorkflowTemplate =
         [...new Set(readyTasks.map((item) => item.workflow_template_id))].length === 1
           ? readyTasks[0].workflow_template_id
@@ -5093,7 +5142,20 @@ function inferTaskTypeFromContext(goal, contextText = '') {
               actor: SESSION_DISPATCHER_ID,
               detail: 'Dispatcher batch launch created the live session.',
             },
+            ...(governanceContext
+              ? [
+                  {
+                    timestamp: nowIso(),
+                    event: 'governance_context_injected',
+                    actor: SESSION_DISPATCHER_ID,
+                    detail:
+                      `Session carries governance-sensitive fallback context (${governanceContext.batch_signature ?? 'governed'}) `
+                      + `for ${governanceContext.blocked_reuse.length} blocked reuse candidate(s).`,
+                  },
+                ]
+              : []),
           ],
+          governance_context: governanceContext,
         },
       });
 
@@ -5276,6 +5338,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${requirement.data.name} bundle batch`,
       });
       const workflowRunIds = [];
+      const governanceContext = buildSessionGovernanceContext(readyTasks);
       const singleWorkflowTemplate =
         [...new Set(readyTasks.map((item) => item.workflow_template_id))].length === 1
           ? readyTasks[0].workflow_template_id
@@ -5306,7 +5369,20 @@ function inferTaskTypeFromContext(goal, contextText = '') {
               actor: SESSION_DISPATCHER_ID,
               detail: `Launched ${readyTasks.length} ready bundle tasks into a single session.`,
             },
+            ...(governanceContext
+              ? [
+                  {
+                    timestamp: nowIso(),
+                    event: 'governance_context_injected',
+                    actor: SESSION_DISPATCHER_ID,
+                    detail:
+                      `Session carries governance-sensitive fallback context (${governanceContext.batch_signature ?? 'governed'}) `
+                      + `for ${governanceContext.blocked_reuse.length} blocked reuse candidate(s).`,
+                  },
+                ]
+              : []),
           ],
+          governance_context: governanceContext,
         },
       });
 

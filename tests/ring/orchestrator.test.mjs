@@ -2227,6 +2227,37 @@ Split milestone prerequisites into ready and blocked sets.
       [1, 1],
     );
 
+    const cleanSession = sharedSessions.find(
+      (item) => item.id === launchedClean.batching.session_id,
+    );
+    const governedSession = sharedSessions.find(
+      (item) => item.id === launchedGoverned.batching.session_id,
+    );
+    assert.ok(cleanSession);
+    assert.ok(governedSession);
+    assert.equal(cleanSession.data.governance_context ?? null, null);
+    assert.equal(governedSession.data.governance_context?.isolated_batch, true);
+    assert.equal(
+      governedSession.data.governance_context?.batch_signature,
+      'warm_semantic_lineage',
+    );
+    assert.deepEqual(governedSession.data.governance_context?.reasons, [
+      'warm_semantic_lineage',
+    ]);
+    assert.equal(
+      governedSession.data.governance_context?.blocked_reuse[0]?.task_id,
+      governedSession.data.task_ids[0],
+    );
+    assert.equal(
+      governedSession.data.governance_context?.blocked_reuse[0]?.workflow_template_id,
+      'wf-shared-testing-lineage-hold',
+    );
+    assert.ok(
+      governedSession.data.execution_log.some(
+        (entry) => entry.event === 'governance_context_injected',
+      ),
+    );
+
     const archivedHealthy = await ring.update('workflow', 'wf-shared-docs-healthy', {
       status: 'archived',
     });

@@ -43,6 +43,38 @@
           },
           "default": { "workflow_template": null, "distillations_applied": [], "registry_rank_at_selection": null }
         },
+        "governance_context": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "source": { "type": "string" },
+            "isolated_batch": { "type": "boolean" },
+            "batch_signature": { "type": ["string", "null"] },
+            "reasons": { "type": "array", "items": { "type": "string" } },
+            "blocked_reuse": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["task_id", "workflow_template_id", "workflow_name", "reason", "detail"],
+                "properties": {
+                  "task_id": { "type": "string" },
+                  "task_name": { "type": ["string", "null"] },
+                  "workflow_template_id": { "type": "string" },
+                  "workflow_name": { "type": "string" },
+                  "reason": { "type": "string" },
+                  "checkpoint_id": { "type": ["string", "null"] },
+                  "adoption_status": { "type": ["string", "null"] },
+                  "branch_budget": { "type": ["number", "null"] },
+                  "workflow_tightness": { "type": ["string", "null"] },
+                  "oversight_strength": { "type": ["string", "null"] },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          },
+          "default": null
+        },
         "execution_log": {
           "type": "array",
           "items": {
