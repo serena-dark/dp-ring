@@ -1702,6 +1702,248 @@ Split milestone prerequisites into ready and blocked sets.
     }
   });
 
+  it('keeps automatic reuse blocked while the latest mainline checkpoint still exhausts branch budget', async () => {
+    const reusableWorkflow = await ring.create('workflow', {
+      id: 'wf-docs-tight-policy-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Docs Tight Policy Template',
+        description: 'Reusable workflow for testing tasks that should stay blocked while the latest mainline checkpoint still carries exhausted branch budget.',
+        applicable_to: ['testing'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the governance context.' },
+          { id: 's2', name: 'verify', description: 'Run the governed verification path.' },
+          { id: 's3', name: 'report', description: 'Summarize the result.' },
+        ],
+      },
+    });
+    assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
+    await ring.registry.recordScore('testing', 'wf-docs-tight-policy-hold', 9.98);
+
+    const governedCheckpoint = createWorkflowRunCheckpoint({
+      id: 'cp-docs-tight-policy-active',
+      status: 'mainline',
+      created_by: 'session-runner',
+      node_id: 'n-docs-tight-policy',
+      scope_ref: { kind: 'workflow-run', id: 'run-docs-tight-policy', path: null },
+      execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+      adoption_status: 'mainline',
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 0,
+        notes: 'Warm-lineage recovery already consumed the branch budget for this template.',
+      },
+    });
+
+    const checkpointResult = await ring.create('checkpoint', {
+      id: governedCheckpoint.id,
+      status: governedCheckpoint.status,
+      created_by: governedCheckpoint.created_by,
+      session_id: governedCheckpoint.session_id,
+      data: governedCheckpoint.data,
+    });
+    assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+    const governedRun = await ring.create('workflow-run', {
+      id: 'run-docs-tight-policy',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-18T01:00:00Z',
+      updated_at: '2026-04-18T01:01:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-docs-tight-policy',
+      status: 'completed',
+      data: {
+        workflow_template_id: 'wf-docs-tight-policy-hold',
+        workflow_template_version: 1,
+        task_id: 'task-docs-tight-policy',
+        current_step_index: 2,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: 'http://127.0.0.1:3100/api/workflow-run/run-docs-tight-policy/report',
+          token: 'token-docs-tight-policy',
+          signing_secret: 'signing-secret-docs-tight-policy',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'completed',
+          issued_at: '2026-04-18T01:00:00Z',
+          prepared_at: '2026-04-18T01:00:05Z',
+          last_report_at: '2026-04-18T01:00:50Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 0,
+          retry_count: 0,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-18T01:05:00Z',
+          packet_path: '.ring/orchestrator/runner/sessions/session-docs-tight-policy/run-docs-tight-policy.json',
+          allowed_worker_ids: ['worker-docs-tight'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-docs-tight',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: null,
+        },
+        reports: [
+          {
+            at: '2026-04-18T01:00:50Z',
+            status: 'completed',
+            actor: 'worker-docs-tight',
+            step_id: 'report',
+            note: 'The governed redispatch completed under a root checkpoint that already exhausted branch budget.',
+            commit_sha: null,
+            worker_id: 'worker-docs-tight',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Governed verification completed.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-docs-tight-policy',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-docs-tight-policy-active',
+          checkpoint_ids: ['cp-docs-tight-policy-active'],
+          branch_event_ids: ['be-docs-tight-policy-1'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-docs-tight-policy',
+            runtime_status: 'completed',
+            current_checkpoint_id: 'cp-docs-tight-policy-active',
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-18T01:00:10Z',
+            ended_at: '2026-04-18T01:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'verify',
+            status: 'completed',
+            started_at: '2026-04-18T01:00:21Z',
+            ended_at: '2026-04-18T01:00:35Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'report',
+            status: 'completed',
+            started_at: '2026-04-18T01:00:36Z',
+            ended_at: '2026-04-18T01:00:50Z',
+            outputs: {},
+            notes: 'Completed under a branch_budget=0 checkpoint policy.',
+          },
+        ],
+      },
+    });
+    assert.equal(governedRun.ok, true, JSON.stringify(governedRun.errors));
+
+    const submitDocsBundle = (projectId, title) => ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'bundle-test',
+      payload: {
+        goal: {
+          title,
+          description:
+            'Verify the regression without automatically reusing a template whose latest mainline checkpoint already exhausted branch budget.',
+          acceptance_criteria: [
+            'A testing task is created',
+            'Checkpoint policy affects workflow reuse',
+          ],
+        },
+        environment: {
+          project_id: projectId,
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['src/regression.js'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: `${projectId}-docs`,
+            kind: 'preparation_package',
+            uri: null,
+            format: 'json',
+            mount_to: 'workspace/bugfix',
+            required: true,
+            inline_data: '{"bugfix":true}',
+          },
+        ],
+        context: {
+          artifact_refs: [],
+          brief_ref: null,
+        },
+      },
+    });
+
+    const blockedBundle = await submitDocsBundle(
+      'bundle-project-tight-policy-blocked',
+      'Regression verification while branch budget is exhausted',
+    );
+
+    assert.equal(blockedBundle.status, 'ready_queued');
+    assert.equal(
+      blockedBundle.workflows.reused_workflow_ids.includes('wf-docs-tight-policy-hold'),
+      false,
+    );
+    assert.notEqual(
+      blockedBundle.workflows.waiting_tasks[0].workflow_template_id,
+      'wf-docs-tight-policy-hold',
+    );
+
+    const clearedCheckpoint = await ring.update('checkpoint', 'cp-docs-tight-policy-active', {
+      data: {
+        adoption_status: 'mainline',
+        policy_snapshot: {
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: null,
+          notes: 'A later healthy pass cleared the tight governance hold.',
+        },
+      },
+    });
+    assert.equal(clearedCheckpoint.ok, true, JSON.stringify(clearedCheckpoint.errors));
+
+    const clearedBundle = await submitDocsBundle(
+      'bundle-project-tight-policy-cleared',
+      'Regression verification after branch budget clears',
+    );
+
+    assert.equal(clearedBundle.status, 'ready_queued');
+    assert.deepEqual(clearedBundle.workflows.reused_workflow_ids, ['wf-docs-tight-policy-hold']);
+    assert.equal(clearedBundle.workflows.generated_workflow_ids.length, 0);
+    assert.equal(clearedBundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+    assert.equal(clearedBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-tight-policy-hold');
+
+    const archivedReusable = await ring.update('workflow', 'wf-docs-tight-policy-hold', {
+      status: 'archived',
+    });
+    assert.equal(archivedReusable.ok, true, JSON.stringify(archivedReusable.errors));
+
+    if (blockedBundle.workflows.generated_workflow_ids[0]) {
+      const archivedGenerated = await ring.update('workflow', blockedBundle.workflows.generated_workflow_ids[0], {
+        status: 'archived',
+      });
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+  });
+
   it('normalizes an A2A bundle into the same canonical goal shape as ring.goal', async () => {
     const ringGoalBundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
