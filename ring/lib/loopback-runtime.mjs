@@ -636,6 +636,34 @@ async function replanDepth(ring, task) {
   return depth;
 }
 
+async function semanticRecoveryAutoRedispatchContext(ring, task, reason) {
+  const workflowRunId = trimString(task?.data?.workflow_run_id);
+  if (reason !== 'workflow_timeout' || !workflowRunId) {
+    return {
+      blocked: false,
+      workflowRunId,
+      checkpointCount: 0,
+      replayStatus: 'idle',
+      sawProgressReport: false,
+    };
+  }
+
+  const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
+  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
+  const replayStatus = trimString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
+  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
+    && workflowRun.data.reports.some((report) => report?.status === 'progress');
+  const blocked = sawProgressReport && checkpointCount > 2 && replayStatus === 'requested';
+
+  return {
+    blocked,
+    workflowRunId,
+    checkpointCount,
+    replayStatus,
+    sawProgressReport,
+  };
+}
+
 export function createLoopbackRuntime(
   repoRoot,
   ring,
@@ -1087,16 +1115,22 @@ export function createLoopbackRuntime(
 
       const depth = await replanDepth(ring, task);
       const reason = trimString(task.data.replanning?.source_failure) ?? 'unknown_failure';
+      const semanticRecovery = await semanticRecoveryAutoRedispatchContext(ring, task, reason);
       const canRedispatch =
         depth < config.max_replan_depth &&
         ['workflow_failed', 'workflow_timeout', 'review_rejected'].includes(reason) &&
-        trimString(task.data.workflow_template_id);
-      const cloudDecision = await decideReplanWithOpenAi(openai, task, canRedispatch, reason);
+        trimString(task.data.workflow_template_id) &&
+        !semanticRecovery.blocked;
+      const cloudDecision = semanticRecovery.blocked
+        ? null
+        : await decideReplanWithOpenAi(openai, task, canRedispatch, reason);
       const verdict = cloudDecision?.verdict ?? (canRedispatch ? 'redispatch' : 'terminal');
-      const note = cloudDecision?.note ??
-        (canRedispatch
-          ? `Loopback replanner redispatched the task after ${reason}.`
-          : `Loopback replanner marked the task terminal after ${reason}.`);
+      const note = semanticRecovery.blocked
+        ? `Loopback replanner marked the task terminal after ${reason} because workflow run ${semanticRecovery.workflowRunId} already established semantic checkpoint lineage (${semanticRecovery.checkpointCount} checkpoints, replay ${semanticRecovery.replayStatus}). Auto-redispatch is suppressed until an explicit governance decision consumes that lineage.`
+        : cloudDecision?.note ??
+          (canRedispatch
+            ? `Loopback replanner redispatched the task after ${reason}.`
+            : `Loopback replanner marked the task terminal after ${reason}.`);
 
       const replannedTask = await taskExecution.replan(task.id, verdict === 'redispatch'
         ? {
