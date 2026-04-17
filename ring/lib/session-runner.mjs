@@ -1,6 +1,23 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
+import {
+  createCheckpoint,
+  continueFromCheckpoint,
+  lineageForCheckpoint,
+} from './checkpoint-tree.mjs';
+import {
+  createEmptyCapsuleState,
+  recordCheckpoint,
+  acquireLease,
+  renewLease,
+  leaseExpired,
+  expireLease,
+  recordHeartbeat,
+  attachEvidence,
+  requestReplay,
+  completeReplay,
+} from './node-capsule.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -281,6 +298,199 @@ function appendRunReport(run, report) {
   };
 }
 
+function contractSchema(schema, description) {
+  return {
+    kind: 'json_schema',
+    schema,
+    description: description ?? null,
+    notes: null,
+  };
+}
+
+function workflowRunNodeExecution() {
+  return {
+    node_id: null,
+    branch_id: 'main',
+    active_checkpoint_id: null,
+    checkpoint_ids: [],
+    branch_event_ids: [],
+    capsule_state: createEmptyCapsuleState({
+      node_id: null,
+      runtime_status: 'idle',
+      current_checkpoint_id: null,
+    }),
+  };
+}
+
+function workflowRunNodeArtifact(nodeId, sessionId, run, task, workflow, now) {
+  return {
+    id: nodeId,
+    type: 'node',
+    version: 1,
+    created_at: now,
+    updated_at: now,
+    created_by: 'session-runner',
+    session_id: sessionId,
+    status: 'active',
+    data: {
+      node_type: 'workflow-run-executor',
+      interface_version: 'node.interface.v1',
+      input_schema: contractSchema(
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['workflow_run_id', 'task_id', 'packet_path'],
+          properties: {
+            workflow_run_id: { type: 'string' },
+            task_id: { type: 'string' },
+            packet_path: { type: 'string' },
+          },
+        },
+        'Execution capsule input for a prepared workflow run.',
+      ),
+      output_schema: contractSchema(
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['status'],
+          properties: {
+            status: { type: 'string' },
+            commit_sha: { type: ['string', 'null'] },
+            outputs: { type: ['object', 'null'] },
+            note: { type: ['string', 'null'] },
+          },
+        },
+        'Normalized workflow-run report envelope seen by the global tree.',
+      ),
+      evidence_schema: contractSchema(
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['evidence_refs'],
+          properties: {
+            evidence_refs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['kind', 'ref'],
+                properties: {
+                  kind: { type: 'string' },
+                  ref: { type: 'string' },
+                  digest: { type: ['string', 'null'] },
+                },
+              },
+            },
+          },
+        },
+        'Evidence references exported from the node boundary.',
+      ),
+      capability_summary: {
+        purpose: 'Execute a workflow-run through a stable node-facing execution capsule.',
+        responsibilities: [
+          'Accept prepared execution packets.',
+          'Emit normalized workflow-run reports.',
+          'Expose semantic checkpoints and evidence refs to the global tree.',
+        ],
+        limits: [
+          'Does not expose local worker internals beyond the published contract.',
+        ],
+      },
+      governance_profile: {
+        owner: 'session-runner',
+        decision_policy: 'report-normalization',
+        escalation_policy: 'task-judge',
+        change_control: {
+          requires_review: true,
+          allows_internal_heterogeneity: true,
+        },
+      },
+      checkpoint_policy: {
+        strategy: 'on_decision',
+        retention: 'rolling',
+        evidence_binding: 'required',
+        max_snapshots: 16,
+      },
+      runtime: {
+        boundary_mode: 'contract_projection',
+        tree_projection: 'contract_plus_summary',
+        internals: {
+          visibility: 'summarized',
+          heterogeneous: true,
+        },
+        rag_profile: null,
+        capsule_state: createEmptyCapsuleState({
+          node_id: nodeId,
+          runtime_status: 'prepared',
+          current_checkpoint_id: null,
+        }),
+      },
+    },
+  };
+}
+
+function workflowRunPolicySnapshot(task) {
+  return {
+    workflow_tightness: task.data.execution_mode === 'parallel' ? 'loose' : 'balanced',
+    oversight_strength: 'normal',
+    branch_budget: null,
+    notes: null,
+  };
+}
+
+function checkpointEvidenceRefsFromRun(run) {
+  const refs = [];
+  const packetPath = run.data.callback?.packet_path;
+  if (packetPath) {
+    refs.push({ kind: 'execution_packet', ref: packetPath, digest: null });
+  }
+  return refs;
+}
+
+function checkpointEvidenceRefsFromReport(normalizedReport, callback) {
+  const refs = [];
+  if (normalizedReport.report.commit_sha) {
+    refs.push({ kind: 'git_commit', ref: String(normalizedReport.report.commit_sha).trim(), digest: null });
+  }
+  for (const artifact of normalizedReport.report.outputs?.artifacts ?? []) {
+    const ref = artifact?.uri ?? artifact?.path ?? null;
+    if (typeof ref === 'string' && ref.trim()) {
+      refs.push({ kind: artifact.kind ?? 'artifact', ref: ref.trim(), digest: null });
+    }
+  }
+  if (callback?.packet_path) {
+    refs.push({ kind: 'execution_packet', ref: callback.packet_path, digest: null });
+  }
+  return refs;
+}
+
+async function appendBranchEvent(ring, fields) {
+  const id = await ring.newId('branch-event', { name: fields.event_type.replace(/_/g, ' ') });
+  const createdAt = fields.occurred_at ?? nowIso();
+  const result = await ring.create('branch-event', {
+    id,
+    status: 'recorded',
+    created_by: fields.actor ?? 'session-runner',
+    session_id: fields.session_id ?? null,
+    data: {
+      event_type: fields.event_type,
+      branch_id: fields.branch_id,
+      checkpoint_id: fields.checkpoint_id,
+      actor: fields.actor ?? 'session-runner',
+      occurred_at: createdAt,
+      details: {
+        parent_checkpoint_id: fields.parent_checkpoint_id ?? null,
+        synthesis_inputs: clone(fields.synthesis_inputs ?? []),
+        reason: fields.reason ?? null,
+      },
+    },
+  });
+  if (!result.ok) {
+    throw new Error(`Branch event creation failed: ${JSON.stringify(result.errors)}`);
+  }
+  return result.artifact;
+}
+
 export function createSessionRunner(
   repoRoot,
   ring,
@@ -360,6 +570,136 @@ export function createSessionRunner(
       signing_secret: callbackSecret(),
       key_version: Math.max(1, Number(callback.key_version ?? 1)) + 1,
       last_rotated_at: rotatedAt,
+    };
+  }
+
+  async function bindWorkflowRunNodeExecution(session, workflowRun, task, workflow, preparedAt) {
+    const existing = workflowRun.data.node_execution ?? workflowRunNodeExecution();
+    if (existing.node_id && existing.active_checkpoint_id) {
+      return {
+        workflowRun,
+        node: await ring.read('node', existing.node_id),
+        activeCheckpoint: await ring.read('checkpoint', existing.active_checkpoint_id),
+      };
+    }
+
+    const nodeId = await ring.newId('node', {
+      name: `${task.id} ${workflowRun.id} executor`,
+    });
+    const rootCheckpointId = await ring.newId('checkpoint', {
+      name: `${workflowRun.id} root`,
+    });
+    const rootCheckpoint = createCheckpoint({
+      id: rootCheckpointId,
+      created_by: 'session-runner',
+      session_id: session.id,
+      status: 'mainline',
+      branch_id: existing.branch_id ?? 'main',
+      node_id: nodeId,
+      scope_ref: { kind: 'workflow-run', id: workflowRun.id, path: null },
+      policy_snapshot: workflowRunPolicySnapshot(task),
+      execution_cursor: {
+        phase: 'prepared',
+        step_id: workflowRun.data.steps[Math.min(1, (workflowRun.data.steps ?? []).length - 1)]?.step_id ?? null,
+        ordinal: workflowRun.data.current_step_index ?? 0,
+      },
+      evidence_refs: checkpointEvidenceRefsFromRun(workflowRun),
+      adoption_status: 'mainline',
+      replay_state: {
+        status: 'idle',
+        cursor: null,
+        replayable: true,
+        last_replayed_at: null,
+      },
+      synthesis_inputs: [],
+      parent_checkpoint_id: null,
+    });
+    const nodeArtifact = workflowRunNodeArtifact(nodeId, session.id, workflowRun, task, workflow, preparedAt);
+    nodeArtifact.data.runtime.capsule_state = recordCheckpoint(
+      createEmptyCapsuleState({
+        node_id: nodeId,
+        runtime_status: 'prepared',
+        current_checkpoint_id: null,
+      }),
+      rootCheckpointId,
+      { now: preparedAt, metadata: { workflow_run_id: workflowRun.id } },
+    );
+
+    const nodeResult = await ring.create('node', {
+      id: nodeArtifact.id,
+      status: nodeArtifact.status,
+      created_by: nodeArtifact.created_by,
+      session_id: nodeArtifact.session_id,
+      data: nodeArtifact.data,
+    });
+    if (!nodeResult.ok) {
+      throw new Error(`Node creation failed for workflow run ${workflowRun.id}: ${JSON.stringify(nodeResult.errors)}`);
+    }
+
+    const checkpointResult = await ring.create('checkpoint', {
+      id: rootCheckpoint.id,
+      status: rootCheckpoint.status,
+      created_by: rootCheckpoint.created_by,
+      session_id: rootCheckpoint.session_id,
+      data: rootCheckpoint.data,
+    });
+    if (!checkpointResult.ok) {
+      throw new Error(`Checkpoint creation failed for workflow run ${workflowRun.id}: ${JSON.stringify(checkpointResult.errors)}`);
+    }
+
+    const branchEvent = await appendBranchEvent(ring, {
+      event_type: 'checkpoint_created',
+      branch_id: rootCheckpoint.data.branch_id,
+      checkpoint_id: rootCheckpoint.id,
+      actor: 'session-runner',
+      occurred_at: preparedAt,
+      session_id: session.id,
+      parent_checkpoint_id: null,
+    });
+
+    const nextRun = {
+      ...workflowRun,
+      data: {
+        ...workflowRun.data,
+        node_execution: {
+          node_id: nodeId,
+          branch_id: rootCheckpoint.data.branch_id,
+          active_checkpoint_id: rootCheckpoint.id,
+          checkpoint_ids: [rootCheckpoint.id],
+          branch_event_ids: [branchEvent.id],
+          capsule_state: clone(nodeArtifact.data.runtime.capsule_state),
+        },
+      },
+    };
+
+    return {
+      workflowRun: nextRun,
+      node: nodeResult.artifact,
+      activeCheckpoint: checkpointResult.artifact,
+      branchEvent,
+    };
+  }
+
+  async function recoverWorkflowRunNodeState(runId) {
+    const workflowRun = await ring.read('workflow-run', runId);
+    const nodeExecution = workflowRun.data.node_execution ?? null;
+    if (!nodeExecution?.node_id) {
+      return null;
+    }
+    const node = await ring.read('node', nodeExecution.node_id);
+    const checkpoints = await Promise.all((nodeExecution.checkpoint_ids ?? []).map((id) => ring.read('checkpoint', id)));
+    const activeCheckpoint = nodeExecution.active_checkpoint_id
+      ? checkpoints.find((checkpoint) => checkpoint.id === nodeExecution.active_checkpoint_id) ?? await ring.read('checkpoint', nodeExecution.active_checkpoint_id)
+      : null;
+    const branchEvents = await Promise.all((nodeExecution.branch_event_ids ?? []).map((id) => ring.read('branch-event', id)));
+    return {
+      workflow_run: workflowRun,
+      node,
+      capsule_state: clone(node.data.runtime?.capsule_state ?? nodeExecution.capsule_state ?? null),
+      active_checkpoint: activeCheckpoint,
+      checkpoints,
+      lineage: activeCheckpoint ? lineageForCheckpoint(checkpoints, activeCheckpoint.id) : [],
+      branch_events: branchEvents,
     };
   }
 
@@ -514,6 +854,11 @@ export function createSessionRunner(
         brief_ref: bundle?.canonical?.context?.brief_ref ?? null,
         bundle_id: bundle?.id ?? null,
       },
+      node: {
+        node_id: workflowRun.data.node_execution?.node_id ?? null,
+        branch_id: workflowRun.data.node_execution?.branch_id ?? 'main',
+        active_checkpoint_id: workflowRun.data.node_execution?.active_checkpoint_id ?? null,
+      },
       callbacks: {
         workflow_run_report: {
           url: callback.report_url,
@@ -605,9 +950,10 @@ export function createSessionRunner(
           ...run.data,
           callback,
           reports: clone(run.data.reports ?? []),
+          node_execution: clone(run.data.node_execution ?? workflowRunNodeExecution()),
         },
       };
-      const executionPacket = await buildExecutionPacket(
+      let executionPacket = await buildExecutionPacket(
         session,
         nextRun,
         task,
@@ -615,6 +961,16 @@ export function createSessionRunner(
         bundle,
       );
       const steps = clone(run.data.steps ?? []);
+      nextRun.data.callback.packet_path = executionPacket.packet_path;
+      const nodeBinding = await bindWorkflowRunNodeExecution(session, nextRun, task, workflow, preparedAt);
+      nextRun = nodeBinding.workflowRun;
+      executionPacket = await buildExecutionPacket(
+        session,
+        nextRun,
+        task,
+        workflow,
+        bundle,
+      );
       nextRun.data.callback.packet_path = executionPacket.packet_path;
 
       if (steps.length === 0) {
@@ -723,6 +1079,215 @@ export function createSessionRunner(
     return writeSession(nextSession, 'executing');
   }
 
+  async function persistNodeCapsuleState(node, capsuleState) {
+    const result = await ring.update('node', node.id, {
+      data: {
+        runtime: {
+          ...node.data.runtime,
+          capsule_state: clone(capsuleState),
+        },
+      },
+    });
+    if (!result.ok) {
+      throw new Error(`Node update failed for ${node.id}: ${JSON.stringify(result.errors)}`);
+    }
+    return result.artifact;
+  }
+
+  async function advanceWorkflowRunNodeExecution(run, session, normalizedReport, worker, callback, reportedAt) {
+    const nodeExecution = run.data.node_execution ?? workflowRunNodeExecution();
+    if (!nodeExecution.node_id || !nodeExecution.active_checkpoint_id) {
+      return { workflowRun: run, node: null, activeCheckpoint: null };
+    }
+
+    const node = await ring.read('node', nodeExecution.node_id);
+    const activeCheckpoint = await ring.read('checkpoint', nodeExecution.active_checkpoint_id);
+    let capsuleState = clone(node.data.runtime?.capsule_state ?? nodeExecution.capsule_state ?? createEmptyCapsuleState({
+      node_id: node.id,
+      runtime_status: 'prepared',
+      current_checkpoint_id: activeCheckpoint.id,
+    }));
+
+    if (worker?.id) {
+      if (!capsuleState.lease?.holder) {
+        capsuleState = acquireLease(capsuleState, worker.id, { now: reportedAt, runtime_status: 'leased' });
+      } else if (capsuleState.lease.holder === worker.id) {
+        if (!leaseExpired(capsuleState, { now: reportedAt })) {
+          capsuleState = renewLease(capsuleState, worker.id, { now: reportedAt, runtime_status: capsuleState.runtime_status });
+        } else {
+          capsuleState = expireLease(capsuleState, { now: reportedAt, reason: 'expired_before_renew' });
+          capsuleState = acquireLease(capsuleState, worker.id, { now: reportedAt, runtime_status: 'leased' });
+        }
+      } else if (leaseExpired(capsuleState, { now: reportedAt })) {
+        capsuleState = expireLease(capsuleState, { now: reportedAt, reason: 'worker_takeover' });
+        capsuleState = acquireLease(capsuleState, worker.id, { now: reportedAt, runtime_status: 'leased' });
+      } else {
+        throw new WorkflowRunReportError(
+          `Workflow run ${run.id} is currently leased to worker "${capsuleState.lease.holder}".`,
+          409,
+        );
+      }
+    }
+
+    capsuleState = recordHeartbeat(capsuleState, {
+      now: reportedAt,
+      runtime_status:
+        normalizedReport.report.status === 'progress'
+          ? 'running'
+          : normalizedReport.report.status === 'completed'
+            ? 'completed'
+            : 'failed',
+      detail: {
+        worker_id: worker?.id ?? null,
+        status: normalizedReport.report.status,
+        step_id: normalizedReport.report.step_id ?? null,
+      },
+    });
+
+    const evidenceRefs = checkpointEvidenceRefsFromReport(normalizedReport, callback);
+    if (evidenceRefs.length > 0) {
+      capsuleState = attachEvidence(capsuleState, evidenceRefs, {
+        now: reportedAt,
+        checkpoint_id: activeCheckpoint.id,
+      });
+    }
+
+    const nextCheckpoint = continueFromCheckpoint(activeCheckpoint, {
+      id: await ring.newId('checkpoint', {
+        name: `${run.id} ${normalizedReport.report.status} ${normalizedReport.report.step_id ?? 'step'}`,
+      }),
+      created_by: worker?.id ?? 'session-runner',
+      session_id: session.id,
+      status:
+        normalizedReport.report.status === 'completed'
+          ? 'mainline'
+          : normalizedReport.report.status === 'failed'
+            ? 'candidate'
+            : activeCheckpoint.status,
+      branch_id: nodeExecution.branch_id,
+      node_id: node.id,
+      scope_ref: { kind: 'workflow-run', id: run.id, path: callback.packet_path ?? null },
+      policy_snapshot: activeCheckpoint.data.policy_snapshot,
+      execution_cursor: {
+        phase:
+          normalizedReport.report.status === 'progress'
+            ? 'running'
+            : normalizedReport.report.status === 'completed'
+              ? 'completed'
+              : 'failed',
+        step_id: normalizedReport.report.step_id ?? null,
+        ordinal: run.data.current_step_index ?? 0,
+      },
+      evidence_refs: capsuleState.last_accepted_evidence_refs,
+      adoption_status:
+        normalizedReport.report.status === 'completed' ? 'mainline' : activeCheckpoint.data.adoption_status,
+      replay_state: capsuleState.replay,
+      synthesis_inputs: [],
+    });
+
+    let recoveryEvent = null;
+    if (normalizedReport.report.status === 'failed') {
+      capsuleState = requestReplay(capsuleState, {
+        now: reportedAt,
+        requested_by: 'session-runner',
+        reason: normalizedReport.report.note ?? 'workflow execution failed',
+        source_checkpoint_id: activeCheckpoint.id,
+        target_checkpoint_id: nextCheckpoint.id,
+        cursor: {
+          workflow_run_id: run.id,
+          step_id: normalizedReport.report.step_id ?? null,
+        },
+        runtime_status: 'recovering',
+      });
+      nextCheckpoint.data.replay_state = capsuleState.replay;
+    } else if (capsuleState.replay?.status === 'requested') {
+      capsuleState = completeReplay(capsuleState, {
+        now: reportedAt,
+        checkpoint_id: nextCheckpoint.id,
+        runtime_status:
+          normalizedReport.report.status === 'progress' ? 'running' : 'completed',
+        evidence_refs: evidenceRefs,
+      });
+      nextCheckpoint.data.replay_state = capsuleState.replay;
+      recoveryEvent = await appendBranchEvent(ring, {
+        event_type: 'recovery_completed',
+        branch_id: nodeExecution.branch_id,
+        checkpoint_id: nextCheckpoint.id,
+        actor: worker?.id ?? 'session-runner',
+        occurred_at: reportedAt,
+        session_id: session.id,
+        parent_checkpoint_id: activeCheckpoint.id,
+      });
+    }
+
+    const checkpointResult = await ring.create('checkpoint', {
+      id: nextCheckpoint.id,
+      status: nextCheckpoint.status,
+      created_by: nextCheckpoint.created_by,
+      session_id: nextCheckpoint.session_id,
+      data: nextCheckpoint.data,
+    });
+    if (!checkpointResult.ok) {
+      throw new Error(`Checkpoint continuation failed for workflow run ${run.id}: ${JSON.stringify(checkpointResult.errors)}`);
+    }
+
+    const continuedEvent = await appendBranchEvent(ring, {
+      event_type: 'checkpoint_continued',
+      branch_id: nodeExecution.branch_id,
+      checkpoint_id: nextCheckpoint.id,
+      actor: worker?.id ?? 'session-runner',
+      occurred_at: reportedAt,
+      session_id: session.id,
+      parent_checkpoint_id: activeCheckpoint.id,
+      reason: normalizedReport.report.status,
+    });
+
+    if (normalizedReport.report.status === 'failed') {
+      recoveryEvent = await appendBranchEvent(ring, {
+        event_type: 'recovery_triggered',
+        branch_id: nodeExecution.branch_id,
+        checkpoint_id: nextCheckpoint.id,
+        actor: 'session-runner',
+        occurred_at: reportedAt,
+        session_id: session.id,
+        parent_checkpoint_id: activeCheckpoint.id,
+        reason: normalizedReport.report.note ?? 'workflow execution failed',
+      });
+    }
+
+    const updatedNode = await persistNodeCapsuleState(node, recordCheckpoint(capsuleState, nextCheckpoint.id, {
+      now: reportedAt,
+      metadata: {
+        workflow_run_id: run.id,
+        report_status: normalizedReport.report.status,
+      },
+    }));
+
+    const nextRun = {
+      ...run,
+      data: {
+        ...run.data,
+        node_execution: {
+          ...nodeExecution,
+          active_checkpoint_id: nextCheckpoint.id,
+          checkpoint_ids: [...nodeExecution.checkpoint_ids, nextCheckpoint.id],
+          branch_event_ids: [
+            ...nodeExecution.branch_event_ids,
+            continuedEvent.id,
+            ...(recoveryEvent ? [recoveryEvent.id] : []),
+          ],
+          capsule_state: clone(updatedNode.data.runtime.capsule_state),
+        },
+      },
+    };
+
+    return {
+      workflowRun: nextRun,
+      node: updatedNode,
+      activeCheckpoint: checkpointResult.artifact,
+    };
+  }
+
   async function processWorkflowTimeouts(session, bundleIndex = null) {
     if (session.status !== 'executing') {
       return session;
@@ -829,11 +1394,32 @@ export function createSessionRunner(
         judge_agent_id: null,
         note: detail,
       });
+      const nodeAdvance = await advanceWorkflowRunNodeExecution(
+        run,
+        session,
+        {
+          protocol: RING_REPORT_PROTOCOL,
+          report: {
+            status: 'failed',
+            step_id: steps[stepIndex]?.step_id ?? null,
+            actor: 'session-runner',
+            worker_id: null,
+            note: detail,
+            commit_sha: null,
+            outputs: {},
+            judge_agent_id: null,
+          },
+        },
+        null,
+        callback,
+        now,
+      );
+      const advancedRun = nodeAdvance.workflowRun;
       const failedRun = appendRunReport(
         {
-          ...run,
+          ...advancedRun,
           data: {
-            ...run.data,
+            ...advancedRun.data,
             callback: {
               ...callback,
               status: 'timed_out',
@@ -1030,7 +1616,7 @@ export function createSessionRunner(
       outputs.commit_sha = String(normalized.report.commit_sha).trim();
     }
 
-    let nextRun = clone(run);
+    let nextRun;
     let nextSession = clone(session);
     const callback = {
       ...emptyCallbackState(normalizeRunnerConfig(await orchestrator.getConfig())),
@@ -1062,6 +1648,16 @@ export function createSessionRunner(
           ? normalized.report.outputs
           : null,
     };
+
+    const nodeAdvance = await advanceWorkflowRunNodeExecution(
+      run,
+      session,
+      normalized,
+      worker,
+      callback,
+      reportedAt,
+    );
+    nextRun = clone(nodeAdvance.workflowRun);
 
     if (status === 'progress') {
       steps[stepIndex] = {
@@ -1254,6 +1850,7 @@ export function createSessionRunner(
   return {
     tick,
     reportWorkflowRun,
+    recoverWorkflowRunNodeState,
     runnerDir,
   };
 }

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { createEmptyCapsuleState } from './node-capsule.mjs';
 
 const DEFAULT_CONFIG = {
   schema_version: 4,
@@ -982,6 +983,21 @@ function emptyWorkflowRunCallback() {
     last_worker_id: null,
     last_protocol: null,
     last_error: null,
+  };
+}
+
+function emptyWorkflowRunNodeExecution() {
+  return {
+    node_id: null,
+    branch_id: 'main',
+    active_checkpoint_id: null,
+    checkpoint_ids: [],
+    branch_event_ids: [],
+    capsule_state: createEmptyCapsuleState({
+      node_id: null,
+      runtime_status: 'idle',
+      current_checkpoint_id: null,
+    }),
   };
 }
 
@@ -4869,6 +4885,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             current_step_index: 0,
             callback: emptyWorkflowRunCallback(),
             reports: [],
+            node_execution: emptyWorkflowRunNodeExecution(),
             steps: workflow.data.steps.map((step) => ({
               step_id: step.id,
               status: 'pending',
@@ -5082,6 +5099,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             current_step_index: 0,
             callback: emptyWorkflowRunCallback(),
             reports: [],
+            node_execution: emptyWorkflowRunNodeExecution(),
             steps: workflow.data.steps.map((step) => ({
               step_id: step.id,
               status: 'pending',

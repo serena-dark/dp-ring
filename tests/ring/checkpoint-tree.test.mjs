@@ -101,7 +101,7 @@ describe('checkpoint tree groundwork', async () => {
     const discarded = discardBranch(forked);
     assert.equal(discarded.status, 'discarded');
     assert.equal(discarded.data.adoption_status, 'discarded');
-    assert.equal(discarded.data.replay_state.replayable, false);
+    assert.equal(discarded.data.replay_state.status, 'idle');
   });
 
   it('creates synthesized checkpoints from multiple inputs', () => {

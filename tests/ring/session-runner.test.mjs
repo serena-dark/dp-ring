@@ -154,6 +154,23 @@ describe('session runner', async () => {
     assert.equal(workflowRun.data.callback.status, 'active');
     assert.ok(workflowRun.data.callback.token);
     assert.ok(workflowRun.data.callback.signing_secret);
+    assert.ok(workflowRun.data.node_execution.node_id);
+    assert.ok(workflowRun.data.node_execution.active_checkpoint_id);
+    assert.equal(workflowRun.data.node_execution.branch_id, 'main');
+    assert.equal(workflowRun.data.node_execution.checkpoint_ids.length, 1);
+    assert.equal(workflowRun.data.node_execution.branch_event_ids.length, 1);
+
+    const node = await ring.read('node', workflowRun.data.node_execution.node_id);
+    assert.equal(node.type, 'node');
+    assert.equal(node.data.runtime.capsule_state.current_checkpoint_id, workflowRun.data.node_execution.active_checkpoint_id);
+
+    const checkpoint = await ring.read('checkpoint', workflowRun.data.node_execution.active_checkpoint_id);
+    assert.equal(checkpoint.type, 'checkpoint');
+    assert.equal(checkpoint.status, 'mainline');
+    assert.equal(checkpoint.data.scope_ref.kind, 'workflow-run');
+
+    const branchEvent = await ring.read('branch-event', workflowRun.data.node_execution.branch_event_ids[0]);
+    assert.equal(branchEvent.data.event_type, 'checkpoint_created');
 
     const packetPath = join(tempDir, workflowRun.data.steps[0].outputs.execution_packet_path);
     const packet = JSON.parse(await readFile(packetPath, 'utf-8'));
@@ -161,6 +178,8 @@ describe('session runner', async () => {
     assert.equal(packet.workflow_run_id, workflowRun.id);
     assert.equal(packet.materials.length, 1);
     assert.ok(packet.materials[0].resolved_path);
+    assert.equal(packet.node.node_id, workflowRun.data.node_execution.node_id);
+    assert.equal(packet.node.active_checkpoint_id, workflowRun.data.node_execution.active_checkpoint_id);
     assert.equal(packet.callbacks.workflow_run_report.auth.type, 'bearer');
     assert.equal(packet.callbacks.workflow_run_report.auth.token, workflowRun.data.callback.token);
     assert.equal(packet.callbacks.workflow_run_report.signing.secret, workflowRun.data.callback.signing_secret);
@@ -267,6 +286,84 @@ describe('session runner', async () => {
     await ring.sessionRunner.tick();
     const closedSession = await ring.read('session', sessionId);
     assert.equal(closedSession.status, 'closed');
+
+    const recovered = await ring.sessionRunner.recoverWorkflowRunNodeState(runId);
+    assert.ok(recovered);
+    assert.equal(recovered.node.id, workflowRun.data.node_execution.node_id);
+    assert.equal(recovered.active_checkpoint.id, recovered.workflow_run.data.node_execution.active_checkpoint_id);
+    assert.ok(recovered.lineage.length >= 2);
+    assert.equal(recovered.capsule_state.current_checkpoint_id, recovered.active_checkpoint.id);
+  });
+
+  it('requests semantic replay from node capsule lineage when a workflow run times out', async () => {
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-timeout',
+      payload: {
+        goal: {
+          title: 'Workflow Run Timeout Recovery',
+          description: 'Timeouts should trigger semantic replay state in the node capsule.',
+          acceptance_criteria: ['Replay is requested from checkpoint lineage'],
+        },
+        environment: {
+          project_id: 'runner-timeout-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['README.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-timeout-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-timeout',
+            required: true,
+            inline_data: '{"stage":"timeout"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const runId = session.data.workflow_run_ids[0];
+    const workflowRun = await ring.read('workflow-run', runId);
+
+    const expired = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...workflowRun.data.callback,
+          retry_count: workflowRun.data.callback.max_retries,
+          timeout_at: '2000-01-01T00:00:00Z',
+        },
+      },
+    });
+    assert.equal(expired.ok, true, JSON.stringify(expired.errors));
+
+    await ring.sessionRunner.tick();
+    const failedRun = await ring.read('workflow-run', runId);
+    assert.equal(failedRun.status, 'failed');
+    assert.ok(failedRun.data.node_execution.checkpoint_ids.length >= 2);
+    assert.ok(failedRun.data.node_execution.branch_event_ids.length >= 3);
+
+    const recovered = await ring.sessionRunner.recoverWorkflowRunNodeState(runId);
+    assert.ok(recovered);
+    assert.equal(recovered.capsule_state.replay.status, 'requested');
+    assert.equal(recovered.active_checkpoint.id, failedRun.data.node_execution.active_checkpoint_id);
+    assert.ok(recovered.lineage.length >= 2);
+    assert.ok(recovered.branch_events.some((item) => item.data.event_type === 'recovery_triggered'));
   });
 
   it('accepts A2A-style workflow-run envelopes from registered workers', async () => {

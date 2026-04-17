@@ -26,9 +26,20 @@ function executionCursor(value = {}) {
 function replayState(value = {}) {
   return {
     status: value.status ?? 'idle',
+    requested_at: value.requested_at ?? null,
+    completed_at: value.completed_at ?? null,
+    requested_by: value.requested_by ?? null,
+    reason: value.reason ?? null,
+    source_checkpoint_id: value.source_checkpoint_id ?? null,
+    target_checkpoint_id: value.target_checkpoint_id ?? null,
     cursor: value.cursor ?? null,
-    replayable: value.replayable ?? true,
-    last_replayed_at: value.last_replayed_at ?? null,
+    journal_state: {
+      mode: value.journal_state?.mode ?? 'semantic',
+      last_applied_entry_id: value.journal_state?.last_applied_entry_id ?? null,
+      pending_entry_ids: Array.isArray(value.journal_state?.pending_entry_ids)
+        ? [...value.journal_state.pending_entry_ids]
+        : [],
+    },
   };
 }
 
@@ -141,7 +152,7 @@ export function discardBranch(checkpoint, fields = {}) {
       adoption_status: 'discarded',
       replay_state: replayState({
         ...checkpoint.data.replay_state,
-        replayable: fields.replayable ?? false,
+        status: fields.replay_status ?? checkpoint.data.replay_state?.status ?? 'idle',
       }),
     },
   };
