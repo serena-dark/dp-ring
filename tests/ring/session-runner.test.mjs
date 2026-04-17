@@ -366,6 +366,111 @@ describe('session runner', async () => {
     assert.ok(recovered.branch_events.some((item) => item.data.event_type === 'recovery_triggered'));
   });
 
+  it('skips blind callback retry once checkpoint lineage has advanced beyond the root checkpoint', async () => {
+    await ring.orchestrator.updateConfig({
+      session_runner: {
+        report_timeout_ms: 10,
+        max_report_retries: 3,
+        retry_backoff_ms: 10,
+        signature_ttl_ms: 300_000,
+      },
+    });
+
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-lineage-timeout',
+      payload: {
+        goal: {
+          title: 'Workflow Run Timeout With Lineage',
+          description: 'Once a workflow-run has semantic checkpoint lineage, timeout handling should stop doing blind callback retries.',
+          acceptance_criteria: ['Warm workflow-run timeout skips blind retry'],
+        },
+        environment: {
+          project_id: 'runner-lineage-timeout-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['README.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-lineage-timeout-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-lineage-timeout',
+            required: true,
+            inline_data: '{"stage":"lineage-timeout"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const taskId = session.data.task_ids[0];
+    const runId = session.data.workflow_run_ids[0];
+    const preparedRun = await ring.read('workflow-run', runId);
+    const progressPayload = {
+      status: 'progress',
+      actor: 'worker-agent',
+      note: 'First semantic checkpoint recorded before timeout.',
+    };
+
+    const progressReport = await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      progressPayload,
+      signedHeaders(preparedRun, progressPayload, {
+        workerId: 'worker-agent',
+        includeKeyVersion: true,
+      }),
+    );
+    assert.equal(progressReport.workflow_run.status, 'running');
+
+    const progressedRun = await ring.read('workflow-run', runId);
+    assert.ok(progressedRun.data.node_execution.checkpoint_ids.length >= 2);
+    assert.equal(progressedRun.data.callback.retry_count, 0);
+
+    const expired = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...progressedRun.data.callback,
+          timeout_at: '2000-01-01T00:00:00Z',
+        },
+      },
+    });
+    assert.equal(expired.ok, true, JSON.stringify(expired.errors));
+
+    await ring.sessionRunner.tick();
+
+    const failedRun = await ring.read('workflow-run', runId);
+    const failedTask = await ring.read('task', taskId);
+    const failedSession = await ring.read('session', sessionId);
+    assert.equal(failedRun.status, 'failed');
+    assert.equal(failedRun.data.callback.status, 'timed_out');
+    assert.equal(failedRun.data.callback.retry_count, 0);
+    assert.match(failedRun.data.callback.last_error, /skipping blind callback retry/);
+    assert.equal(failedTask.status, 'failed');
+    assert.equal(failedTask.data.replanning.status, 'awaiting_replan');
+    assert.equal(failedSession.status, 'failed');
+
+    const recovered = await ring.sessionRunner.recoverWorkflowRunNodeState(runId);
+    assert.ok(recovered);
+    assert.equal(recovered.capsule_state.replay.status, 'requested');
+    assert.ok(recovered.lineage.length >= 3);
+    assert.ok(recovered.branch_events.some((item) => item.data.event_type === 'recovery_triggered'));
+  });
+
   it('accepts A2A-style workflow-run envelopes from registered workers', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',

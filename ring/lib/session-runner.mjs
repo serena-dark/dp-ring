@@ -438,6 +438,11 @@ function workflowRunPolicySnapshot(task) {
   };
 }
 
+function hasSemanticTimeoutLineage(run) {
+  const nodeExecution = run.data.node_execution ?? workflowRunNodeExecution();
+  return (nodeExecution.checkpoint_ids?.length ?? 0) > 1;
+}
+
 function checkpointEvidenceRefsFromRun(run) {
   const refs = [];
   const packetPath = run.data.callback?.packet_path;
@@ -1315,12 +1320,15 @@ export function createSessionRunner(
 
       const stepIndex = Math.min(run.data.current_step_index ?? 0, (run.data.steps ?? []).length - 1);
       const steps = clone(run.data.steps ?? []);
-      const detail =
-        callback.retry_count < callback.max_retries
-          ? `No signed callback report arrived before ${callback.timeout_at}; scheduling retry ${callback.retry_count + 1}/${callback.max_retries}.`
+      const hasLineage = hasSemanticTimeoutLineage(run);
+      const canBlindRetry = callback.retry_count < callback.max_retries && !hasLineage;
+      const detail = canBlindRetry
+        ? `No signed callback report arrived before ${callback.timeout_at}; scheduling retry ${callback.retry_count + 1}/${callback.max_retries}.`
+        : hasLineage
+          ? `No signed callback report arrived before ${callback.timeout_at}; node checkpoint lineage already exists, so the runner is skipping blind callback retry and routing the task into semantic replay.`
           : `No signed callback report arrived before ${callback.timeout_at}; retry budget exhausted.`;
 
-      if (callback.retry_count < callback.max_retries) {
+      if (canBlindRetry) {
         let nextRun = {
           ...run,
           data: {
