@@ -500,6 +500,29 @@ async function semanticCheckpointDispatchGovernanceContext(ring, task) {
   };
 }
 
+async function semanticCheckpointTimeoutTerminalContext(ring, task, run) {
+  const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
+  const activeCheckpointId = trimString(run?.data?.node_execution?.active_checkpoint_id);
+  if (!parentTaskId || !activeCheckpointId) {
+    return {
+      parentTaskId,
+      activeCheckpointId,
+      branchBudget: null,
+      terminalOnTimeout: false,
+    };
+  }
+
+  const activeCheckpoint = await ring.read('checkpoint', activeCheckpointId).catch(() => null);
+  const branchBudget = activeCheckpoint?.data?.policy_snapshot?.branch_budget ?? null;
+
+  return {
+    parentTaskId,
+    activeCheckpointId,
+    branchBudget,
+    terminalOnTimeout: branchBudget === 0,
+  };
+}
+
 function applyGovernanceDispatchPolicy(callback, workers, automationConfig = {}, governance = null) {
   if (!governance?.tightenedDispatch) {
     return callback;
@@ -1526,6 +1549,16 @@ export function createSessionRunner(
         judge_agent_id: null,
         note: detail,
       });
+      const timeoutGovernance = await semanticCheckpointTimeoutTerminalContext(ring, failedTask, run);
+      const finalTask = timeoutGovernance.terminalOnTimeout
+        ? await taskExecution.replan(failedTask.id, {
+            verdict: 'terminal',
+            replanner_agent_id: 'session-runner',
+            note:
+              `Workflow run ${run.id} timed out under a checkpoint policy with branch_budget=${timeoutGovernance.branchBudget} `
+              + `at ${timeoutGovernance.activeCheckpointId}, so no further redispatch will be scheduled after the warm-lineage governed retry.`,
+          })
+        : failedTask;
       const nodeAdvance = await advanceWorkflowRunNodeExecution(
         run,
         session,
@@ -1586,7 +1619,8 @@ export function createSessionRunner(
           protocol: null,
           authenticated: true,
           outputs: {
-            replanning_status: failedTask.data.replanning?.status ?? null,
+            replanning_status: finalTask.data.replanning?.status ?? null,
+            branch_budget: timeoutGovernance.branchBudget,
           },
         },
       );
@@ -1595,7 +1629,9 @@ export function createSessionRunner(
         timestamp: now,
         event: 'workflow_run_timeout',
         actor: 'session-runner',
-        detail: `Workflow run ${run.id} timed out and task ${failedTask.id} was routed into replanning.`,
+        detail: timeoutGovernance.terminalOnTimeout
+          ? `Workflow run ${run.id} timed out after a warm-lineage governed redispatch and task ${finalTask.id} was marked terminal because checkpoint policy exhausted the branch budget.`
+          : `Workflow run ${run.id} timed out and task ${finalTask.id} was routed into replanning.`,
       });
       changed = true;
     }

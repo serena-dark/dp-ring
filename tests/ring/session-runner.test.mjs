@@ -736,6 +736,147 @@ describe('session runner', async () => {
     assert.equal(closedSession.status, 'closed');
   });
 
+  it('marks a governed warm-lineage redispatch terminal when branch budget is already exhausted', async () => {
+    await ring.orchestrator.updateConfig({
+      automation: {
+        enabled: false,
+      },
+      session_runner: {
+        report_timeout_ms: 10,
+        max_report_retries: 3,
+        retry_backoff_ms: 10,
+        signature_ttl_ms: 300_000,
+      },
+    });
+
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-lineage-terminal-redispatch',
+      payload: {
+        goal: {
+          title: 'Governed Warm-Lineage Terminal Redispatch',
+          description: 'A tighter redispatch that already consumed warm checkpoint lineage should not reopen another replanning loop after timeout.',
+          acceptance_criteria: ['Timeout after governed redispatch becomes terminal instead of redispatchable'],
+        },
+        environment: {
+          project_id: 'runner-lineage-terminal-redispatch',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['README.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-lineage-terminal-redispatch-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-lineage-terminal-redispatch',
+            required: true,
+            inline_data: '{"stage":"terminal-redispatch"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const originalSession = await ring.read('session', launched.batching.session_id);
+    const originalTaskId = originalSession.data.task_ids[0];
+    const originalRunId = originalSession.data.workflow_run_ids[0];
+    const preparedRun = await ring.read('workflow-run', originalRunId);
+    const progressPayload = {
+      status: 'progress',
+      actor: 'worker-agent',
+      note: 'Warm semantic checkpoint lineage established before timeout.',
+    };
+
+    await ring.sessionRunner.reportWorkflowRun(
+      originalRunId,
+      progressPayload,
+      signedHeaders(preparedRun, progressPayload, {
+        workerId: 'worker-agent',
+        includeKeyVersion: true,
+      }),
+    );
+
+    const progressedRun = await ring.read('workflow-run', originalRunId);
+    const expiredOriginal = await ring.update('workflow-run', originalRunId, {
+      data: {
+        callback: {
+          ...progressedRun.data.callback,
+          timeout_at: '2000-01-01T00:00:00Z',
+        },
+      },
+    });
+    assert.equal(expiredOriginal.ok, true, JSON.stringify(expiredOriginal.errors));
+
+    await ring.sessionRunner.tick();
+
+    const failedTask = await ring.read('task', originalTaskId);
+    const replannedTask = await ring.taskExecution.replan(originalTaskId, {
+      verdict: 'redispatch',
+      replanner_agent_id: 'task-replanner',
+      note: 'Explicitly reuse the existing workflow template under tighter governance.',
+      task: {
+        workflow_template_id: failedTask.data.workflow_template_id,
+      },
+    });
+    const successorTaskId = replannedTask.data.replanning.successor_task_id;
+    const successorTask = await ring.read('task', successorTaskId);
+    const workflow = await ring.read('workflow', successorTask.data.workflow_template_id);
+    const { sessionId, runId } = await createRedispatchSession(ring, successorTask, workflow);
+
+    await ring.sessionRunner.tick();
+
+    const governedRun = await ring.read('workflow-run', runId);
+    assert.equal(governedRun.data.callback.max_retries, 0);
+    const rootCheckpoint = await ring.read('checkpoint', governedRun.data.node_execution.active_checkpoint_id);
+    assert.equal(rootCheckpoint.data.policy_snapshot.branch_budget, 0);
+
+    const expiredGoverned = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...governedRun.data.callback,
+          timeout_at: '2000-01-01T00:00:00Z',
+        },
+      },
+    });
+    assert.equal(expiredGoverned.ok, true, JSON.stringify(expiredGoverned.errors));
+
+    await ring.sessionRunner.tick();
+
+    const failedGovernedTask = await ring.read('task', successorTaskId);
+    const failedGovernedRun = await ring.read('workflow-run', runId);
+    const failedGovernedSession = await ring.read('session', sessionId);
+    assert.equal(failedGovernedRun.status, 'failed');
+    assert.equal(failedGovernedRun.data.callback.status, 'timed_out');
+    assert.equal(failedGovernedRun.data.callback.retry_count, 0);
+    assert.equal(failedGovernedTask.status, 'failed');
+    assert.equal(failedGovernedTask.data.replanning.status, 'terminal');
+    assert.equal(failedGovernedTask.data.replanning.successor_task_id, null);
+    assert.match(failedGovernedTask.data.replanning.decision_note ?? '', /branch_budget=0/i);
+    assert.match(failedGovernedTask.data.replanning.decision_note ?? '', /no further redispatch/i);
+    assert.equal(failedGovernedSession.status, 'failed');
+    assert.ok(
+      failedGovernedSession.data.execution_log.some((entry) =>
+        /marked terminal because checkpoint policy exhausted the branch budget/i.test(entry.detail ?? '')
+      ),
+    );
+    const timeoutReport = failedGovernedRun.data.reports.at(-1);
+    assert.equal(timeoutReport.status, 'timed_out');
+    assert.equal(timeoutReport.outputs.replanning_status, 'terminal');
+    assert.equal(timeoutReport.outputs.branch_budget, 0);
+  });
+
   it('accepts A2A-style workflow-run envelopes from registered workers', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
