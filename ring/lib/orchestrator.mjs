@@ -247,6 +247,41 @@ function normalizeStringList(value) {
     .filter(Boolean);
 }
 
+function trimString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function workflowRunRecencyValue(run) {
+  const parsed = Date.parse(run?.updated_at ?? run?.created_at ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function latestWorkflowRunsByTemplate(workflowRuns) {
+  const latestByTemplate = new Map();
+  for (const run of workflowRuns) {
+    const workflowTemplateId = trimString(run?.data?.workflow_template_id);
+    if (!workflowTemplateId) {
+      continue;
+    }
+    const current = latestByTemplate.get(workflowTemplateId);
+    if (!current || workflowRunRecencyValue(run) >= workflowRunRecencyValue(current)) {
+      latestByTemplate.set(workflowTemplateId, run);
+    }
+  }
+  return latestByTemplate;
+}
+
+function runRequiresExplicitWorkflowReuse(run) {
+  if (!run || run.status !== 'failed') {
+    return false;
+  }
+  const checkpointCount = run.data?.node_execution?.checkpoint_ids?.length ?? 0;
+  const replayStatus = trimString(run.data?.node_execution?.capsule_state?.replay?.status) || 'idle';
+  const sawProgressReport = Array.isArray(run.data?.reports)
+    && run.data.reports.some((report) => report?.status === 'progress');
+  return sawProgressReport && checkpointCount > 2 && replayStatus === 'requested';
+}
+
 function normalizeAcceptanceCriteria(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -1428,6 +1463,10 @@ ${milestoneSections}`;
 
 function summarizeWorkflowRecommendation(recommendation) {
   if (!recommendation?.recommended) {
+    const blocked = recommendation?.governance_blocked_candidates ?? [];
+    if (blocked.length > 0) {
+      return `Automatic reuse is withheld because ${blocked.map((item) => item.id).join(', ')} already have warm semantic checkpoint lineage that requires an explicit governance decision before reuse.`;
+    }
     return 'No ranked workflow recommendation yet.';
   }
 
@@ -1452,6 +1491,11 @@ function buildWorkflowPreparationPacket(
                 .map((item) => `${item.id} (${item.name})`)
                 .join(', ')
             : 'none';
+          const blockedCandidates = recommendation?.governance_blocked_candidates?.length
+            ? recommendation.governance_blocked_candidates
+                .map((item) => `${item.id} (${item.name})`)
+                .join(', ')
+            : 'none';
           return [
             `- ${task.id}: ${task.data.name}`,
             `  task_type: ${task.data.task_type}`,
@@ -1459,6 +1503,7 @@ function buildWorkflowPreparationPacket(
             `  task_document: docs/tasks/${task.id}/${task.id}.md`,
             `  preferred_reuse: ${summarizeWorkflowRecommendation(recommendation)}`,
             `  reusable_candidates: ${candidates}`,
+            `  governance_blocked_reuse: ${blockedCandidates}`,
           ].join('\n');
         })
         .join('\n')
@@ -1492,6 +1537,7 @@ function buildWorkflowPreparationPacket(
       'Rules:',
       '- One task maps to one workflow.',
       '- Prefer previous templates ranked for the task type.',
+      '- If a reusable workflow is omitted as governance-blocked, do not silently reinstate it; only explicit governance should reuse warm-lineage templates.',
       '- Use the task document and ready prerequisites as the planning context.',
       '- When finished, report completion back to the orchestrator.',
     ].join('\n'),
@@ -1516,6 +1562,7 @@ function buildWorkflowPreparationScaffold(
     ? tasks.map((task) => {
         const recommendation = recommendationsByTaskId.get(task.id);
         const preferred = recommendation?.recommended?.workflow ?? null;
+        const blockedCandidates = recommendation?.governance_blocked_candidates ?? [];
         const action = preferred ? 'reuse' : 'create';
         const headerLines = [
           `## Task ${task.id}: ${task.data.name}`,
@@ -1534,11 +1581,22 @@ function buildWorkflowPreparationScaffold(
               ? `Other candidates: ${recommendation.candidates.map((item) => item.id).join(', ')}`
               : 'Other candidates: none',
           );
+          headerLines.push(
+            blockedCandidates.length
+              ? `Governance-blocked reuse: ${blockedCandidates.map((item) => item.id).join(', ')}`
+              : 'Governance-blocked reuse: none',
+          );
           return headerLines.join('\n');
         }
 
         headerLines.push(`Workflow Name: ${task.data.name} Delivery Flow`);
         headerLines.push('');
+        if (blockedCandidates.length > 0) {
+          headerLines.push(
+            `Governance note: ${blockedCandidates.map((item) => item.id).join(', ')} already have warm semantic checkpoint lineage, so automatic reuse is intentionally disabled until an explicit workflow governance decision says otherwise.`,
+          );
+          headerLines.push('');
+        }
         headerLines.push('### Workflow Description');
         headerLines.push('');
         headerLines.push(
@@ -4438,11 +4496,18 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     const activeWorkflows = (await ring.list('workflow')).filter(
       (workflow) => workflow.status === 'active',
     );
+    const latestWorkflowRuns = latestWorkflowRunsByTemplate(await ring.list('workflow-run'));
     const recommendations = new Map();
 
     for (const task of tasks) {
       const candidates = activeWorkflows.filter((workflow) =>
         workflow.data.applicable_to.includes(task.data.task_type),
+      );
+      const governanceBlockedCandidates = candidates.filter((workflow) =>
+        runRequiresExplicitWorkflowReuse(latestWorkflowRuns.get(workflow.id)),
+      );
+      const reusableCandidates = candidates.filter(
+        (workflow) => !runRequiresExplicitWorkflowReuse(latestWorkflowRuns.get(workflow.id)),
       );
 
       let registryPick = null;
@@ -4453,9 +4518,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       }
 
       const rankedWorkflow = registryPick?.workflow_id
-        ? candidates.find((workflow) => workflow.id === registryPick.workflow_id) ?? null
+        ? reusableCandidates.find((workflow) => workflow.id === registryPick.workflow_id) ?? null
         : null;
-      const recommendedWorkflow = rankedWorkflow ?? candidates[0] ?? null;
+      const recommendedWorkflow = rankedWorkflow ?? reusableCandidates[0] ?? null;
 
       recommendations.set(task.id, {
         recommended: recommendedWorkflow
@@ -4465,7 +4530,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
               mode: rankedWorkflow ? registryPick?.mode ?? null : null,
             }
           : null,
-        candidates: candidates.map((workflow) => ({
+        candidates: reusableCandidates.map((workflow) => ({
+          id: workflow.id,
+          name: workflow.data.name,
+        })),
+        governance_blocked_candidates: governanceBlockedCandidates.map((workflow) => ({
           id: workflow.id,
           name: workflow.data.name,
         })),
