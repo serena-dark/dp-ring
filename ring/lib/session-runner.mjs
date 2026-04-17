@@ -444,10 +444,13 @@ function workflowRunNodeArtifact(nodeId, sessionId, run, task, workflow, now) {
 function workflowRunPolicySnapshot(task, governance = null) {
   if (governance?.tightenedDispatch) {
     return {
-      workflow_tightness: 'tight',
-      oversight_strength: 'strong',
-      branch_budget: 0,
-      notes: `Tightened dispatch after warm semantic checkpoint lineage on ${governance.workflowRunId}.`,
+      workflow_tightness: trimString(governance.workflowTightness) ?? 'tight',
+      oversight_strength: trimString(governance.oversightStrength) ?? 'strong',
+      branch_budget:
+        typeof governance.branchBudget === 'number' && Number.isFinite(governance.branchBudget)
+          ? governance.branchBudget
+          : null,
+      notes: trimString(governance.note) ?? null,
     };
   }
   return {
@@ -462,12 +465,18 @@ async function semanticCheckpointDispatchGovernanceContext(ring, task) {
   const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
   if (!parentTaskId) {
     return {
+      source: null,
+      reasons: [],
       parentTaskId: null,
       workflowRunId: null,
       checkpointCount: 0,
       replayStatus: 'idle',
       sawProgressReport: false,
       tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
     };
   }
 
@@ -475,12 +484,18 @@ async function semanticCheckpointDispatchGovernanceContext(ring, task) {
   const workflowRunId = trimString(parentTask?.data?.workflow_run_id);
   if (parentTask?.data?.replanning?.source_failure !== 'workflow_timeout' || !workflowRunId) {
     return {
+      source: null,
+      reasons: [],
       parentTaskId,
       workflowRunId,
       checkpointCount: 0,
       replayStatus: 'idle',
       sawProgressReport: false,
       tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
     };
   }
 
@@ -491,12 +506,53 @@ async function semanticCheckpointDispatchGovernanceContext(ring, task) {
     && workflowRun.data.reports.some((report) => report?.status === 'progress');
 
   return {
+    source: 'warm_semantic_lineage',
+    reasons: ['warm_semantic_lineage'],
     parentTaskId,
     workflowRunId,
     checkpointCount,
     replayStatus,
     sawProgressReport,
     tightenedDispatch: sawProgressReport && checkpointCount > 2 && replayStatus === 'requested',
+    workflowTightness: 'tight',
+    oversightStrength: 'strong',
+    branchBudget: 0,
+    note: `Tightened dispatch after warm semantic checkpoint lineage on ${workflowRunId}.`,
+  };
+}
+
+function governanceBlockedReuseDispatchContext(session) {
+  const context = session?.data?.governance_context;
+  const source = trimString(context?.source);
+  const reasons = uniqueStrings([
+    ...(Array.isArray(context?.reasons) ? context.reasons : []),
+    ...((Array.isArray(context?.blocked_reuse) ? context.blocked_reuse : [])
+      .map((item) => trimString(item?.reason))
+      .filter(Boolean)),
+  ]);
+  if (source !== 'governance_blocked_reuse' || reasons.length === 0) {
+    return {
+      source,
+      reasons,
+      tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
+    };
+  }
+
+  const summary = trimString(context?.batch_signature) ?? reasons.join(', ');
+  return {
+    source,
+    reasons,
+    tightenedDispatch: true,
+    workflowTightness: 'tight',
+    oversightStrength: 'strong',
+    branchBudget: null,
+    note:
+      `Tightened dispatch for governance-blocked fallback session (${summary}) `
+      + 'after automatic workflow reuse was withheld.',
   };
 }
 
@@ -1080,7 +1136,11 @@ export function createSessionRunner(
       const workflow = await ring.read('workflow', run.data.workflow_template_id);
       const bundle = bundlesByTaskId.get(task.id) ?? null;
       const preparedAt = nowIso();
-      const governance = await semanticCheckpointDispatchGovernanceContext(ring, task);
+      const lineageGovernance = await semanticCheckpointDispatchGovernanceContext(ring, task);
+      const sessionGovernance = governanceBlockedReuseDispatchContext(session);
+      const governance = lineageGovernance.tightenedDispatch
+        ? lineageGovernance
+        : sessionGovernance;
       const callback = createCallbackState(
         run,
         runnerConfig,
