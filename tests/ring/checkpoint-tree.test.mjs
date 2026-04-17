@@ -111,12 +111,24 @@ describe('checkpoint tree groundwork', async () => {
       created_by: 'agent-left',
       branch_id: 'left',
       evidence_refs: [{ kind: 'doc', ref: 'doc:left', digest: 'a1' }],
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'normal',
+        branch_budget: 0,
+        notes: 'Left branch already exhausted its branch budget.',
+      },
     });
     const right = forkCheckpoint(root, {
       id: 'cp-right',
       created_by: 'agent-right',
       branch_id: 'right',
       evidence_refs: [{ kind: 'doc', ref: 'doc:right', digest: 'b2' }],
+      policy_snapshot: {
+        workflow_tightness: 'balanced',
+        oversight_strength: 'strong',
+        branch_budget: 2,
+        notes: 'Right branch required stronger oversight for review.',
+      },
     });
 
     const synthesized = synthesizeCheckpoint([left, right], {
@@ -130,6 +142,11 @@ describe('checkpoint tree groundwork', async () => {
     assert.equal(synthesized.data.adoption_status, 'synthesized');
     assert.deepEqual(synthesized.data.synthesis_inputs, ['cp-left', 'cp-right']);
     assert.equal(synthesized.data.evidence_refs.length, 2);
+    assert.equal(synthesized.data.policy_snapshot.workflow_tightness, 'tight');
+    assert.equal(synthesized.data.policy_snapshot.oversight_strength, 'strong');
+    assert.equal(synthesized.data.policy_snapshot.branch_budget, 0);
+    assert.match(synthesized.data.policy_snapshot.notes ?? '', /Left branch already exhausted its branch budget\./);
+    assert.match(synthesized.data.policy_snapshot.notes ?? '', /Right branch required stronger oversight for review\./);
 
     const result = validator.validate('checkpoint', synthesized);
     assert.equal(result.valid, true, JSON.stringify(result.errors));

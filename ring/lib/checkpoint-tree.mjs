@@ -15,6 +15,60 @@ function policySnapshot(value = {}) {
   };
 }
 
+function uniqueStrings(values = []) {
+  const seen = new Set();
+  const results = [];
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    results.push(normalized);
+  }
+  return results;
+}
+
+function strictestPolicyLevel(values, orderedLevels, fallback) {
+  let strongestLevel = fallback;
+  let strongestIndex = orderedLevels.indexOf(fallback);
+  for (const value of values) {
+    const levelIndex = orderedLevels.indexOf(value);
+    if (levelIndex > strongestIndex) {
+      strongestLevel = value;
+      strongestIndex = levelIndex;
+    }
+  }
+  return strongestLevel;
+}
+
+function synthesizedPolicySnapshot(inputs, overrides = {}) {
+  const inputPolicies = inputs.map((checkpoint) => policySnapshot(checkpoint?.data?.policy_snapshot ?? {}));
+  const branchBudgets = inputPolicies
+    .map((snapshot) => snapshot.branch_budget)
+    .filter((budget) => typeof budget === 'number' && Number.isFinite(budget));
+  const mergedNotes = uniqueStrings(inputPolicies.map((snapshot) => snapshot.notes)).join(' | ') || null;
+
+  return policySnapshot({
+    workflow_tightness: strictestPolicyLevel(
+      inputPolicies.map((snapshot) => snapshot.workflow_tightness),
+      ['loose', 'balanced', 'tight'],
+      'balanced',
+    ),
+    oversight_strength: strictestPolicyLevel(
+      inputPolicies.map((snapshot) => snapshot.oversight_strength),
+      ['weak', 'normal', 'strong'],
+      'normal',
+    ),
+    branch_budget: branchBudgets.length > 0 ? Math.min(...branchBudgets) : null,
+    notes: mergedNotes,
+    ...clone(overrides),
+  });
+}
+
 function executionCursor(value = {}) {
   return {
     phase: value.phase ?? 'created',
@@ -163,6 +217,7 @@ export function synthesizeCheckpoint(inputs, fields = {}) {
     throw new Error('synthesizeCheckpoint requires at least one input checkpoint');
   }
   const parent = inputs[0];
+  const mergedPolicySnapshot = synthesizedPolicySnapshot(inputs, fields.policy_snapshot);
   const mergedEvidence = [];
   const seen = new Set();
   for (const cp of inputs) {
@@ -178,7 +233,7 @@ export function synthesizeCheckpoint(inputs, fields = {}) {
     branch_id: fields.branch_id ?? `${parent.data.branch_id}.synth`,
     node_id: fields.node_id ?? parent.data.node_id,
     scope_ref: fields.scope_ref ?? parent.data.scope_ref,
-    policy_snapshot: fields.policy_snapshot ?? parent.data.policy_snapshot,
+    policy_snapshot: mergedPolicySnapshot,
     execution_cursor: fields.execution_cursor ?? parent.data.execution_cursor,
     evidence_refs: fields.evidence_refs ?? mergedEvidence,
     replay_state: fields.replay_state ?? parent.data.replay_state,
