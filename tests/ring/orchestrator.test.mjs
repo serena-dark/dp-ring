@@ -81,7 +81,7 @@ function createWorkflowRunCheckpoint(overrides = {}) {
   });
 }
 
-describe('orchestrator', async () => {
+describe('orchestrator', { concurrency: 1 }, async () => {
   let tempDir;
   let ring;
   let assetServer;
@@ -1438,15 +1438,15 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
   });
 
-  it('only auto-reuses a template again after synthesized checkpoint lineage is adopted into mainline', async () => {
+  it('only auto-reuses a synthesized template again after mainline adoption clears any inherited branch-budget hold', async () => {
     const reusableWorkflow = await ring.create('workflow', {
       id: 'wf-docs-synth-hold',
       status: 'active',
       created_by: 'test',
       data: {
-        name: 'Docs Synth Lineage Template',
-        description: 'Reusable workflow for testing tasks that should stay governance-blocked until synthesized checkpoint lineage is adopted into mainline.',
-        applicable_to: ['testing'],
+        name: 'Lineage Synthesis Governance Template',
+        description: 'Reusable workflow for governance tasks that should stay blocked until synthesized lineage is adopted and its inherited policy hold is cleared.',
+        applicable_to: ['feature-implementation'],
         steps: [
           { id: 's1', name: 'inspect', description: 'Inspect the regression context.' },
           { id: 's2', name: 'qa', description: 'Run the focused verification path.' },
@@ -1455,7 +1455,7 @@ Split milestone prerequisites into ready and blocked sets.
       },
     });
     assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
-    await ring.registry.recordScore('testing', 'wf-docs-synth-hold', 9.97);
+    await ring.registry.recordScore('feature-implementation', 'wf-docs-synth-hold', 99.97);
 
     const rootCheckpoint = createWorkflowRunCheckpoint({
       id: 'cp-docs-synth-root',
@@ -1470,6 +1470,12 @@ Split milestone prerequisites into ready and blocked sets.
       branch_id: 'docs.left',
       execution_cursor: { phase: 'review', step_id: 'verify', ordinal: 2 },
       evidence_refs: [{ kind: 'doc', ref: 'docs:left', digest: 'left1' }],
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'normal',
+        branch_budget: 0,
+        notes: 'The left review branch already exhausted its governed branch budget.',
+      },
     });
     const rightCheckpoint = forkCheckpoint(rootCheckpoint, {
       id: 'cp-docs-synth-right',
@@ -1477,6 +1483,12 @@ Split milestone prerequisites into ready and blocked sets.
       branch_id: 'docs.right',
       execution_cursor: { phase: 'review', step_id: 'verify', ordinal: 2 },
       evidence_refs: [{ kind: 'doc', ref: 'docs:right', digest: 'right2' }],
+      policy_snapshot: {
+        workflow_tightness: 'balanced',
+        oversight_strength: 'strong',
+        branch_budget: 2,
+        notes: 'The right review branch required stronger oversight for synthesis review.',
+      },
     });
     const synthesizedCheckpoint = synthesizeCheckpoint([leftCheckpoint, rightCheckpoint], {
       id: 'cp-docs-synth-active',
@@ -1486,6 +1498,18 @@ Split milestone prerequisites into ready and blocked sets.
       scope_ref: { kind: 'workflow-run', id: 'run-docs-synth-hold', path: null },
       execution_cursor: { phase: 'synthesize', step_id: 'merge', ordinal: 3 },
     });
+
+    assert.equal(synthesizedCheckpoint.data.policy_snapshot.workflow_tightness, 'tight');
+    assert.equal(synthesizedCheckpoint.data.policy_snapshot.oversight_strength, 'strong');
+    assert.equal(synthesizedCheckpoint.data.policy_snapshot.branch_budget, 0);
+    assert.match(
+      synthesizedCheckpoint.data.policy_snapshot.notes ?? '',
+      /left review branch already exhausted its governed branch budget/i,
+    );
+    assert.match(
+      synthesizedCheckpoint.data.policy_snapshot.notes ?? '',
+      /right review branch required stronger oversight for synthesis review/i,
+    );
 
     for (const checkpoint of [
       rootCheckpoint,
@@ -1616,10 +1640,10 @@ Split milestone prerequisites into ready and blocked sets.
         goal: {
           title,
           description:
-            'Verify the regression without blindly reusing a workflow whose latest checkpoint lineage is not yet mainline.',
+            'Advance the synthesized lineage governance rollout without automatically reusing a template whose inherited checkpoint policy is still active.',
           acceptance_criteria: [
-            'A testing task is created',
-            'Checkpoint adoption influences workflow reuse',
+            'A governance task is created',
+            'Synthesized checkpoint policy influences workflow reuse',
           ],
         },
         environment: {
@@ -1627,7 +1651,7 @@ Split milestone prerequisites into ready and blocked sets.
           repo_root: tempDir,
           target_scope: {
             level: 'file',
-            include_paths: ['src/regression.js'],
+            include_paths: ['src/lineage-governance.js'],
             exclude_paths: [],
           },
           constraints: {
@@ -1638,13 +1662,13 @@ Split milestone prerequisites into ready and blocked sets.
         },
         materials: [
           {
-            material_id: `${projectId}-docs`,
+            material_id: `${projectId}-policy`,
             kind: 'preparation_package',
             uri: null,
             format: 'json',
-            mount_to: 'workspace/bugfix',
+            mount_to: 'workspace/policy',
             required: true,
-            inline_data: '{"bugfix":true}',
+            inline_data: '{"governance":true}',
           },
         ],
         context: {
@@ -1656,7 +1680,7 @@ Split milestone prerequisites into ready and blocked sets.
 
     const blockedBundle = await submitDocsBundle(
       'bundle-project-synth-lineage-blocked',
-      'Regression verification after synthesized lineage',
+      'Checkpoint governance rollout while synthesized lineage is not yet mainline',
     );
 
     assert.equal(blockedBundle.status, 'ready_queued');
@@ -1670,17 +1694,62 @@ Split milestone prerequisites into ready and blocked sets.
     );
     assert.notEqual(blockedBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-synth-hold');
 
+    const blockedGeneratedWorkflowId = blockedBundle.workflows.generated_workflow_ids[0] ?? null;
+    if (blockedGeneratedWorkflowId) {
+      const archivedGenerated = await ring.update('workflow', blockedGeneratedWorkflowId, {
+        status: 'archived',
+      });
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+
     const adoptedCheckpoint = await ring.update('checkpoint', 'cp-docs-synth-active', {
       status: 'mainline',
       data: {
         adoption_status: 'mainline',
+        policy_snapshot: synthesizedCheckpoint.data.policy_snapshot,
       },
     });
     assert.equal(adoptedCheckpoint.ok, true, JSON.stringify(adoptedCheckpoint.errors));
 
+    const governedAfterAdoptionBundle = await submitDocsBundle(
+      'bundle-project-synth-lineage-adopted-governed',
+      'Checkpoint governance rollout after mainline adoption while inherited branch budget stays active',
+    );
+
+    assert.equal(governedAfterAdoptionBundle.status, 'ready_queued');
+    assert.equal(
+      governedAfterAdoptionBundle.workflows.reused_workflow_ids.includes('wf-docs-synth-hold'),
+      false,
+    );
+    assert.notEqual(
+      governedAfterAdoptionBundle.workflows.waiting_tasks[0].workflow_template_id,
+      'wf-docs-synth-hold',
+    );
+
+    const adoptedGovernedWorkflowId = governedAfterAdoptionBundle.workflows.generated_workflow_ids[0] ?? null;
+    if (adoptedGovernedWorkflowId) {
+      const archivedGenerated = await ring.update('workflow', adoptedGovernedWorkflowId, {
+        status: 'archived',
+      });
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+
+    const clearedCheckpoint = await ring.update('checkpoint', 'cp-docs-synth-active', {
+      data: {
+        adoption_status: 'mainline',
+        policy_snapshot: {
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: null,
+          notes: 'A later healthy mainline pass cleared the inherited synthesized governance hold.',
+        },
+      },
+    });
+    assert.equal(clearedCheckpoint.ok, true, JSON.stringify(clearedCheckpoint.errors));
+
     const adoptedBundle = await submitDocsBundle(
-      'bundle-project-synth-lineage-adopted',
-      'Regression verification after mainline adoption',
+      'bundle-project-synth-lineage-cleared',
+      'Checkpoint governance rollout after mainline adoption and policy clear',
     );
 
     assert.equal(adoptedBundle.status, 'ready_queued');
@@ -1693,13 +1762,6 @@ Split milestone prerequisites into ready and blocked sets.
       status: 'archived',
     });
     assert.equal(archivedReusable.ok, true, JSON.stringify(archivedReusable.errors));
-
-    if (blockedBundle.workflows.generated_workflow_ids[0]) {
-      const archivedGenerated = await ring.update('workflow', blockedBundle.workflows.generated_workflow_ids[0], {
-        status: 'archived',
-      });
-      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
-    }
   });
 
   it('keeps automatic reuse blocked while the latest mainline checkpoint still exhausts branch budget', async () => {
