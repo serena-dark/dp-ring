@@ -287,12 +287,32 @@ function checkpointAdoptionStatus(checkpoint) {
   return adoptionStatus || null;
 }
 
+function checkpointBranchBudget(checkpoint) {
+  const branchBudget = checkpoint?.data?.policy_snapshot?.branch_budget;
+  return typeof branchBudget === 'number' && Number.isFinite(branchBudget)
+    ? branchBudget
+    : null;
+}
+
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
   if (runRequiresExplicitWorkflowReuse(run)) {
     return {
       reason: 'warm_semantic_lineage',
       checkpoint_id: trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
       adoption_status: checkpointAdoptionStatus(checkpoint),
+    };
+  }
+
+  const branchBudget = checkpointBranchBudget(checkpoint);
+  if (branchBudget !== null && branchBudget <= 0) {
+    return {
+      reason: 'checkpoint_branch_budget_exhausted',
+      checkpoint_id:
+        trimString(checkpoint?.id) || trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
+      adoption_status: checkpointAdoptionStatus(checkpoint),
+      branch_budget: branchBudget,
+      workflow_tightness: trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) || null,
+      oversight_strength: trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) || null,
     };
   }
 
@@ -317,6 +337,17 @@ function describeWorkflowGovernanceBlock(item) {
   const label = `${item.id} (${item.name})`;
   if (item.reason === 'warm_semantic_lineage') {
     return `${label} already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse`;
+  }
+
+  if (item.reason === 'checkpoint_branch_budget_exhausted') {
+    const checkpointLabel = item.checkpoint_id
+      ? `active checkpoint ${item.checkpoint_id}`
+      : 'the active checkpoint';
+    const governanceLabels = [
+      item.workflow_tightness ? `${item.workflow_tightness} workflow_tightness` : null,
+      item.oversight_strength ? `${item.oversight_strength} oversight` : null,
+    ].filter(Boolean);
+    return `${label} last exhausted branch_budget=${item.branch_budget ?? 0} at ${checkpointLabel}${governanceLabels.length ? ` under ${governanceLabels.join(' / ')}` : ''}, so automatic reuse stays blocked until a later run clears that constraint`;
   }
 
   const checkpointLabel = item.checkpoint_id
@@ -4608,6 +4639,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           reason: block.reason,
           checkpoint_id: block.checkpoint_id,
           adoption_status: block.adoption_status,
+          branch_budget: block.branch_budget ?? null,
+          workflow_tightness: block.workflow_tightness ?? null,
+          oversight_strength: block.oversight_strength ?? null,
         })),
       });
     }
