@@ -365,6 +365,48 @@ function describeWorkflowGovernanceBlock(item) {
   return `${label} is governance-blocked for automatic reuse`;
 }
 
+function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
+  if (workflowSource !== 'custom_generated' || recommendation?.recommended) {
+    return [];
+  }
+
+  return Array.isArray(recommendation?.governance_blocked_candidates)
+    ? recommendation.governance_blocked_candidates.map((item) => ({
+        id: item.id,
+        name: item.name,
+        reason: item.reason,
+        checkpoint_id: item.checkpoint_id ?? null,
+        adoption_status: item.adoption_status ?? null,
+        branch_budget: item.branch_budget ?? null,
+        workflow_tightness: item.workflow_tightness ?? null,
+        oversight_strength: item.oversight_strength ?? null,
+      }))
+    : [];
+}
+
+function describeWaitingTaskGovernance(waitingTask) {
+  const blockedCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
+    ? waitingTask.governance_blocked_reuse
+    : [];
+  if (blockedCandidates.length === 0) {
+    return 'none';
+  }
+  return blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ');
+}
+
+function governanceBatchSignature(waitingTasks = []) {
+  const reasons = [...new Set(
+    waitingTasks.flatMap((item) =>
+      Array.isArray(item?.governance_blocked_reuse)
+        ? item.governance_blocked_reuse
+            .map((candidate) => trimString(candidate?.reason))
+            .filter(Boolean)
+        : [],
+    ),
+  )].sort();
+  return reasons.length > 0 ? reasons.join('+') : null;
+}
+
 function normalizeAcceptanceCriteria(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -1728,7 +1770,10 @@ ${taskSections}
 function buildSessionBatchPacket(job, requirement, waitingTasks) {
   const taskLines = waitingTasks.length > 0
     ? waitingTasks
-        .map((item) => `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}`)
+        .map((item) => {
+          const governance = describeWaitingTaskGovernance(item);
+          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}`;
+        })
         .join('\n')
     : '- no waiting tasks';
 
@@ -1748,6 +1793,7 @@ function buildSessionBatchPacket(job, requirement, waitingTasks) {
       '- Start every task that is currently in the waiting area.',
       '- One batch launch creates exactly one session.',
       '- Each launched task keeps exactly one workflow template.',
+      '- Keep governance-sensitive fallback tasks in their own batch group instead of merging them into a normal healthy-reuse launch.',
     ].join('\n'),
     payload: {
       requirement_id: requirement.id,
@@ -3757,7 +3803,8 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     const reusedWorkflowIds = [];
 
     for (const task of tasks) {
-      const recommendation = recommendations.get(task.id)?.recommended ?? null;
+      const recommendationEntry = recommendations.get(task.id) ?? null;
+      const recommendation = recommendationEntry?.recommended ?? null;
       const strategy = bundle.canonical.environment.constraints.workflow_strategy ?? 'reuse_first';
       let workflow = null;
       let workflowSource = 'custom_generated';
@@ -3806,6 +3853,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         },
       });
 
+      const governanceBlockedReuse = waitingTaskGovernanceBlockedReuse(
+        recommendationEntry,
+        workflowSource,
+      );
+
       waitingTasks.push({
         task_id: task.id,
         task_name: task.data.name,
@@ -3820,6 +3872,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         workflow_source: workflowSource,
         registry_rank: registryRank,
         registry_mode: registryMode,
+        governance_blocked_reuse: governanceBlockedReuse,
         ready_at: nowIso(),
         dispatched_at: null,
       });
@@ -3835,14 +3888,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
   function sessionGroupKeyForBundle(bundle, requirementId) {
     const configured =
       bundle.canonical.environment.constraints.session_group_key ?? null;
-    if (configured) {
-      return `${requirementId}:${configured}`;
-    }
-    return [
-      requirementId,
-      bundle.canonical.environment.project_id,
-      bundle.canonical.environment.repo_root,
-    ].join(':');
+    const baseKey = configured
+      ? `${requirementId}:${configured}`
+      : [
+          requirementId,
+          bundle.canonical.environment.project_id,
+          bundle.canonical.environment.repo_root,
+        ].join(':');
+    const governanceSignature = governanceBatchSignature(bundle.workflows?.waiting_tasks ?? []);
+    return governanceSignature ? `${baseKey}:governance:${governanceSignature}` : baseKey;
   }
 
   async function submitDispatchBundle(envelope) {
@@ -4794,7 +4848,8 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         let workflowSource;
         let registryRank = null;
         let registryMode = null;
-        const recommendation = recommendations.get(task.id)?.recommended ?? null;
+        const recommendationEntry = recommendations.get(task.id) ?? null;
+        const recommendation = recommendationEntry?.recommended ?? null;
         if (
           assignment.action === 'create' &&
           job.routing.workflow_strategy === 'reuse_strict' &&
@@ -4862,6 +4917,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           },
         });
 
+        const governanceBlockedReuse = waitingTaskGovernanceBlockedReuse(
+          recommendationEntry,
+          workflowSource,
+        );
+
         waitingTasks.push({
           task_id: task.id,
           task_name: task.data.name,
@@ -4876,6 +4936,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           workflow_source: workflowSource,
           registry_rank: registryRank,
           registry_mode: registryMode,
+          governance_blocked_reuse: governanceBlockedReuse,
           ready_at: nowIso(),
           dispatched_at: null,
         });

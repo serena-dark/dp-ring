@@ -1944,6 +1944,311 @@ Split milestone prerequisites into ready and blocked sets.
     }
   });
 
+  it('isolates governance-forced fallback bundles into their own batch session groups', async () => {
+    const requirementId = await ring.newId('requirement', {
+      name: 'Shared Governance Batch Requirement',
+    });
+    const milestoneId = await ring.newId('milestone', {
+      name: 'Shared Governance Batch Execution',
+      parentId: requirementId,
+    });
+
+    const requirementResult = await ring.create('requirement', {
+      id: requirementId,
+      status: 'ready',
+      created_by: 'test',
+      data: {
+        name: 'Shared Governance Batch Requirement',
+        description: 'Two adaptive bundles share a batch key so governance-sensitive fallback routing must isolate their launches.',
+        acceptance_criteria: [],
+        milestone_ids: [milestoneId],
+        priority: 'high',
+      },
+    });
+    assert.equal(requirementResult.ok, true, JSON.stringify(requirementResult.errors));
+
+    const milestoneResult = await ring.create('milestone', {
+      id: milestoneId,
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Shared Governance Batch Execution',
+        requirement_id: requirementId,
+        description: 'Launch adaptive bundles with a shared session group key.',
+        acceptance_checks: [],
+        prerequisites: [],
+      },
+    });
+    assert.equal(milestoneResult.ok, true, JSON.stringify(milestoneResult.errors));
+
+    const healthyWorkflow = await ring.create('workflow', {
+      id: 'wf-shared-docs-healthy',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Shared Docs Healthy Template',
+        description: 'Reusable refactoring workflow with no governance hold on its latest run.',
+        applicable_to: ['refactoring'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the doc target.' },
+          { id: 's2', name: 'draft', description: 'Draft the update.' },
+          { id: 's3', name: 'verify', description: 'Verify the result.' },
+        ],
+      },
+    });
+    assert.equal(healthyWorkflow.ok, true, JSON.stringify(healthyWorkflow.errors));
+    await ring.registry.recordScore('refactoring', 'wf-shared-docs-healthy', 9.93);
+
+    const governedWorkflow = await ring.create('workflow', {
+      id: 'wf-shared-testing-lineage-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Shared Testing Warm Lineage Hold',
+        description: 'Reusable bug-fix workflow that should trigger governance-sensitive fallback routing after warm timeout lineage.',
+        applicable_to: ['bug-fix'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the regression context.' },
+          { id: 's2', name: 'verify', description: 'Verify the governed path.' },
+          { id: 's3', name: 'report', description: 'Report the result.' },
+        ],
+      },
+    });
+    assert.equal(governedWorkflow.ok, true, JSON.stringify(governedWorkflow.errors));
+    await ring.registry.recordScore('bug-fix', 'wf-shared-testing-lineage-hold', 9.99);
+
+    const warmLineageRun = await ring.create('workflow-run', {
+      id: 'run-shared-testing-lineage-hold',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-18T02:00:00Z',
+      updated_at: '2026-04-18T02:01:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-shared-testing-lineage-hold',
+      status: 'failed',
+      data: {
+        workflow_template_id: 'wf-shared-testing-lineage-hold',
+        workflow_template_version: 1,
+        task_id: 'task-shared-testing-lineage-hold',
+        current_step_index: 1,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url:
+            'http://127.0.0.1:3100/api/workflow-run/run-shared-testing-lineage-hold/report',
+          token: 'token-shared-testing-lineage-hold',
+          signing_secret: 'signing-secret-shared-testing-lineage-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'timed_out',
+          issued_at: '2026-04-18T02:00:00Z',
+          prepared_at: '2026-04-18T02:00:05Z',
+          last_report_at: '2026-04-18T02:00:40Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 2,
+          retry_count: 1,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-18T02:05:00Z',
+          packet_path:
+            '.ring/orchestrator/runner/sessions/session-shared-testing-lineage-hold/run-shared-testing-lineage-hold.json',
+          allowed_worker_ids: ['worker-testing'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-testing',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: 'Timed out after semantic progress was already reported.',
+        },
+        reports: [
+          {
+            at: '2026-04-18T02:00:40Z',
+            status: 'progress',
+            actor: 'worker-testing',
+            step_id: 'verify',
+            note: 'The checkpoint lineage advanced before timeout.',
+            commit_sha: null,
+            worker_id: 'worker-testing',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Semantic progress exists.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-shared-testing-lineage-hold',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-shared-testing-lineage-2',
+          checkpoint_ids: ['cp-shared-testing-root', 'cp-shared-testing-lineage-1', 'cp-shared-testing-lineage-2'],
+          branch_event_ids: ['be-shared-testing-lineage-1'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-shared-testing-lineage-hold',
+            runtime_status: 'recovering',
+            current_checkpoint_id: 'cp-shared-testing-lineage-2',
+            replay: {
+              status: 'requested',
+              requested_at: '2026-04-18T02:00:45Z',
+              completed_at: null,
+              requested_by: 'session-runner',
+              reason: 'workflow_timeout',
+              source_checkpoint_id: 'cp-shared-testing-lineage-2',
+              target_checkpoint_id: 'cp-shared-testing-lineage-2',
+              cursor: { phase: 'execute', step_id: 'verify' },
+              journal_state: {
+                mode: 'semantic',
+                last_applied_entry_id: 'journal-shared-testing-1',
+                pending_entry_ids: ['journal-shared-testing-2'],
+              },
+            },
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-18T02:00:10Z',
+            ended_at: '2026-04-18T02:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'verify',
+            status: 'failed',
+            started_at: '2026-04-18T02:00:21Z',
+            ended_at: '2026-04-18T02:01:00Z',
+            outputs: {},
+            notes: 'Timed out after semantic progress.',
+          },
+        ],
+      },
+    });
+    assert.equal(warmLineageRun.ok, true, JSON.stringify(warmLineageRun.errors));
+
+    const submitSharedBundle = ({ title, description, includePath, materialId, inlineData }) =>
+      ring.orchestrator.submitDispatchBundle({
+        bundle_protocol: 'ring.goal.v1',
+        bundle_version: '1',
+        artifact_transport: 'inline',
+        submitted_by: 'bundle-test',
+        payload: {
+          goal: {
+            title,
+            description,
+            acceptance_criteria: ['One task is created and routed into a batch session.'],
+          },
+          environment: {
+            project_id: 'shared-governance-project',
+            repo_root: tempDir,
+            target_scope: {
+              level: 'file',
+              include_paths: [includePath],
+              exclude_paths: [],
+            },
+            constraints: {
+              must_build: false,
+              must_cleanup: false,
+              merge_policy: 'judge_then_merge',
+              session_group_key: 'shared-batch',
+            },
+          },
+          materials: [
+            {
+              material_id: materialId,
+              kind: 'preparation_package',
+              uri: null,
+              format: 'json',
+              mount_to: 'workspace/shared',
+              required: true,
+              inline_data: inlineData,
+            },
+          ],
+          context: {
+            artifact_refs: [],
+            brief_ref: null,
+            requirement_id: requirementId,
+            milestone_id: milestoneId,
+          },
+        },
+      });
+
+    const cleanBundle = await submitSharedBundle({
+      title: 'Refactor shared batch routing',
+      description: 'Refactor the shared batch launch behavior around the healthy reusable workflow.',
+      includePath: 'docs/shared-governance.md',
+      materialId: 'mat-shared-docs',
+      inlineData: '{"docs":true}',
+    });
+    const governedBundle = await submitSharedBundle({
+      title: 'Regression bug fix after warm lineage timeout',
+      description: 'Fix the governed failure with a fallback workflow after semantic timeout lineage.',
+      includePath: 'tests/shared-governance.test.mjs',
+      materialId: 'mat-shared-testing',
+      inlineData: '{"testing":true}',
+    });
+
+    assert.equal(cleanBundle.status, 'ready_queued');
+    assert.equal(cleanBundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+    assert.deepEqual(cleanBundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+    assert.equal(cleanBundle.batching.session_group_key.includes(':governance:'), false);
+
+    assert.equal(governedBundle.status, 'ready_queued');
+    assert.equal(governedBundle.workflows.waiting_tasks[0].workflow_source, 'custom_generated');
+    assert.equal(governedBundle.workflows.waiting_tasks[0].governance_blocked_reuse.length, 1);
+    assert.equal(
+      governedBundle.workflows.waiting_tasks[0].governance_blocked_reuse[0].reason,
+      'warm_semantic_lineage',
+    );
+    assert.match(
+      governedBundle.batching.session_group_key,
+      /:governance:warm_semantic_lineage$/,
+    );
+    assert.notEqual(
+      cleanBundle.batching.session_group_key,
+      governedBundle.batching.session_group_key,
+    );
+
+    await ring.orchestrator.tick();
+
+    const launchedClean = await ring.orchestrator.readDispatchBundle(cleanBundle.id);
+    const launchedGoverned = await ring.orchestrator.readDispatchBundle(governedBundle.id);
+    assert.equal(launchedClean.status, 'session_launched');
+    assert.equal(launchedGoverned.status, 'session_launched');
+    assert.ok(launchedClean.batching.session_id);
+    assert.ok(launchedGoverned.batching.session_id);
+    assert.notEqual(launchedClean.batching.session_id, launchedGoverned.batching.session_id);
+
+    const sharedSessions = (await ring.list('session')).filter(
+      (item) => item.data.requirement_id === requirementId,
+    );
+    assert.equal(sharedSessions.length, 2);
+    assert.deepEqual(
+      sharedSessions.map((item) => item.data.task_ids.length).sort((a, b) => a - b),
+      [1, 1],
+    );
+
+    const archivedHealthy = await ring.update('workflow', 'wf-shared-docs-healthy', {
+      status: 'archived',
+    });
+    assert.equal(archivedHealthy.ok, true, JSON.stringify(archivedHealthy.errors));
+
+    const archivedGoverned = await ring.update('workflow', 'wf-shared-testing-lineage-hold', {
+      status: 'archived',
+    });
+    assert.equal(archivedGoverned.ok, true, JSON.stringify(archivedGoverned.errors));
+
+    if (governedBundle.workflows.generated_workflow_ids[0]) {
+      const archivedGenerated = await ring.update(
+        'workflow',
+        governedBundle.workflows.generated_workflow_ids[0],
+        {
+          status: 'archived',
+        },
+      );
+      assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+  });
+
   it('normalizes an A2A bundle into the same canonical goal shape as ring.goal', async () => {
     const ringGoalBundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
