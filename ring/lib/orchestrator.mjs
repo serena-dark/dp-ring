@@ -282,6 +282,58 @@ function runRequiresExplicitWorkflowReuse(run) {
   return sawProgressReport && checkpointCount > 2 && replayStatus === 'requested';
 }
 
+function checkpointAdoptionStatus(checkpoint) {
+  const adoptionStatus = trimString(checkpoint?.data?.adoption_status);
+  return adoptionStatus || null;
+}
+
+function workflowReuseGovernanceBlock(run, checkpoint = null) {
+  if (runRequiresExplicitWorkflowReuse(run)) {
+    return {
+      reason: 'warm_semantic_lineage',
+      checkpoint_id: trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
+      adoption_status: checkpointAdoptionStatus(checkpoint),
+    };
+  }
+
+  const adoptionStatus = checkpointAdoptionStatus(checkpoint);
+  if (adoptionStatus && adoptionStatus !== 'mainline') {
+    return {
+      reason: `checkpoint_${adoptionStatus}`,
+      checkpoint_id:
+        trimString(checkpoint?.id) || trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
+      adoption_status: adoptionStatus,
+    };
+  }
+
+  return null;
+}
+
+function describeWorkflowGovernanceBlock(item) {
+  if (!item) {
+    return 'automatic reuse is governance-blocked';
+  }
+
+  const label = `${item.id} (${item.name})`;
+  if (item.reason === 'warm_semantic_lineage') {
+    return `${label} already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse`;
+  }
+
+  const checkpointLabel = item.checkpoint_id
+    ? `active checkpoint ${item.checkpoint_id}`
+    : 'the active checkpoint';
+  if (item.adoption_status === 'synthesized') {
+    return `${label} still ends on synthesized lineage at ${checkpointLabel}, so adoption into mainline has not happened yet`;
+  }
+  if (item.adoption_status === 'discarded') {
+    return `${label} still ends on discarded lineage at ${checkpointLabel}`;
+  }
+  if (item.adoption_status) {
+    return `${label} still ends on ${item.adoption_status} lineage at ${checkpointLabel} instead of mainline`;
+  }
+  return `${label} is governance-blocked for automatic reuse`;
+}
+
 function normalizeAcceptanceCriteria(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -1465,7 +1517,7 @@ function summarizeWorkflowRecommendation(recommendation) {
   if (!recommendation?.recommended) {
     const blocked = recommendation?.governance_blocked_candidates ?? [];
     if (blocked.length > 0) {
-      return `Automatic reuse is withheld because ${blocked.map((item) => item.id).join(', ')} already have warm semantic checkpoint lineage that requires an explicit governance decision before reuse.`;
+      return `Automatic reuse is withheld because ${blocked.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}.`;
     }
     return 'No ranked workflow recommendation yet.';
   }
@@ -1493,8 +1545,8 @@ function buildWorkflowPreparationPacket(
             : 'none';
           const blockedCandidates = recommendation?.governance_blocked_candidates?.length
             ? recommendation.governance_blocked_candidates
-                .map((item) => `${item.id} (${item.name})`)
-                .join(', ')
+                .map((item) => describeWorkflowGovernanceBlock(item))
+                .join('; ')
             : 'none';
           return [
             `- ${task.id}: ${task.data.name}`,
@@ -1593,7 +1645,7 @@ function buildWorkflowPreparationScaffold(
         headerLines.push('');
         if (blockedCandidates.length > 0) {
           headerLines.push(
-            `Governance note: ${blockedCandidates.map((item) => item.id).join(', ')} already have warm semantic checkpoint lineage, so automatic reuse is intentionally disabled until an explicit workflow governance decision says otherwise.`,
+            `Governance note: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}.`,
           );
           headerLines.push('');
         }
@@ -4497,17 +4549,33 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       (workflow) => workflow.status === 'active',
     );
     const latestWorkflowRuns = latestWorkflowRunsByTemplate(await ring.list('workflow-run'));
+    const governanceBlocksByTemplate = new Map();
     const recommendations = new Map();
+
+    for (const workflow of activeWorkflows) {
+      const latestRun = latestWorkflowRuns.get(workflow.id) ?? null;
+      const activeCheckpointId = trimString(latestRun?.data?.node_execution?.active_checkpoint_id);
+      const activeCheckpoint = activeCheckpointId
+        ? await ring.read('checkpoint', activeCheckpointId).catch(() => null)
+        : null;
+      governanceBlocksByTemplate.set(
+        workflow.id,
+        workflowReuseGovernanceBlock(latestRun, activeCheckpoint),
+      );
+    }
 
     for (const task of tasks) {
       const candidates = activeWorkflows.filter((workflow) =>
         workflow.data.applicable_to.includes(task.data.task_type),
       );
-      const governanceBlockedCandidates = candidates.filter((workflow) =>
-        runRequiresExplicitWorkflowReuse(latestWorkflowRuns.get(workflow.id)),
-      );
+      const governanceBlockedCandidates = candidates
+        .map((workflow) => ({
+          workflow,
+          block: governanceBlocksByTemplate.get(workflow.id) ?? null,
+        }))
+        .filter(({ block }) => block);
       const reusableCandidates = candidates.filter(
-        (workflow) => !runRequiresExplicitWorkflowReuse(latestWorkflowRuns.get(workflow.id)),
+        (workflow) => !(governanceBlocksByTemplate.get(workflow.id) ?? null),
       );
 
       let registryPick = null;
@@ -4534,9 +4602,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           id: workflow.id,
           name: workflow.data.name,
         })),
-        governance_blocked_candidates: governanceBlockedCandidates.map((workflow) => ({
+        governance_blocked_candidates: governanceBlockedCandidates.map(({ workflow, block }) => ({
           id: workflow.id,
           name: workflow.data.name,
+          reason: block.reason,
+          checkpoint_id: block.checkpoint_id,
+          adoption_status: block.adoption_status,
         })),
       });
     }
