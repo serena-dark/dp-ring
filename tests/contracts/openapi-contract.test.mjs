@@ -13,7 +13,7 @@ function documentedPath(path) {
 
 function extractControlApiRoutes(source) {
   return [...source.matchAll(/\.route\("([^"]+)"/g)]
-    .map(([, route]) => route.replace(/:id/g, '{id}'))
+    .map(([, route]) => route)
     .sort();
 }
 
@@ -30,6 +30,11 @@ describe('control-api OpenAPI contract', () => {
   it('documents bootstrap viewer override headers', () => {
     assert.match(openapi, /\/api\/bootstrap:[\s\S]*x-dp-user/);
     assert.match(openapi, /\/api\/bootstrap:[\s\S]*x-dp-role/);
+  });
+
+  it('uses current axum path parameter syntax in control-api routes', () => {
+    assert.doesNotMatch(controlApiSource, /\.route\("[^"]+:id"/);
+    assert.match(controlApiSource, /\.route\("\/api\/orgs\/\{id\}"/);
   });
 
   it('documents the shared not-found response for resource lookups', () => {
