@@ -1635,7 +1635,7 @@ function buildWorkflowPreparationScaffold(
           );
           headerLines.push(
             blockedCandidates.length
-              ? `Governance-blocked reuse: ${blockedCandidates.map((item) => item.id).join(', ')}`
+              ? `Governance-blocked reuse: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}`
               : 'Governance-blocked reuse: none',
           );
           return headerLines.join('\n');
