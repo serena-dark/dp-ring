@@ -1,8 +1,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { feedback } from "@ring-gui/api/client";
-import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { PageSection } from "@ring-gui/components/PageSection";
+import { TextField } from "@ring-gui/components/TextField";
 import { sortByUpdatedAt, titleize } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
 import { usePageQuery } from "@ring-gui/lib/page-state";
@@ -214,55 +215,49 @@ export default function FeedbackList() {
                 </select>
               </div>
 
-              <div className="field">
-                <label htmlFor="feedback-target-id">Target id</label>
-                <input
-                  id="feedback-target-id"
-                  value={targetId}
-                  onChange={(event) => setTargetId(event.target.value)}
-                  placeholder="t1-frontend-shell"
-                />
-              </div>
+              <TextField
+                id="feedback-target-id"
+                label="Target id"
+                value={targetId}
+                onValueChange={setTargetId}
+                placeholder="t1-frontend-shell"
+              />
 
-              <div className="field">
-                <label htmlFor="feedback-target-field">Target field</label>
-                <input
-                  id="feedback-target-field"
-                  value={targetField}
-                  onChange={(event) => setTargetField(event.target.value)}
-                  placeholder="data.acceptance_criteria"
-                />
-              </div>
+              <TextField
+                id="feedback-target-field"
+                label="Target field"
+                value={targetField}
+                onValueChange={setTargetField}
+                placeholder="data.acceptance_criteria"
+              />
 
-              <div className="field">
-                <label htmlFor="feedback-source-session">Source session</label>
-                <input
-                  id="feedback-source-session"
-                  value={sourceSessionId}
-                  onChange={(event) => setSourceSessionId(event.target.value)}
-                  placeholder="s1-step1-baseline"
-                />
-              </div>
+              <TextField
+                id="feedback-source-session"
+                label="Source session"
+                value={sourceSessionId}
+                onValueChange={setSourceSessionId}
+                placeholder="s1-step1-baseline"
+              />
 
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor="feedback-description">Description</label>
-                <textarea
-                  id="feedback-description"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Describe the issue and its impact."
-                />
-              </div>
+              <TextField
+                id="feedback-description"
+                label="Description"
+                multiline
+                value={description}
+                onValueChange={setDescription}
+                placeholder="Describe the issue and its impact."
+                containerStyle={{ gridColumn: "1 / -1" }}
+              />
 
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label htmlFor="feedback-action">Proposed action</label>
-                <textarea
-                  id="feedback-action"
-                  value={proposedAction}
-                  onChange={(event) => setProposedAction(event.target.value)}
-                  placeholder="Optional mitigation or follow-up."
-                />
-              </div>
+              <TextField
+                id="feedback-action"
+                label="Proposed action"
+                multiline
+                value={proposedAction}
+                onValueChange={setProposedAction}
+                placeholder="Optional mitigation or follow-up."
+                containerStyle={{ gridColumn: "1 / -1" }}
+              />
 
               <div className="button-row" style={{ gridColumn: "1 / -1" }}>
                 <button type="submit" className="button" disabled={submitting}>

@@ -1516,11 +1516,6 @@ tbody tr.is-selected {
 }
 
 .assistant-pane {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0.8rem;
-  min-height: 240px;
-  max-height: min(38vh, 360px);
   padding: 0.95rem var(--layout-content-padding) 1rem;
   border-top: var(--border-soft);
   background: var(--composer-background);

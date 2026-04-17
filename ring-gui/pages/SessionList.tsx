@@ -5,9 +5,10 @@ import {
   sessions,
   tasks,
 } from "@ring-gui/api/client";
-import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { PageSection } from "@ring-gui/components/PageSection";
+import { TextField } from "@ring-gui/components/TextField";
 import { sortByUpdatedAt, titleize } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
 import { usePageQuery } from "@ring-gui/lib/page-state";
@@ -161,15 +162,13 @@ export default function SessionList() {
           </summary>
           <div className="details-body">
             <form onSubmit={handleSubmit} className="field-grid">
-              <div className="field">
-                <label htmlFor="session-name">Name</label>
-                <input
-                  id="session-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Frontend delivery loop"
-                />
-              </div>
+              <TextField
+                id="session-name"
+                label="Name"
+                value={name}
+                onValueChange={setName}
+                placeholder="Frontend delivery loop"
+              />
 
               <div className="field">
                 <label htmlFor="session-requirement">Requirement</label>
