@@ -8,13 +8,14 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use futures_util::StreamExt;
 use platform_types::{
     demo_snapshot, ActivityEvent, Blueprint, BootstrapPayload, Execution, Finding, Insight,
     Objective, Organization, PlatformSnapshot, Repository, Review, Role, Viewer, Worker,
     Workspace, WorkItem,
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio_stream::{wrappers::IntervalStream, StreamExt};
+use tokio_stream::wrappers::IntervalStream;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
 
@@ -39,27 +40,27 @@ async fn main() {
         .route("/healthz", get(healthz))
         .route("/api/bootstrap", get(get_bootstrap))
         .route("/api/orgs", get(list_orgs))
-        .route("/api/orgs/:id", get(read_org))
+        .route("/api/orgs/{id}", get(read_org))
         .route("/api/workspaces", get(list_workspaces))
-        .route("/api/workspaces/:id", get(read_workspace))
+        .route("/api/workspaces/{id}", get(read_workspace))
         .route("/api/repositories", get(list_repositories))
-        .route("/api/repositories/:id", get(read_repository))
+        .route("/api/repositories/{id}", get(read_repository))
         .route("/api/objectives", get(list_objectives))
-        .route("/api/objectives/:id", get(read_objective))
+        .route("/api/objectives/{id}", get(read_objective))
         .route("/api/blueprints", get(list_blueprints))
-        .route("/api/blueprints/:id", get(read_blueprint))
+        .route("/api/blueprints/{id}", get(read_blueprint))
         .route("/api/work-items", get(list_work_items))
-        .route("/api/work-items/:id", get(read_work_item))
+        .route("/api/work-items/{id}", get(read_work_item))
         .route("/api/executions", get(list_executions))
-        .route("/api/executions/:id", get(read_execution))
+        .route("/api/executions/{id}", get(read_execution))
         .route("/api/reviews", get(list_reviews))
-        .route("/api/reviews/:id", get(read_review))
+        .route("/api/reviews/{id}", get(read_review))
         .route("/api/findings", get(list_findings))
-        .route("/api/findings/:id", get(read_finding))
+        .route("/api/findings/{id}", get(read_finding))
         .route("/api/insights", get(list_insights))
-        .route("/api/insights/:id", get(read_insight))
+        .route("/api/insights/{id}", get(read_insight))
         .route("/api/workers", get(list_workers))
-        .route("/api/workers/:id", get(read_worker))
+        .route("/api/workers/{id}", get(read_worker))
         .route("/api/activity", get(list_activity))
         .route("/api/activity/stream", get(activity_stream))
         .with_state(state)
