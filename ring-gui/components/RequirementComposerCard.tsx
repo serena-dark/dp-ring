@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useState } from "react";
 import { orchestrator } from "@ring-gui/api/client";
+import { TextField } from "@ring-gui/components/TextField";
 import { buildAcceptanceCriteria } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
 import { useRouter } from "@ring-gui/lib/router";
@@ -84,7 +85,7 @@ export default function RequirementComposerCard() {
   };
 
   const handleKeyDown = async (
-    event: KeyboardEvent<HTMLTextAreaElement>,
+    event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
       return;
@@ -122,21 +123,20 @@ export default function RequirementComposerCard() {
           </select>
         </div>
 
-        <div className="field" style={{ gridColumn: "1 / -1" }}>
-          <label htmlFor="requirement-card-input">Text</label>
-          <textarea
-            id="requirement-card-input"
-            className="composer-textarea"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              void handleKeyDown(event);
-            }}
-            placeholder={
-              "第一行标题\n正文描述\n- 验收条件"
-            }
-          />
-        </div>
+        <TextField
+          id="requirement-card-input"
+          label="Text"
+          multiline
+          rows={10}
+          value={draft}
+          onValueChange={setDraft}
+          onKeyDown={(event) => {
+            void handleKeyDown(event);
+          }}
+          placeholder={"第一行标题\n正文描述\n- 验收条件"}
+          controlClassName="composer-textarea"
+          containerStyle={{ gridColumn: "1 / -1" }}
+        />
       </div>
 
       <div className="button-row">

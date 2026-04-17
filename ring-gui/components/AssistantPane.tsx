@@ -1,6 +1,6 @@
 import {
   type FormEvent,
-  useEffect,
+  type KeyboardEvent,
   useMemo,
   useRef,
   useState,
@@ -16,6 +16,8 @@ import {
   ui,
   workflows,
 } from "@ring-gui/api/client";
+import { TextField } from "@ring-gui/components/TextField";
+import { titleize } from "@ring-gui/lib/format";
 import { useNotifications } from "@ring-gui/lib/notifications";
 import { useRouter } from "@ring-gui/lib/router";
 import {
@@ -23,30 +25,15 @@ import {
   getPageDescriptors,
   matchRoute,
 } from "@ring-gui/lib/routes";
-import { titleize } from "@ring-gui/lib/format";
 import type {
+  AssistantCreateFeedbackPayload,
   AssistantCreateRequirementPayload,
   AssistantCreateSessionPayload,
-  AssistantCreateFeedbackPayload,
   AssistantPlan,
   AssistantProposedAction,
   AssistantTransitionPayload,
   NavigationTarget,
 } from "@ring-gui/types/api";
-
-interface AssistantMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  text: string;
-  plan?: AssistantPlan | null;
-}
-
-function createMessageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function buildNavigationFromPlan(
   plan: AssistantPlan,
@@ -112,26 +99,13 @@ async function executeTransitionAction(payload: AssistantTransitionPayload) {
 
 export function AssistantPane() {
   const [draft, setDraft] = useState("");
-  const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [isPlanning, setIsPlanning] = useState(false);
-  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
-
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   const { notify } = useNotifications();
   const { pathname, search, hash, navigate } = useRouter();
   const route = matchRoute(pathname);
   const pageDescriptors = useMemo(() => getPageDescriptors(), []);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
-    }
-
-    textarea.style.height = "auto";
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 208)}px`;
-  }, [draft]);
 
   async function applyNavigation(plan: AssistantPlan) {
     const target = buildNavigationFromPlan(plan, pathname);
@@ -148,71 +122,7 @@ export function AssistantPane() {
     );
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const prompt = draft.trim();
-    if (!prompt || isPlanning) {
-      return;
-    }
-
-    const userMessage: AssistantMessage = {
-      id: createMessageId(),
-      role: "user",
-      text: prompt,
-    };
-
-    setMessages((current) => [...current, userMessage]);
-    setDraft("");
-    setIsPlanning(true);
-
-    const result = await ui.assistant.plan({
-      prompt,
-      current_route: {
-        path: pathname,
-        title: route?.title ?? null,
-        search,
-        hash,
-      },
-      pages: pageDescriptors,
-    });
-
-    setIsPlanning(false);
-
-    if (!result.ok) {
-      notify(result.error, "error");
-      setMessages((current) => [
-        ...current,
-        {
-          id: createMessageId(),
-          role: "system",
-          text: result.error,
-        },
-      ]);
-      return;
-    }
-
-    const assistantMessage: AssistantMessage = {
-      id: createMessageId(),
-      role: "assistant",
-      text: result.data.answer,
-      plan: result.data,
-    };
-
-    setMessages((current) => [...current, assistantMessage]);
-
-    if (result.data.navigation) {
-      await applyNavigation(result.data);
-    }
-  }
-
-  async function confirmAction(messageId: string, action: AssistantProposedAction) {
-    if (!action.ready || pendingActionId) {
-      return;
-    }
-
-    setPendingActionId(messageId);
-    let systemMessage = "Action completed.";
+  async function executeConfirmedAction(action: AssistantProposedAction) {
     let nextTarget:
       | {
           path: string;
@@ -225,7 +135,6 @@ export function AssistantPane() {
       const payload = action.payload as AssistantCreateRequirementPayload | null;
       if (!payload) {
         notify("Requirement payload is incomplete.", "error");
-        setPendingActionId(null);
         return;
       }
 
@@ -238,12 +147,11 @@ export function AssistantPane() {
 
       if (!result.ok) {
         notify(result.error, "error");
-        setPendingActionId(null);
         return;
       }
 
       const requirementId = result.data.requirement.id;
-      systemMessage = `Created requirement ${requirementId}.`;
+      const systemMessage = `Created requirement ${requirementId}.`;
       nextTarget = {
         path: `/requirements/${requirementId}`,
         hash: "summary",
@@ -253,7 +161,6 @@ export function AssistantPane() {
       const payload = action.payload as AssistantCreateSessionPayload | null;
       if (!payload || payload.task_ids.length === 0) {
         notify("Session payload is incomplete.", "error");
-        setPendingActionId(null);
         return;
       }
 
@@ -271,11 +178,10 @@ export function AssistantPane() {
 
       if (!result.ok) {
         notify(result.error, "error");
-        setPendingActionId(null);
         return;
       }
 
-      systemMessage = `Created session ${result.data.id}.`;
+      const systemMessage = `Created session ${result.data.id}.`;
       nextTarget = {
         path: `/sessions/${result.data.id}`,
         hash: "summary",
@@ -285,7 +191,6 @@ export function AssistantPane() {
       const payload = action.payload as AssistantCreateFeedbackPayload | null;
       if (!payload) {
         notify("Feedback payload is incomplete.", "error");
-        setPendingActionId(null);
         return;
       }
 
@@ -305,11 +210,10 @@ export function AssistantPane() {
 
       if (!result.ok) {
         notify(result.error, "error");
-        setPendingActionId(null);
         return;
       }
 
-      systemMessage = `Created feedback ${result.data.id}.`;
+      const systemMessage = `Created feedback ${result.data.id}.`;
       nextTarget = {
         path: "/feedback",
         hash: "records",
@@ -322,18 +226,16 @@ export function AssistantPane() {
       const payload = action.payload;
       if (!payload || !("artifact_type" in payload)) {
         notify("Transition payload is incomplete.", "error");
-        setPendingActionId(null);
         return;
       }
 
       const result = await executeTransitionAction(payload);
       if (!result.ok) {
         notify(result.error, "error");
-        setPendingActionId(null);
         return;
       }
 
-      systemMessage = `${titleize(payload.artifact_type)} ${payload.artifact_id} moved to ${titleize(payload.next_status)}.`;
+      const systemMessage = `${titleize(payload.artifact_type)} ${payload.artifact_id} moved to ${titleize(payload.next_status)}.`;
       const detailPath = artifactPath(payload.artifact_type, payload.artifact_id);
       nextTarget = detailPath
         ? {
@@ -345,16 +247,6 @@ export function AssistantPane() {
           };
       notify(systemMessage, "success");
     }
-
-    setPendingActionId(null);
-    setMessages((current) => [
-      ...current,
-      {
-        id: createMessageId(),
-        role: "system",
-        text: systemMessage,
-      },
-    ]);
 
     if (nextTarget) {
       navigate(
@@ -369,101 +261,115 @@ export function AssistantPane() {
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const prompt = draft.trim();
+    if (!prompt || isPlanning) {
+      return;
+    }
+
+    setDraft("");
+    setIsPlanning(true);
+
+    const result = await ui.assistant.plan({
+      prompt,
+      current_route: {
+        path: pathname,
+        title: route?.title ?? null,
+        search,
+        hash,
+      },
+      pages: pageDescriptors,
+    });
+
+    if (!result.ok) {
+      setIsPlanning(false);
+      notify(result.error, "error");
+      return;
+    }
+
+    const plan = result.data;
+
+    if (plan.mode === "mutate") {
+      const action = plan.proposed_action;
+      if (!action) {
+        setIsPlanning(false);
+        notify("Assistant did not return an action.", "error");
+        return;
+      }
+
+      if (!action.ready) {
+        setIsPlanning(false);
+        notify(
+          action.missing_inputs.length > 0
+            ? `Missing: ${action.missing_inputs.join(", ")}`
+            : "Action is not ready yet.",
+          "error",
+        );
+        return;
+      }
+
+      const confirmationMessage = [action.title, action.description]
+        .filter(Boolean)
+        .join("\n\n") || "Run assistant action?";
+      const approved =
+        typeof window === "undefined"
+          ? true
+          : window.confirm(confirmationMessage);
+
+      if (!approved) {
+        setIsPlanning(false);
+        return;
+      }
+
+      await executeConfirmedAction(action);
+      setIsPlanning(false);
+      return;
+    }
+
+    if (plan.navigation) {
+      await applyNavigation(plan);
+    }
+
+    if (plan.answer.trim()) {
+      notify(plan.answer, "info");
+    }
+
+    setIsPlanning(false);
+  }
+
+  function handleInputKeyDown(
+    event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing ||
+      !draft.trim() ||
+      isPlanning
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    formRef.current?.requestSubmit();
+  }
+
   return (
     <aside className="assistant-pane" aria-label="Global assistant">
-      <div className="assistant-pane-header">
-        <div>
-          <p className="eyebrow">Assistant</p>
-          <strong>Ask, jump, adjust</strong>
-        </div>
-        <span className="assistant-status">
-          {isPlanning ? "Planning" : "Ready"}
-        </span>
-      </div>
-
-      <div className="assistant-feed">
-        {messages.length === 0 ? (
-          <div className="assistant-message assistant-message-system">
-            <p className="assistant-message-text">
-              Ask about records, rankings, filters, or draft a safe action.
-            </p>
-          </div>
-        ) : (
-          messages.map((message) => (
-            <article
-              key={message.id}
-              className={`assistant-message assistant-message-${message.role}`}
-            >
-              <div className="assistant-message-head">
-                <strong>{titleize(message.role)}</strong>
-                {message.plan ? (
-                  <span className="assistant-confidence">
-                    {Math.round(message.plan.confidence * 100)}%
-                  </span>
-                ) : null}
-              </div>
-              <p className="assistant-message-text">{message.text}</p>
-
-              {message.plan?.mode === "mutate" ? (
-                <div className="assistant-action-card">
-                  <div className="assistant-action-head">
-                    <strong>{message.plan.proposed_action.title}</strong>
-                    <span className="assistant-action-mode">Confirm</span>
-                  </div>
-                  <p className="subtle">
-                    {message.plan.proposed_action.description}
-                  </p>
-                  {message.plan.proposed_action.missing_inputs.length > 0 ? (
-                    <p className="assistant-missing">
-                      Missing: {message.plan.proposed_action.missing_inputs.join(", ")}
-                    </p>
-                  ) : null}
-                  <div className="button-row">
-                    {(() => {
-                      const action = message.plan?.proposed_action;
-                      return (
-                    <button
-                      type="button"
-                      className="button button-small"
-                      disabled={
-                        !action?.ready ||
-                        pendingActionId === message.id
-                      }
-                      onClick={() =>
-                        action
-                          ? void confirmAction(message.id, action)
-                          : undefined
-                      }
-                    >
-                      {pendingActionId === message.id ? "Running..." : "Confirm"}
-                    </button>
-                      );
-                    })()}
-                  </div>
-                </div>
-              ) : null}
-            </article>
-          ))
-        )}
-      </div>
-
-      <form className="assistant-form" onSubmit={handleSubmit}>
-        <textarea
-          ref={textareaRef}
-          value={draft}
+      <form ref={formRef} className="assistant-form" onSubmit={handleSubmit}>
+        <TextField
+          multiline
           rows={3}
-          className="assistant-input"
-          placeholder="Ask about counts, filters, pages, or draft an action"
-          onChange={(event) => setDraft(event.target.value)}
+          autoResize
+          value={draft}
+          onValueChange={setDraft}
+          onKeyDown={handleInputKeyDown}
+          ariaLabel="Global assistant prompt"
+          disabled={isPlanning}
+          controlClassName="assistant-input"
         />
-        <div className="assistant-form-footer">
-          <p className="subtle assistant-context">
-            {route?.title ?? "Unknown"} · {pathname}
-          </p>
-          <button type="submit" className="button" disabled={isPlanning || !draft.trim()}>
-            {isPlanning ? "Thinking..." : "Send"}
-          </button>
-        </div>
       </form>
     </aside>
   );

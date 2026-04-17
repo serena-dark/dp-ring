@@ -6,9 +6,10 @@ import {
   tasks,
   workflows,
 } from "@ring-gui/api/client";
-import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { DataState } from "@ring-gui/components/DataState";
+import { FactoryTable } from "@ring-gui/components/FactoryTable";
 import { PageSection } from "@ring-gui/components/PageSection";
+import { TextField } from "@ring-gui/components/TextField";
 import {
   buildAcceptanceCriteria,
   sortByUpdatedAt,
@@ -222,25 +223,21 @@ export default function TaskList() {
         </summary>
         <div className="details-body">
           <form onSubmit={handleSubmit} className="field-grid">
-            <div className="field">
-              <label htmlFor="task-name">Name</label>
-              <input
-                id="task-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Implement ring frontend"
-              />
-            </div>
+            <TextField
+              id="task-name"
+              label="Name"
+              value={name}
+              onValueChange={setName}
+              placeholder="Implement ring frontend"
+            />
 
-            <div className="field">
-              <label htmlFor="task-type">Task type</label>
-              <input
-                id="task-type"
-                value={taskType}
-                onChange={(event) => setTaskType(event.target.value)}
-                placeholder="feature-implementation"
-              />
-            </div>
+            <TextField
+              id="task-type"
+              label="Task type"
+              value={taskType}
+              onValueChange={setTaskType}
+              placeholder="feature-implementation"
+            />
 
             <div className="field">
               <label htmlFor="task-requirement">Requirement</label>
@@ -327,81 +324,69 @@ export default function TaskList() {
               </select>
             </div>
 
-            <div className="field">
-              <label htmlFor="task-target-path">Target path</label>
-              <input
-                id="task-target-path"
-                value={targetPath}
-                onChange={(event) => setTargetPath(event.target.value)}
-                placeholder="ring-gui/components/Layout.tsx"
-              />
-            </div>
+            <TextField
+              id="task-target-path"
+              label="Target path"
+              value={targetPath}
+              onValueChange={setTargetPath}
+              placeholder="ring-gui/components/Layout.tsx"
+            />
 
-            <div className="field">
-              <label htmlFor="task-repo-root">Git repo root</label>
-              <input
-                id="task-repo-root"
-                value={repoRoot}
-                onChange={(event) => setRepoRoot(event.target.value)}
-                placeholder="."
-              />
-            </div>
+            <TextField
+              id="task-repo-root"
+              label="Git repo root"
+              value={repoRoot}
+              onValueChange={setRepoRoot}
+              placeholder="."
+            />
 
-            <div className="field">
-              <label htmlFor="task-build-command">Build command</label>
-              <input
-                id="task-build-command"
-                value={buildCommand}
-                onChange={(event) => setBuildCommand(event.target.value)}
-                placeholder="npm run build"
-              />
-            </div>
+            <TextField
+              id="task-build-command"
+              label="Build command"
+              value={buildCommand}
+              onValueChange={setBuildCommand}
+              placeholder="npm run build"
+            />
 
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label htmlFor="task-description">Description</label>
-              <textarea
-                id="task-description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="Describe the scope of work and expected output."
-              />
-            </div>
+            <TextField
+              id="task-description"
+              label="Description"
+              multiline
+              value={description}
+              onValueChange={setDescription}
+              placeholder="Describe the scope of work and expected output."
+              containerStyle={{ gridColumn: "1 / -1" }}
+            />
 
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label htmlFor="task-file-scope">
-                File scope (comma or newline separated)
-              </label>
-              <textarea
-                id="task-file-scope"
-                value={fileScopeText}
-                onChange={(event) => setFileScopeText(event.target.value)}
-                placeholder="ring-gui/components/Layout.tsx&#10;ring-gui/styles.css"
-              />
-            </div>
+            <TextField
+              id="task-file-scope"
+              label="File scope (comma or newline separated)"
+              multiline
+              value={fileScopeText}
+              onValueChange={setFileScopeText}
+              placeholder="ring-gui/components/Layout.tsx&#10;ring-gui/styles.css"
+              containerStyle={{ gridColumn: "1 / -1" }}
+            />
 
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label htmlFor="task-cleanup-paths">
-                Cleanup paths (optional, comma or newline separated)
-              </label>
-              <textarea
-                id="task-cleanup-paths"
-                value={cleanupPathsText}
-                onChange={(event) => setCleanupPathsText(event.target.value)}
-                placeholder="tmp/task-scratch"
-              />
-            </div>
+            <TextField
+              id="task-cleanup-paths"
+              label="Cleanup paths (optional, comma or newline separated)"
+              multiline
+              value={cleanupPathsText}
+              onValueChange={setCleanupPathsText}
+              placeholder="tmp/task-scratch"
+              containerStyle={{ gridColumn: "1 / -1" }}
+            />
 
-            <div className="field" style={{ gridColumn: "1 / -1" }}>
-              <label htmlFor="task-criteria">
-                Acceptance criteria (one per line)
-              </label>
-              <textarea
-                id="task-criteria"
-                value={criteriaText}
-                onChange={(event) => setCriteriaText(event.target.value)}
-                placeholder="API client implemented&#10;Dashboard routes render&#10;Build and lint pass"
-              />
-            </div>
+            <TextField
+              id="task-criteria"
+              label="Acceptance criteria (one per line)"
+              multiline
+              value={criteriaText}
+              onValueChange={setCriteriaText}
+              placeholder="API client implemented&#10;Dashboard routes render&#10;Build and lint pass"
+              containerStyle={{ gridColumn: "1 / -1" }}
+            />
 
             <div className="button-row" style={{ gridColumn: "1 / -1" }}>
               <button type="submit" className="button" disabled={submitting}>
