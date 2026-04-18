@@ -2,10 +2,17 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkpointAutomaticReusePolicyState,
+  checkpointBranchMetricsState,
   checkpointGovernancePressureState,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
+import {
+  continueFromCheckpoint,
+  createCheckpoint,
+  forkCheckpoint,
+  synthesizeCheckpoint,
+} from '../../ring/lib/checkpoint-tree.mjs';
 
 function buildWorkflowRun() {
   return {
@@ -38,6 +45,45 @@ function buildCheckpoint() {
         notes: 'Tight oversight for the next reuse.',
       },
     },
+  };
+}
+
+function buildCheckpointGraph() {
+  const root = createCheckpoint({
+    id: 'cp-root',
+    created_by: 'test-agent',
+    branch_id: 'main',
+    node_id: 'node-governance',
+    scope_ref: { kind: 'task', id: 'task-governance', path: 'tasks/task-governance.md' },
+  });
+  const left = forkCheckpoint(root, {
+    id: 'cp-left',
+    created_by: 'agent-left',
+    branch_id: ' left ',
+  });
+  const leftContinued = continueFromCheckpoint(left, {
+    id: 'cp-left-continued',
+    created_by: 'agent-left',
+  });
+  const right = forkCheckpoint(root, {
+    id: 'cp-right',
+    created_by: 'agent-right',
+    branch_id: 'right',
+  });
+  const synthesized = synthesizeCheckpoint([leftContinued, right], {
+    id: ' cp-synth ',
+    created_by: 'judge-agent',
+    branch_id: ' main.synth ',
+    synthesis_inputs: [' cp-left-continued ', 'cp-right', 'cp-right'],
+  });
+
+  return {
+    root,
+    left,
+    leftContinued,
+    right,
+    synthesized,
+    checkpoints: [root, left, leftContinued, right, synthesized],
   };
 }
 
@@ -75,6 +121,70 @@ describe('governance policy', () => {
     workflowRun.data.node_execution.checkpoint_ids = ['cp-root', 'cp-progress', 'cp-timeout'];
     workflowRun.data.node_execution.capsule_state.replay.status = 'idle';
     assert.equal(warmSemanticLineageState(workflowRun).hasWarmSemanticLineage, false);
+  });
+
+  it('derives divergence from normalized branch ancestry before any synthesis occurs', () => {
+    const { leftContinued, checkpoints } = buildCheckpointGraph();
+
+    assert.deepEqual(checkpointBranchMetricsState(leftContinued, checkpoints), {
+      checkpointId: 'cp-left-continued',
+      branchId: 'left',
+      parentCheckpointId: 'cp-left',
+      lineageDepth: 3,
+      lineageCheckpointIds: ['cp-root', 'cp-left', 'cp-left-continued'],
+      distinctLineageBranchIds: ['main', 'left'],
+      synthesisInputCount: 0,
+      synthesisInputIds: [],
+      synthesisInputBranchIds: [],
+      sharedSynthesisLineageDepth: 0,
+      divergenceScore: 1,
+      composabilityScore: 0,
+    });
+  });
+
+  it('derives divergence and composability from synthesized checkpoint lineage fan-in', () => {
+    const { synthesized, checkpoints } = buildCheckpointGraph();
+
+    assert.deepEqual(checkpointBranchMetricsState(synthesized, checkpoints), {
+      checkpointId: 'cp-synth',
+      branchId: 'main.synth',
+      parentCheckpointId: 'cp-left-continued',
+      lineageDepth: 4,
+      lineageCheckpointIds: ['cp-root', 'cp-left', 'cp-left-continued', 'cp-synth'],
+      distinctLineageBranchIds: ['main', 'left', 'main.synth'],
+      synthesisInputCount: 2,
+      synthesisInputIds: ['cp-left-continued', 'cp-right'],
+      synthesisInputBranchIds: ['left', 'right'],
+      sharedSynthesisLineageDepth: 1,
+      divergenceScore: 3,
+      composabilityScore: 2,
+    });
+  });
+
+  it('normalizes checkpoint ids when branch metrics receive a map keyed by padded ids', () => {
+    const { root, left, leftContinued, right, synthesized } = buildCheckpointGraph();
+    const byId = new Map([
+      [' cp-root ', root],
+      [' cp-left ', left],
+      [' cp-left-continued ', leftContinued],
+      [' cp-right ', right],
+      [' cp-synth ', synthesized],
+    ]);
+
+    assert.deepEqual(checkpointBranchMetricsState(synthesized, byId), {
+      checkpointId: 'cp-synth',
+      branchId: 'main.synth',
+      parentCheckpointId: 'cp-left-continued',
+      lineageDepth: 4,
+      lineageCheckpointIds: ['cp-root', 'cp-left', 'cp-left-continued', 'cp-synth'],
+      distinctLineageBranchIds: ['main', 'left', 'main.synth'],
+      synthesisInputCount: 2,
+      synthesisInputIds: ['cp-left-continued', 'cp-right'],
+      synthesisInputBranchIds: ['left', 'right'],
+      sharedSynthesisLineageDepth: 1,
+      divergenceScore: 3,
+      composabilityScore: 2,
+    });
   });
 
   it('normalizes adopted mainline checkpoint policy for automatic reuse decisions', () => {
