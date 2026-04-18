@@ -81,6 +81,56 @@ function createWorkflowRunCheckpoint(overrides = {}) {
   });
 }
 
+async function createIsolatedOrchestratorRing() {
+  const repoRoot = await mkdtemp(join(tmpdir(), 'ring-orchestrator-isolated-'));
+  const ringDir = join(repoRoot, '.ring');
+
+  await cp(resolve(import.meta.dirname, '../../.ring/schemas'), join(ringDir, 'schemas'), {
+    recursive: true,
+  });
+  await cp(resolve(import.meta.dirname, '../../.ring/config.json'), join(ringDir, 'config.json'));
+  await cp(resolve(import.meta.dirname, '../../.ring/orchestrator'), join(ringDir, 'orchestrator'), {
+    recursive: true,
+  });
+
+  const dirs = [
+    'sessions',
+    'requirements',
+    'milestones',
+    'tasks',
+    'workflows',
+    'workflow-runs',
+    'evaluations',
+    'feedback',
+    'distillations',
+    'registry',
+  ];
+  for (const dir of dirs) {
+    await mkdir(join(ringDir, dir), { recursive: true });
+  }
+
+  await writeFile(
+    join(ringDir, 'registry', 'leaderboard.json'),
+    JSON.stringify({ updated_at: '2026-04-08T00:00:00Z', rankings: {} }),
+  );
+
+  const ring = await createRing(repoRoot);
+  await ring.orchestrator.updateConfig({
+    automation: {
+      enabled: false,
+    },
+  });
+
+  return {
+    repoRoot,
+    ring,
+    async cleanup() {
+      ring.orchestrator.stop();
+      await rm(repoRoot, { recursive: true, force: true });
+    },
+  };
+}
+
 describe('orchestrator', { concurrency: 1 }, async () => {
   let tempDir;
   let ring;
@@ -2003,6 +2053,228 @@ Split milestone prerequisites into ready and blocked sets.
         status: 'archived',
       });
       assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+  });
+
+  it('prefers an unconstrained reusable workflow before consuming inherited mainline checkpoint policy', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const constrainedWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-constrained-policy-carryover',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing Constrained Policy Carryover',
+          description: 'Reusable testing workflow whose latest mainline checkpoint still carries a governed branch budget.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the governed verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(constrainedWorkflow.ok, true, JSON.stringify(constrainedWorkflow.errors));
+      await isolatedRing.registry.recordScore('testing', 'wf-testing-constrained-policy-carryover', 9.99);
+
+      const healthyWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-healthy-default',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing Healthy Default',
+          description: 'Reusable testing workflow with no inherited checkpoint constraints.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the healthy verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(healthyWorkflow.ok, true, JSON.stringify(healthyWorkflow.errors));
+
+      const constrainedCheckpoint = createWorkflowRunCheckpoint({
+        id: 'cp-testing-policy-carryover',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-testing-policy-carryover',
+        scope_ref: { kind: 'workflow-run', id: 'run-testing-policy-carryover', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          notes: 'The last mainline pass should remain reusable, but only after unconstrained templates are considered first.',
+        },
+      });
+      const checkpointResult = await isolatedRing.create('checkpoint', {
+        id: constrainedCheckpoint.id,
+        status: constrainedCheckpoint.status,
+        created_by: constrainedCheckpoint.created_by,
+        session_id: constrainedCheckpoint.session_id,
+        data: constrainedCheckpoint.data,
+      });
+      assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+      const constrainedRun = await isolatedRing.create('workflow-run', {
+        id: 'run-testing-policy-carryover',
+        status: 'completed',
+        created_by: 'session-runner',
+        session_id: 'session-testing-policy-carryover',
+        data: {
+          workflow_template_id: 'wf-testing-constrained-policy-carryover',
+          workflow_template_version: 1,
+          task_id: 'task-testing-policy-carryover',
+          current_step_index: 2,
+          callback: {
+            auth_scheme: 'bearer',
+            report_url: 'http://127.0.0.1:3100/api/workflow-run/run-testing-policy-carryover/report',
+            token: 'token-testing-policy-carryover',
+            signing_secret: 'signing-secret-testing-policy-carryover',
+            signature_algorithm: 'hmac-sha256',
+            key_version: 1,
+            status: 'completed',
+            issued_at: '2026-04-18T06:10:00Z',
+            prepared_at: '2026-04-18T06:10:05Z',
+            last_report_at: '2026-04-18T06:10:40Z',
+            last_retry_at: null,
+            last_rotated_at: null,
+            next_retry_at: null,
+            report_timeout_ms: 300000,
+            max_retries: 0,
+            retry_count: 0,
+            retry_backoff_ms: 1000,
+            signature_ttl_ms: 60000,
+            timeout_at: '2026-04-18T06:15:00Z',
+            packet_path: '.ring/orchestrator/runner/sessions/session-testing-policy-carryover/run-testing-policy-carryover.json',
+            allowed_worker_ids: ['worker-testing-policy'],
+            accepted_protocols: ['ring.workflow-run-report.v1'],
+            last_worker_id: 'worker-testing-policy',
+            last_protocol: 'ring.workflow-run-report.v1',
+            last_error: null,
+          },
+          reports: [
+            {
+              at: '2026-04-18T06:10:40Z',
+              status: 'completed',
+              actor: 'worker-testing-policy',
+              step_id: 'report',
+              note: 'Completed under inherited mainline checkpoint policy so the next automatic reuse should preserve branch budget when a healthy template exists.',
+              commit_sha: null,
+              worker_id: 'worker-testing-policy',
+              protocol: 'ring.workflow-run-report.v1',
+              authenticated: true,
+              outputs: {
+                summary: 'Constrained testing workflow completed successfully.',
+              },
+            },
+          ],
+          node_execution: {
+            node_id: 'n-testing-policy-carryover',
+            branch_id: 'main',
+            active_checkpoint_id: 'cp-testing-policy-carryover',
+            checkpoint_ids: ['cp-testing-policy-carryover'],
+            branch_event_ids: ['be-testing-policy-carryover-1'],
+            capsule_state: createEmptyCapsuleState({
+              node_id: 'n-testing-policy-carryover',
+              runtime_status: 'completed',
+              current_checkpoint_id: 'cp-testing-policy-carryover',
+            }),
+          },
+          steps: [
+            {
+              step_id: 'inspect',
+              status: 'completed',
+              started_at: '2026-04-18T06:10:10Z',
+              ended_at: '2026-04-18T06:10:20Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'verify',
+              status: 'completed',
+              started_at: '2026-04-18T06:10:21Z',
+              ended_at: '2026-04-18T06:10:30Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'report',
+              status: 'completed',
+              started_at: '2026-04-18T06:10:31Z',
+              ended_at: '2026-04-18T06:10:40Z',
+              outputs: {},
+              notes: 'Completed under branch_budget=1 inherited policy.',
+            },
+          ],
+        },
+      });
+      assert.equal(constrainedRun.ok, true, JSON.stringify(constrainedRun.errors));
+
+      const bundle = await isolatedRing.orchestrator.submitDispatchBundle({
+        bundle_protocol: 'ring.goal.v1',
+        bundle_version: '1',
+        artifact_transport: 'inline',
+        submitted_by: 'bundle-test',
+        payload: {
+          goal: {
+            title: 'Verify governance-aware reuse selection',
+            description:
+              'Verify that automatic reuse prefers a healthy reusable workflow before consuming carried mainline checkpoint policy from another testing template.',
+            acceptance_criteria: [
+              'A testing task is created',
+              'Automatic selection prefers the healthy reusable workflow first',
+            ],
+          },
+          environment: {
+            project_id: 'bundle-project-governance-preference',
+            repo_root: repoRoot,
+            target_scope: {
+              level: 'file',
+              include_paths: ['tests/governance-selection.test.mjs'],
+              exclude_paths: [],
+            },
+            constraints: {
+              must_build: false,
+              must_cleanup: false,
+              merge_policy: 'judge_then_merge',
+            },
+          },
+          materials: [
+            {
+              material_id: 'mat-governance-preference',
+              kind: 'preparation_package',
+              uri: null,
+              format: 'json',
+              mount_to: 'workspace/selection',
+              required: true,
+              inline_data: '{"selection":true}',
+            },
+          ],
+          context: {
+            artifact_refs: [],
+            brief_ref: null,
+          },
+        },
+      });
+
+      assert.equal(bundle.status, 'ready_queued');
+      assert.deepEqual(bundle.workflows.reused_workflow_ids, ['wf-testing-healthy-default']);
+      assert.equal(bundle.workflows.generated_workflow_ids.length, 0);
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-testing-healthy-default');
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+      assert.equal(bundle.workflows.waiting_tasks[0].registry_rank, null);
+      assert.equal(
+        bundle.workflows.waiting_tasks[0].registry_mode,
+        'governance_prefer_unconstrained',
+      );
+      assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+    } finally {
+      await isolated.cleanup();
     }
   });
 

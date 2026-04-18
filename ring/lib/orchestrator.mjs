@@ -294,6 +294,41 @@ function checkpointBranchBudget(checkpoint) {
     : null;
 }
 
+function checkpointAutomaticReusePolicy(checkpoint) {
+  const adoptionStatus = checkpointAdoptionStatus(checkpoint);
+  const workflowTightness = trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) || 'balanced';
+  const oversightStrength = trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) || 'normal';
+  const branchBudget = checkpointBranchBudget(checkpoint);
+  const constrained = adoptionStatus === 'mainline'
+    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || branchBudget !== null);
+
+  return {
+    constrained,
+    adoption_status: adoptionStatus,
+    workflow_tightness: constrained ? workflowTightness : null,
+    oversight_strength: constrained ? oversightStrength : null,
+    branch_budget: constrained ? branchBudget : null,
+  };
+}
+
+function describeAutomaticReusePolicy(policy) {
+  if (!policy?.constrained) {
+    return 'no active inherited checkpoint policy';
+  }
+
+  const labels = [
+    policy.workflow_tightness && policy.workflow_tightness !== 'balanced'
+      ? `${policy.workflow_tightness} workflow_tightness`
+      : null,
+    policy.oversight_strength && policy.oversight_strength !== 'normal'
+      ? `${policy.oversight_strength} oversight`
+      : null,
+    policy.branch_budget !== null ? `branch_budget=${policy.branch_budget}` : null,
+  ].filter(Boolean);
+
+  return labels.length > 0 ? labels.join(', ') : 'an inherited mainline checkpoint policy';
+}
+
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
   if (runRequiresExplicitWorkflowReuse(run)) {
     return {
@@ -1678,8 +1713,14 @@ function summarizeWorkflowRecommendation(recommendation) {
     return 'No ranked workflow recommendation yet.';
   }
 
-  const { workflow, rank, mode } = recommendation.recommended;
-  return `${workflow.id} (${workflow.data.name}) rank ${rank ?? '--'} via ${mode ?? 'direct selection'}.`;
+  const {
+    workflow,
+    rank,
+    mode,
+    note,
+  } = recommendation.recommended;
+  const summary = `${workflow.id} (${workflow.data.name}) rank ${rank ?? '--'} via ${mode ?? 'direct selection'}.`;
+  return note ? `${summary} ${note}` : summary;
 }
 
 function buildWorkflowPreparationPacket(
@@ -4718,6 +4759,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     );
     const latestWorkflowRuns = latestWorkflowRunsByTemplate(await ring.list('workflow-run'));
     const governanceBlocksByTemplate = new Map();
+    const automaticReusePolicyByTemplate = new Map();
     const recommendations = new Map();
 
     for (const workflow of activeWorkflows) {
@@ -4729,6 +4771,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       governanceBlocksByTemplate.set(
         workflow.id,
         workflowReuseGovernanceBlock(latestRun, activeCheckpoint),
+      );
+      automaticReusePolicyByTemplate.set(
+        workflow.id,
+        checkpointAutomaticReusePolicy(activeCheckpoint),
       );
     }
 
@@ -4747,23 +4793,65 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       );
 
       let registryPick = null;
+      let registryRankings = [];
       try {
+        registryRankings = await ring.registry.rank(task.data.task_type);
         registryPick = await ring.registry.select(task.data.task_type);
       } catch {
         registryPick = null;
       }
 
+      const registryRanksByWorkflowId = new Map(
+        registryRankings.map((entry, index) => [entry.workflow_id, index + 1]),
+      );
       const rankedWorkflow = registryPick?.workflow_id
         ? reusableCandidates.find((workflow) => workflow.id === registryPick.workflow_id) ?? null
         : null;
-      const recommendedWorkflow = rankedWorkflow ?? reusableCandidates[0] ?? null;
+      const defaultWorkflow = rankedWorkflow ?? reusableCandidates[0] ?? null;
+      let recommendedWorkflow = defaultWorkflow;
+      let recommendedRank = rankedWorkflow
+        ? registryPick?.rank ?? registryRanksByWorkflowId.get(rankedWorkflow.id) ?? null
+        : defaultWorkflow
+          ? registryRanksByWorkflowId.get(defaultWorkflow.id) ?? null
+          : null;
+      let recommendedMode = rankedWorkflow ? registryPick?.mode ?? null : null;
+      let recommendedNote = null;
+
+      if (defaultWorkflow) {
+        const recommendedPolicy = automaticReusePolicyByTemplate.get(defaultWorkflow.id) ?? {
+          constrained: false,
+        };
+        const unconstrainedReusableCandidates = reusableCandidates
+          .filter(
+            (workflow) =>
+              !(automaticReusePolicyByTemplate.get(workflow.id)?.constrained ?? false),
+          )
+          .sort((left, right) => {
+            const leftRank = registryRanksByWorkflowId.get(left.id) ?? Number.POSITIVE_INFINITY;
+            const rightRank = registryRanksByWorkflowId.get(right.id) ?? Number.POSITIVE_INFINITY;
+            return leftRank - rightRank;
+          });
+
+        if (recommendedPolicy.constrained && unconstrainedReusableCandidates.length > 0) {
+          const preferredWorkflow = unconstrainedReusableCandidates[0];
+          if (preferredWorkflow.id !== defaultWorkflow.id) {
+            recommendedWorkflow = preferredWorkflow;
+            recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
+            recommendedMode = 'governance_prefer_unconstrained';
+            recommendedNote =
+              `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} `
+              + `because ${defaultWorkflow.id} still carries ${describeAutomaticReusePolicy(recommendedPolicy)}.`;
+          }
+        }
+      }
 
       recommendations.set(task.id, {
         recommended: recommendedWorkflow
           ? {
               workflow: recommendedWorkflow,
-              rank: rankedWorkflow ? registryPick?.rank ?? null : null,
-              mode: rankedWorkflow ? registryPick?.mode ?? null : null,
+              rank: recommendedRank,
+              mode: recommendedMode,
+              note: recommendedNote,
             }
           : null,
         candidates: reusableCandidates.map((workflow) => ({
