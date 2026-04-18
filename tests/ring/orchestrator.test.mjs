@@ -89,6 +89,19 @@ async function createIsolatedOrchestratorRing() {
     recursive: true,
   });
   await cp(resolve(import.meta.dirname, '../../.ring/config.json'), join(ringDir, 'config.json'));
+  const configPath = join(ringDir, 'config.json');
+  const baseConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      ...baseConfig,
+      evolution: {
+        ...(baseConfig.evolution ?? {}),
+        explore_ratio: 0,
+      },
+    }, null, 2) + '\n',
+    'utf-8',
+  );
   await cp(resolve(import.meta.dirname, '../../.ring/orchestrator'), join(ringDir, 'orchestrator'), {
     recursive: true,
   });
@@ -2271,6 +2284,260 @@ Split milestone prerequisites into ready and blocked sets.
       assert.equal(
         bundle.workflows.waiting_tasks[0].registry_mode,
         'governance_prefer_unconstrained',
+      );
+      assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
+  it('prefers the lowest-cost constrained reusable workflow when every reusable option still carries inherited checkpoint policy', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const tightWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-tight-policy-carryover',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing Tight Policy Carryover',
+          description: 'Reusable testing workflow whose latest mainline checkpoint carries a tight, strong, low-budget policy.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the governed verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(tightWorkflow.ok, true, JSON.stringify(tightWorkflow.errors));
+      await isolatedRing.registry.recordScore('testing', 'wf-testing-tight-policy-carryover', 9.99);
+
+      const budgetWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-budget-policy-carryover',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing Budget Policy Carryover',
+          description: 'Reusable testing workflow whose latest mainline checkpoint keeps a lighter inherited branch budget.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the governed verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(budgetWorkflow.ok, true, JSON.stringify(budgetWorkflow.errors));
+      await isolatedRing.registry.recordScore('testing', 'wf-testing-budget-policy-carryover', 8.75);
+
+      async function createCompletedReusableRun({
+        workflowId,
+        runId,
+        checkpointId,
+        nodeId,
+        policySnapshot,
+        workerId,
+      }) {
+        const checkpoint = createWorkflowRunCheckpoint({
+          id: checkpointId,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: nodeId,
+          scope_ref: { kind: 'workflow-run', id: runId, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: policySnapshot,
+        });
+        const checkpointResult = await isolatedRing.create('checkpoint', {
+          id: checkpoint.id,
+          status: checkpoint.status,
+          created_by: checkpoint.created_by,
+          session_id: checkpoint.session_id,
+          data: checkpoint.data,
+        });
+        assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-18T06:20:00Z',
+              prepared_at: '2026-04-18T06:20:05Z',
+              last_report_at: '2026-04-18T06:20:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-18T06:25:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: [workerId],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: workerId,
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-18T06:20:40Z',
+                status: 'completed',
+                actor: workerId,
+                step_id: 'report',
+                note: policySnapshot.notes,
+                commit_sha: null,
+                worker_id: workerId,
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: 'main',
+              active_checkpoint_id: checkpointId,
+              checkpoint_ids: [checkpointId],
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: checkpointId,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-18T06:20:10Z',
+                ended_at: '2026-04-18T06:20:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-18T06:20:21Z',
+                ended_at: '2026-04-18T06:20:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'report',
+                status: 'completed',
+                started_at: '2026-04-18T06:20:31Z',
+                ended_at: '2026-04-18T06:20:40Z',
+                outputs: {},
+                notes: policySnapshot.notes,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      await createCompletedReusableRun({
+        workflowId: 'wf-testing-tight-policy-carryover',
+        runId: 'run-testing-tight-policy-carryover',
+        checkpointId: 'cp-testing-tight-policy-carryover',
+        nodeId: 'n-testing-tight-policy-carryover',
+        workerId: 'worker-testing-tight-policy',
+        policySnapshot: {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          notes: 'The prior pass tightened workflow oversight and left only branch_budget=1.',
+        },
+      });
+      await createCompletedReusableRun({
+        workflowId: 'wf-testing-budget-policy-carryover',
+        runId: 'run-testing-budget-policy-carryover',
+        checkpointId: 'cp-testing-budget-policy-carryover',
+        nodeId: 'n-testing-budget-policy-carryover',
+        workerId: 'worker-testing-budget-policy',
+        policySnapshot: {
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: 3,
+          notes: 'The prior pass still carries branch_budget=3, but no extra tightness or strong oversight.',
+        },
+      });
+
+      const bundle = await isolatedRing.orchestrator.submitDispatchBundle({
+        bundle_protocol: 'ring.goal.v1',
+        bundle_version: '1',
+        artifact_transport: 'inline',
+        submitted_by: 'bundle-test',
+        payload: {
+          goal: {
+            title: 'Verify constrained governance-cost selection',
+            description:
+              'Verify that automatic reuse chooses the least costly reusable testing workflow when every candidate still carries inherited checkpoint policy.',
+            acceptance_criteria: [
+              'A testing task is created',
+              'Automatic selection minimizes inherited governance cost when no unconstrained template exists',
+            ],
+          },
+          environment: {
+            project_id: 'bundle-project-governance-cost-selection',
+            repo_root: repoRoot,
+            target_scope: {
+              level: 'file',
+              include_paths: ['tests/governance-cost-selection.test.mjs'],
+              exclude_paths: [],
+            },
+            constraints: {
+              must_build: false,
+              must_cleanup: false,
+              merge_policy: 'judge_then_merge',
+            },
+          },
+          materials: [
+            {
+              material_id: 'mat-governance-cost-selection',
+              kind: 'preparation_package',
+              uri: null,
+              format: 'json',
+              mount_to: 'workspace/selection',
+              required: true,
+              inline_data: '{"selection":true}',
+            },
+          ],
+          context: {
+            artifact_refs: [],
+            brief_ref: null,
+          },
+        },
+      });
+
+      assert.equal(bundle.status, 'ready_queued');
+      assert.deepEqual(bundle.workflows.reused_workflow_ids, ['wf-testing-budget-policy-carryover']);
+      assert.equal(bundle.workflows.generated_workflow_ids.length, 0);
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-testing-budget-policy-carryover');
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+      assert.equal(bundle.workflows.waiting_tasks[0].registry_rank, 2);
+      assert.equal(
+        bundle.workflows.waiting_tasks[0].registry_mode,
+        'governance_minimize_policy_carryover',
       );
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
     } finally {
