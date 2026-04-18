@@ -455,6 +455,46 @@ function describeWorkflowGovernanceBlock(item) {
   return `${label} is governance-blocked for automatic reuse`;
 }
 
+function describeWorkflowGovernanceReenableGuidance(item) {
+  if (!item) {
+    return 'Keep automatic reuse disabled until governance records an explicit re-enable decision.';
+  }
+
+  const label = `${item.id} (${item.name})`;
+  const checkpointLabel = item.checkpoint_id
+    ? `active checkpoint ${item.checkpoint_id}`
+    : 'the active checkpoint';
+
+  if (item.reason === 'warm_semantic_lineage') {
+    return `${label} should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`;
+  }
+
+  if (item.reason === 'checkpoint_branch_budget_exhausted') {
+    return `${label} should stay off automatic reuse until a later mainline checkpoint clears branch_budget=${item.branch_budget ?? 0} at ${checkpointLabel}.`;
+  }
+
+  if (item.adoption_status === 'synthesized') {
+    return `${label} should stay off automatic reuse until ${checkpointLabel} is explicitly adopted into mainline.`;
+  }
+
+  if (item.adoption_status === 'discarded') {
+    return `${label} should stay off automatic reuse unless governance creates a later mainline checkpoint that supersedes discarded lineage at ${checkpointLabel}.`;
+  }
+
+  if (item.adoption_status) {
+    return `${label} should stay off automatic reuse until ${checkpointLabel} is explicitly adopted into mainline from ${item.adoption_status} lineage.`;
+  }
+
+  return `${label} should stay off automatic reuse until governance records an explicit re-enable decision.`;
+}
+
+function describeWorkflowGovernanceReenableGuidanceList(items = []) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'none';
+  }
+  return items.map((item) => describeWorkflowGovernanceReenableGuidance(item)).join('; ');
+}
+
 function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
   if (workflowSource !== 'custom_generated' || recommendation?.recommended) {
     return [];
@@ -1790,16 +1830,19 @@ function buildWorkflowPreparationPacket(
     ? tasks
         .map((task) => {
           const recommendation = recommendationsByTaskId.get(task.id);
+          const blockedCandidateItems = recommendation?.governance_blocked_candidates ?? [];
           const candidates = recommendation?.candidates?.length
             ? recommendation.candidates
                 .map((item) => `${item.id} (${item.name})`)
                 .join(', ')
             : 'none';
-          const blockedCandidates = recommendation?.governance_blocked_candidates?.length
-            ? recommendation.governance_blocked_candidates
+          const blockedCandidates = blockedCandidateItems.length
+            ? blockedCandidateItems
                 .map((item) => describeWorkflowGovernanceBlock(item))
                 .join('; ')
             : 'none';
+          const governanceReenableGuidance =
+            describeWorkflowGovernanceReenableGuidanceList(blockedCandidateItems);
           return [
             `- ${task.id}: ${task.data.name}`,
             `  task_type: ${task.data.task_type}`,
@@ -1808,6 +1851,7 @@ function buildWorkflowPreparationPacket(
             `  preferred_reuse: ${summarizeWorkflowRecommendation(recommendation)}`,
             `  reusable_candidates: ${candidates}`,
             `  governance_blocked_reuse: ${blockedCandidates}`,
+            `  governance_reenable_guidance: ${governanceReenableGuidance}`,
           ].join('\n');
         })
         .join('\n')
@@ -1841,7 +1885,7 @@ function buildWorkflowPreparationPacket(
       'Rules:',
       '- One task maps to one workflow.',
       '- Prefer previous templates ranked for the task type.',
-      '- If a reusable workflow is omitted as governance-blocked, do not silently reinstate it; only explicit governance should reuse warm-lineage templates.',
+      '- If a reusable workflow is omitted as governance-blocked, do not silently reinstate it; follow governance_reenable_guidance instead.',
       '- Use the task document and ready prerequisites as the planning context.',
       '- When finished, report completion back to the orchestrator.',
     ].join('\n'),
@@ -1867,6 +1911,8 @@ function buildWorkflowPreparationScaffold(
         const recommendation = recommendationsByTaskId.get(task.id);
         const preferred = recommendation?.recommended?.workflow ?? null;
         const blockedCandidates = recommendation?.governance_blocked_candidates ?? [];
+        const governanceReenableGuidance =
+          describeWorkflowGovernanceReenableGuidanceList(blockedCandidates);
         const action = preferred ? 'reuse' : 'create';
         const headerLines = [
           `## Task ${task.id}: ${task.data.name}`,
@@ -1890,6 +1936,7 @@ function buildWorkflowPreparationScaffold(
               ? `Governance-blocked reuse: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}`
               : 'Governance-blocked reuse: none',
           );
+          headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
           return headerLines.join('\n');
         }
 
@@ -1899,6 +1946,7 @@ function buildWorkflowPreparationScaffold(
           headerLines.push(
             `Governance note: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}.`,
           );
+          headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
           headerLines.push('');
         }
         headerLines.push('### Workflow Description');
