@@ -392,7 +392,7 @@ describe('session runner', async () => {
     assert.match(stagedMaterial, /runner/);
   });
 
-  it('inherits adopted mainline checkpoint policy when reusing a workflow template', async () => {
+  it('inherits and consumes adopted mainline checkpoint policy when reusing a workflow template', async () => {
     const workflowResult = await ring.create('workflow', {
       id: 'wf-runner-mainline-policy-reuse',
       status: 'active',
@@ -560,10 +560,11 @@ describe('session runner', async () => {
     const preparedCheckpoint = await ring.read('checkpoint', preparedRun.data.node_execution.active_checkpoint_id);
     assert.equal(preparedCheckpoint.data.policy_snapshot.workflow_tightness, 'tight');
     assert.equal(preparedCheckpoint.data.policy_snapshot.oversight_strength, 'strong');
-    assert.equal(preparedCheckpoint.data.policy_snapshot.branch_budget, 1);
+    assert.equal(preparedCheckpoint.data.policy_snapshot.branch_budget, 0);
     assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /Inherited mainline checkpoint policy/i);
     assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /cp-runner-mainline-policy-active/i);
     assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /branch_budget=1/i);
+    assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /leaving branch_budget=0/i);
     assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /tight oversight for the next reuse/i);
 
     const preparedPacketPath = join(tempDir, preparedRun.data.steps[0].outputs.execution_packet_path);
