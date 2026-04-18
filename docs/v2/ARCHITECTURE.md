@@ -48,6 +48,4 @@ Current maturity notes:
 - `services/orchestrator` and `services/knowledge-hub` still read from the same seeded snapshot and currently demonstrate ownership boundaries more than independent runtime behavior.
 - `services/runtime-broker` validates the runtime service shape and health surface, but it is not yet wired into a full control-plane execution path.
 - The managed Node-based stack at the repository root remains the practical integration surface while these Rust services are hardened.
-
-The Rust toolchain is not installed in the current execution environment, so the
-Rust services are scaffolded but not compiled in this turn.
+- The root regression suite now compiles `services/control-api` with `cargo check -p control-api` whenever the Rust toolchain is available, so the most active v2 Rust surface is part of routine validation instead of remaining an unverified scaffold.

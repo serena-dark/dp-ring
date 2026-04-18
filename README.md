@@ -40,8 +40,7 @@ Current maturity notes:
 - `services/orchestrator` and `services/knowledge-hub` still boot from the same seeded snapshot data and currently act as service-shape scaffolds rather than independent persistent services.
 - `services/runtime-broker` currently proves the runtime process shape and health endpoint, but not the full end-to-end control-plane flow.
 - The managed local stack (`npm run stack:verified-restart`) remains the practical integration path for day-to-day development while the Rust services continue to mature.
-
-Rust is not installed in the current execution environment, so the Rust services were scaffolded but not compiled here.
+- The root regression suite now compiles `services/control-api` with `cargo check -p control-api` whenever the Rust toolchain is available, so a green `npm test` validates the most active v2 Rust surface instead of leaving it purely scaffolded.
 
 ## Operator web
 
