@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse } from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
 
 const DEFAULT_CONFIG = {
@@ -269,17 +270,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function runRequiresExplicitWorkflowReuse(run) {
-  if (!run || run.status !== 'failed') {
-    return false;
-  }
-  const checkpointCount = run.data?.node_execution?.checkpoint_ids?.length ?? 0;
-  const replayStatus = trimString(run.data?.node_execution?.capsule_state?.replay?.status) || 'idle';
-  const sawProgressReport = Array.isArray(run.data?.reports)
-    && run.data.reports.some((report) => report?.status === 'progress');
-  return sawProgressReport && checkpointCount > 2 && replayStatus === 'requested';
 }
 
 function checkpointAdoptionStatus(checkpoint) {
