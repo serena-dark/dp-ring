@@ -527,13 +527,14 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
   const adoptionStatus = trimString(checkpoint?.data?.adoption_status);
   const workflowTightness = trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) ?? 'balanced';
   const oversightStrength = trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) ?? 'normal';
-  const branchBudget =
+  const inheritedBranchBudget =
     Number.isInteger(checkpoint?.data?.policy_snapshot?.branch_budget)
       && checkpoint.data.policy_snapshot.branch_budget >= 0
       ? checkpoint.data.policy_snapshot.branch_budget
       : null;
+  const branchBudget = inheritedBranchBudget === null ? null : Math.max(inheritedBranchBudget - 1, 0);
   const tightenedDispatch = adoptionStatus === 'mainline'
-    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || branchBudget !== null);
+    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || inheritedBranchBudget !== null);
   const inheritedNote = trimString(checkpoint?.data?.policy_snapshot?.notes);
 
   if (!tightenedDispatch) {
@@ -554,7 +555,7 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
   const policyLabels = [
     workflowTightness !== 'balanced' ? `${workflowTightness} workflow_tightness` : null,
     oversightStrength !== 'normal' ? `${oversightStrength} oversight` : null,
-    branchBudget !== null ? `branch_budget=${branchBudget}` : null,
+    inheritedBranchBudget !== null ? `branch_budget=${inheritedBranchBudget}` : null,
   ].filter(Boolean);
 
   return {
@@ -570,6 +571,9 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
     note:
       `Inherited mainline checkpoint policy from ${checkpointId} on workflow run ${workflowRunId}`
       + `${policyLabels.length ? ` (${policyLabels.join(', ')})` : ''}.`
+      + `${inheritedBranchBudget !== null
+        ? ` Automatic reuse consumed one branch slot, leaving branch_budget=${branchBudget}.`
+        : ''}`
       + `${inheritedNote ? ` Prior checkpoint note: ${inheritedNote}` : ''}`,
   };
 }
