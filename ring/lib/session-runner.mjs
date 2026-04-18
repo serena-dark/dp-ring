@@ -462,6 +462,118 @@ function workflowRunPolicySnapshot(task, governance = null) {
   };
 }
 
+function workflowRunRecencyValue(run) {
+  const parsed = Date.parse(run?.updated_at ?? run?.created_at ?? '');
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function latestWorkflowRunsByTemplate(workflowRuns = []) {
+  const latestByTemplate = new Map();
+  for (const run of workflowRuns) {
+    const workflowTemplateId = trimString(run?.data?.workflow_template_id);
+    if (!workflowTemplateId) {
+      continue;
+    }
+    const current = latestByTemplate.get(workflowTemplateId);
+    if (!current || workflowRunRecencyValue(run) >= workflowRunRecencyValue(current)) {
+      latestByTemplate.set(workflowTemplateId, run);
+    }
+  }
+  return latestByTemplate;
+}
+
+async function mainlineCheckpointReuseDispatchGovernanceContext(
+  ring,
+  workflowRun,
+  latestPriorWorkflowRunsByTemplate = new Map(),
+) {
+  const workflowTemplateId = trimString(workflowRun?.data?.workflow_template_id);
+  const priorRun = workflowTemplateId
+    ? latestPriorWorkflowRunsByTemplate.get(workflowTemplateId) ?? null
+    : null;
+  const workflowRunId = trimString(priorRun?.id);
+  if (!workflowTemplateId || !priorRun || priorRun.status !== 'completed') {
+    return {
+      source: null,
+      reasons: [],
+      workflowRunId,
+      checkpointId: null,
+      adoptionStatus: null,
+      tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
+    };
+  }
+
+  const checkpointId = trimString(priorRun?.data?.node_execution?.active_checkpoint_id);
+  if (!checkpointId) {
+    return {
+      source: null,
+      reasons: [],
+      workflowRunId,
+      checkpointId: null,
+      adoptionStatus: null,
+      tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
+    };
+  }
+
+  const checkpoint = await ring.read('checkpoint', checkpointId).catch(() => null);
+  const adoptionStatus = trimString(checkpoint?.data?.adoption_status);
+  const workflowTightness = trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) ?? 'balanced';
+  const oversightStrength = trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) ?? 'normal';
+  const branchBudget =
+    Number.isInteger(checkpoint?.data?.policy_snapshot?.branch_budget)
+      && checkpoint.data.policy_snapshot.branch_budget >= 0
+      ? checkpoint.data.policy_snapshot.branch_budget
+      : null;
+  const tightenedDispatch = adoptionStatus === 'mainline'
+    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || branchBudget !== null);
+  const inheritedNote = trimString(checkpoint?.data?.policy_snapshot?.notes);
+
+  if (!tightenedDispatch) {
+    return {
+      source: null,
+      reasons: [],
+      workflowRunId,
+      checkpointId,
+      adoptionStatus,
+      tightenedDispatch: false,
+      workflowTightness: null,
+      oversightStrength: null,
+      branchBudget: null,
+      note: null,
+    };
+  }
+
+  const policyLabels = [
+    workflowTightness !== 'balanced' ? `${workflowTightness} workflow_tightness` : null,
+    oversightStrength !== 'normal' ? `${oversightStrength} oversight` : null,
+    branchBudget !== null ? `branch_budget=${branchBudget}` : null,
+  ].filter(Boolean);
+
+  return {
+    source: 'mainline_checkpoint_policy',
+    reasons: ['mainline_checkpoint_policy'],
+    workflowRunId,
+    checkpointId,
+    adoptionStatus,
+    tightenedDispatch: true,
+    workflowTightness,
+    oversightStrength,
+    branchBudget,
+    note:
+      `Inherited mainline checkpoint policy from ${checkpointId} on workflow run ${workflowRunId}`
+      + `${policyLabels.length ? ` (${policyLabels.join(', ')})` : ''}.`
+      + `${inheritedNote ? ` Prior checkpoint note: ${inheritedNote}` : ''}`,
+  };
+}
+
 async function semanticCheckpointDispatchGovernanceContext(ring, task) {
   const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
   if (!parentTaskId) {
@@ -1144,6 +1256,11 @@ export function createSessionRunner(
       return session;
     }
 
+    const currentRunIds = new Set(workflowRuns.map((run) => run.id));
+    const latestPriorWorkflowRunsByTemplate = latestWorkflowRunsByTemplate(
+      (await ring.list('workflow-run')).filter((run) => !currentRunIds.has(run.id)),
+    );
+
     let preparedCount = 0;
     const sessionEvents = [];
 
@@ -1157,10 +1274,17 @@ export function createSessionRunner(
       const bundle = bundlesByTaskId.get(task.id) ?? null;
       const preparedAt = nowIso();
       const lineageGovernance = await semanticCheckpointDispatchGovernanceContext(ring, task);
+      const inheritedCheckpointGovernance = await mainlineCheckpointReuseDispatchGovernanceContext(
+        ring,
+        run,
+        latestPriorWorkflowRunsByTemplate,
+      );
       const sessionGovernance = governanceBlockedReuseDispatchContext(session);
       const governance = lineageGovernance.tightenedDispatch
         ? lineageGovernance
-        : sessionGovernance;
+        : inheritedCheckpointGovernance.tightenedDispatch
+          ? inheritedCheckpointGovernance
+          : sessionGovernance;
       const callback = createCallbackState(
         run,
         runnerConfig,
