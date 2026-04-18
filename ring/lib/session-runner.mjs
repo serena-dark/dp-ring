@@ -19,7 +19,10 @@ import {
   requestReplay,
   completeReplay,
 } from './node-capsule.mjs';
-import { warmSemanticLineageState } from './governance-policy.mjs';
+import {
+  checkpointAutomaticReusePolicyState,
+  warmSemanticLineageState,
+} from './governance-policy.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -525,26 +528,19 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
   }
 
   const checkpoint = await ring.read('checkpoint', checkpointId).catch(() => null);
-  const adoptionStatus = trimString(checkpoint?.data?.adoption_status);
-  const workflowTightness = trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) ?? 'balanced';
-  const oversightStrength = trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) ?? 'normal';
-  const inheritedBranchBudget =
-    Number.isInteger(checkpoint?.data?.policy_snapshot?.branch_budget)
-      && checkpoint.data.policy_snapshot.branch_budget >= 0
-      ? checkpoint.data.policy_snapshot.branch_budget
-      : null;
+  const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
+  const normalizedCheckpointId = checkpointPolicy.checkpointId ?? checkpointId;
+  const inheritedBranchBudget = checkpointPolicy.branchBudget;
   const branchBudget = inheritedBranchBudget === null ? null : Math.max(inheritedBranchBudget - 1, 0);
-  const tightenedDispatch = adoptionStatus === 'mainline'
-    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || inheritedBranchBudget !== null);
-  const inheritedNote = trimString(checkpoint?.data?.policy_snapshot?.notes);
+  const tightenedDispatch = checkpointPolicy.constrained;
 
   if (!tightenedDispatch) {
     return {
       source: null,
       reasons: [],
       workflowRunId,
-      checkpointId,
-      adoptionStatus,
+      checkpointId: normalizedCheckpointId,
+      adoptionStatus: checkpointPolicy.adoptionStatus,
       tightenedDispatch: false,
       workflowTightness: null,
       oversightStrength: null,
@@ -554,8 +550,12 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
   }
 
   const policyLabels = [
-    workflowTightness !== 'balanced' ? `${workflowTightness} workflow_tightness` : null,
-    oversightStrength !== 'normal' ? `${oversightStrength} oversight` : null,
+    checkpointPolicy.workflowTightness !== 'balanced'
+      ? `${checkpointPolicy.workflowTightness} workflow_tightness`
+      : null,
+    checkpointPolicy.oversightStrength !== 'normal'
+      ? `${checkpointPolicy.oversightStrength} oversight`
+      : null,
     inheritedBranchBudget !== null ? `branch_budget=${inheritedBranchBudget}` : null,
   ].filter(Boolean);
 
@@ -563,19 +563,19 @@ async function mainlineCheckpointReuseDispatchGovernanceContext(
     source: 'mainline_checkpoint_policy',
     reasons: ['mainline_checkpoint_policy'],
     workflowRunId,
-    checkpointId,
-    adoptionStatus,
+    checkpointId: normalizedCheckpointId,
+    adoptionStatus: checkpointPolicy.adoptionStatus,
     tightenedDispatch: true,
-    workflowTightness,
-    oversightStrength,
+    workflowTightness: checkpointPolicy.workflowTightness,
+    oversightStrength: checkpointPolicy.oversightStrength,
     branchBudget,
     note:
-      `Inherited mainline checkpoint policy from ${checkpointId} on workflow run ${workflowRunId}`
+      `Inherited mainline checkpoint policy from ${normalizedCheckpointId} on workflow run ${workflowRunId}`
       + `${policyLabels.length ? ` (${policyLabels.join(', ')})` : ''}.`
       + `${inheritedBranchBudget !== null
         ? ` Automatic reuse consumed one branch slot, leaving branch_budget=${branchBudget}.`
         : ''}`
-      + `${inheritedNote ? ` Prior checkpoint note: ${inheritedNote}` : ''}`,
+      + `${checkpointPolicy.notes ? ` Prior checkpoint note: ${checkpointPolicy.notes}` : ''}`,
   };
 }
 
