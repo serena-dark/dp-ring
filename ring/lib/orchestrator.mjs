@@ -431,7 +431,7 @@ function buildSessionGovernanceContext(waitingTasks = []) {
           checkpoint_id: trimString(candidate?.checkpoint_id) || null,
           adoption_status: trimString(candidate?.adoption_status) || null,
           branch_budget:
-            typeof candidate?.branch_budget === 'number' && Number.isFinite(candidate.branch_budget)
+            Number.isInteger(candidate?.branch_budget) && candidate.branch_budget >= 0
               ? candidate.branch_budget
               : null,
           workflow_tightness: trimString(candidate?.workflow_tightness) || null,
