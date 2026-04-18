@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse } from './governance-policy.mjs';
+import {
+  checkpointAutomaticReusePolicyState,
+  workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
+} from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
 
 const DEFAULT_CONFIG = {
@@ -272,32 +275,15 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
   return latestByTemplate;
 }
 
-function checkpointAdoptionStatus(checkpoint) {
-  const adoptionStatus = trimString(checkpoint?.data?.adoption_status);
-  return adoptionStatus || null;
-}
-
-function checkpointBranchBudget(checkpoint) {
-  const branchBudget = checkpoint?.data?.policy_snapshot?.branch_budget;
-  return typeof branchBudget === 'number' && Number.isFinite(branchBudget)
-    ? branchBudget
-    : null;
-}
-
 function checkpointAutomaticReusePolicy(checkpoint) {
-  const adoptionStatus = checkpointAdoptionStatus(checkpoint);
-  const workflowTightness = trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) || 'balanced';
-  const oversightStrength = trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) || 'normal';
-  const branchBudget = checkpointBranchBudget(checkpoint);
-  const constrained = adoptionStatus === 'mainline'
-    && (workflowTightness !== 'balanced' || oversightStrength !== 'normal' || branchBudget !== null);
+  const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
 
   return {
-    constrained,
-    adoption_status: adoptionStatus,
-    workflow_tightness: constrained ? workflowTightness : null,
-    oversight_strength: constrained ? oversightStrength : null,
-    branch_budget: constrained ? branchBudget : null,
+    constrained: checkpointPolicy.constrained,
+    adoption_status: checkpointPolicy.adoptionStatus,
+    workflow_tightness: checkpointPolicy.constrained ? checkpointPolicy.workflowTightness : null,
+    oversight_strength: checkpointPolicy.constrained ? checkpointPolicy.oversightStrength : null,
+    branch_budget: checkpointPolicy.constrained ? checkpointPolicy.branchBudget : null,
   };
 }
 
@@ -375,34 +361,37 @@ function describeAutomaticReusePolicy(policy) {
 }
 
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
+  const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
+  const checkpointId = checkpointPolicy.checkpointId
+    || trimString(run?.data?.node_execution?.active_checkpoint_id)
+    || null;
+
   if (runRequiresExplicitWorkflowReuse(run)) {
     return {
       reason: 'warm_semantic_lineage',
-      checkpoint_id: trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
-      adoption_status: checkpointAdoptionStatus(checkpoint),
+      checkpoint_id: checkpointId,
+      adoption_status: checkpointPolicy.adoptionStatus,
     };
   }
 
-  const branchBudget = checkpointBranchBudget(checkpoint);
-  if (branchBudget !== null && branchBudget <= 0) {
+  if (checkpointPolicy.branchBudget !== null && checkpointPolicy.branchBudget <= 0) {
     return {
       reason: 'checkpoint_branch_budget_exhausted',
-      checkpoint_id:
-        trimString(checkpoint?.id) || trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
-      adoption_status: checkpointAdoptionStatus(checkpoint),
-      branch_budget: branchBudget,
-      workflow_tightness: trimString(checkpoint?.data?.policy_snapshot?.workflow_tightness) || null,
-      oversight_strength: trimString(checkpoint?.data?.policy_snapshot?.oversight_strength) || null,
+      checkpoint_id: checkpointId,
+      adoption_status: checkpointPolicy.adoptionStatus,
+      branch_budget: checkpointPolicy.branchBudget,
+      workflow_tightness:
+        checkpointPolicy.workflowTightness !== 'balanced' ? checkpointPolicy.workflowTightness : null,
+      oversight_strength:
+        checkpointPolicy.oversightStrength !== 'normal' ? checkpointPolicy.oversightStrength : null,
     };
   }
 
-  const adoptionStatus = checkpointAdoptionStatus(checkpoint);
-  if (adoptionStatus && adoptionStatus !== 'mainline') {
+  if (checkpointPolicy.adoptionStatus && checkpointPolicy.adoptionStatus !== 'mainline') {
     return {
-      reason: `checkpoint_${adoptionStatus}`,
-      checkpoint_id:
-        trimString(checkpoint?.id) || trimString(run?.data?.node_execution?.active_checkpoint_id) || null,
-      adoption_status: adoptionStatus,
+      reason: `checkpoint_${checkpointPolicy.adoptionStatus}`,
+      checkpoint_id: checkpointId,
+      adoption_status: checkpointPolicy.adoptionStatus,
     };
   }
 

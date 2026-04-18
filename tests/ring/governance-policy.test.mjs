@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  checkpointAutomaticReusePolicyState,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
@@ -19,6 +20,21 @@ function buildWorkflowRun() {
             status: 'requested',
           },
         },
+      },
+    },
+  };
+}
+
+function buildCheckpoint() {
+  return {
+    id: 'cp-mainline-policy',
+    data: {
+      adoption_status: 'mainline',
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        notes: 'Tight oversight for the next reuse.',
       },
     },
   };
@@ -58,6 +74,63 @@ describe('governance policy', () => {
     workflowRun.data.node_execution.checkpoint_ids = ['cp-root', 'cp-progress', 'cp-timeout'];
     workflowRun.data.node_execution.capsule_state.replay.status = 'idle';
     assert.equal(warmSemanticLineageState(workflowRun).hasWarmSemanticLineage, false);
+  });
+
+  it('normalizes adopted mainline checkpoint policy for automatic reuse decisions', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.id = ' cp-mainline-policy ';
+    checkpoint.data.adoption_status = ' mainline ';
+    checkpoint.data.policy_snapshot.workflow_tightness = ' tight ';
+    checkpoint.data.policy_snapshot.oversight_strength = ' strong ';
+    checkpoint.data.policy_snapshot.notes = ' Tight oversight for the next reuse. ';
+
+    assert.deepEqual(checkpointAutomaticReusePolicyState(checkpoint), {
+      checkpointId: 'cp-mainline-policy',
+      adoptionStatus: 'mainline',
+      workflowTightness: 'tight',
+      oversightStrength: 'strong',
+      branchBudget: 1,
+      notes: 'Tight oversight for the next reuse.',
+      constrained: true,
+    });
+  });
+
+  it('keeps non-mainline checkpoint lineage unconstrained while preserving normalized governance fields', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.id = ' cp-synth-policy ';
+    checkpoint.data.adoption_status = ' synthesized ';
+    checkpoint.data.policy_snapshot.workflow_tightness = ' balanced ';
+    checkpoint.data.policy_snapshot.oversight_strength = ' normal ';
+    checkpoint.data.policy_snapshot.branch_budget = 0;
+    checkpoint.data.policy_snapshot.notes = ' waiting for adoption ';
+
+    assert.deepEqual(checkpointAutomaticReusePolicyState(checkpoint), {
+      checkpointId: 'cp-synth-policy',
+      adoptionStatus: 'synthesized',
+      workflowTightness: 'balanced',
+      oversightStrength: 'normal',
+      branchBudget: 0,
+      notes: 'waiting for adoption',
+      constrained: false,
+    });
+  });
+
+  it('drops invalid branch budgets while preserving default automatic reuse policy levels', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.data.policy_snapshot.branch_budget = 1.5;
+    checkpoint.data.policy_snapshot.workflow_tightness = ' ';
+    checkpoint.data.policy_snapshot.oversight_strength = null;
+    checkpoint.data.policy_snapshot.notes = '   ';
+
+    assert.deepEqual(checkpointAutomaticReusePolicyState(checkpoint), {
+      checkpointId: 'cp-mainline-policy',
+      adoptionStatus: 'mainline',
+      workflowTightness: 'balanced',
+      oversightStrength: 'normal',
+      branchBudget: null,
+      notes: null,
+      constrained: false,
+    });
   });
 
   it('requires failed status before automatic reuse is governance-blocked', () => {
