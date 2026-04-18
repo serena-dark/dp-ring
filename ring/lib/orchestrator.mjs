@@ -394,17 +394,52 @@ function describeWaitingTaskGovernance(waitingTask) {
   return blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ');
 }
 
+function governanceBatchIdentityEntries(waitingTasks = []) {
+  return waitingTasks.flatMap((item) =>
+    Array.isArray(item?.governance_blocked_reuse)
+      ? item.governance_blocked_reuse
+          .map((candidate) => {
+            const reason = trimString(candidate?.reason);
+            if (!reason) {
+              return null;
+            }
+            return {
+              reason,
+              workflow_template_id:
+                trimString(candidate?.id)
+                || trimString(candidate?.workflow_template_id)
+                || trimString(candidate?.name)
+                || null,
+              checkpoint_id: trimString(candidate?.checkpoint_id) || null,
+              adoption_status: trimString(candidate?.adoption_status) || null,
+              branch_budget:
+                Number.isInteger(candidate?.branch_budget) && candidate.branch_budget >= 0
+                  ? candidate.branch_budget
+                  : null,
+              workflow_tightness: trimString(candidate?.workflow_tightness) || null,
+              oversight_strength: trimString(candidate?.oversight_strength) || null,
+            };
+          })
+          .filter(Boolean)
+      : [],
+  );
+}
+
 function governanceBatchSignature(waitingTasks = []) {
-  const reasons = [...new Set(
-    waitingTasks.flatMap((item) =>
-      Array.isArray(item?.governance_blocked_reuse)
-        ? item.governance_blocked_reuse
-            .map((candidate) => trimString(candidate?.reason))
-            .filter(Boolean)
-        : [],
-    ),
-  )].sort();
-  return reasons.length > 0 ? reasons.join('+') : null;
+  const identities = governanceBatchIdentityEntries(waitingTasks);
+  if (identities.length === 0) {
+    return null;
+  }
+
+  const reasonSignature = [...new Set(identities.map((item) => item.reason))].sort().join('+');
+  const identityFingerprint = createHash('sha256')
+    .update(
+      [...new Set(identities.map((item) => JSON.stringify(item)))].sort().join('|'),
+      'utf-8',
+    )
+    .digest('hex')
+    .slice(0, 12);
+  return `${reasonSignature}:${identityFingerprint}`;
 }
 
 function buildSessionGovernanceContext(waitingTasks = []) {
