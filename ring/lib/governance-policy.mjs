@@ -80,6 +80,57 @@ function sharedLineageDepth(lineages) {
   }
 }
 
+function evidenceRefKey(ref) {
+  const kind = trimString(ref?.kind);
+  const pointer = trimString(ref?.ref);
+  if (!kind || !pointer) {
+    return null;
+  }
+  const digest = trimString(ref?.digest) ?? '';
+  return `${kind}:${pointer}:${digest}`;
+}
+
+function replayFrictionScore(replayStatus) {
+  switch (replayStatus) {
+    case 'idle':
+      return 0;
+    case 'completed':
+      return 2;
+    case 'running':
+    case 'replaying':
+      return 8;
+    case 'requested':
+      return 14;
+    case 'failed':
+    case 'error':
+      return 16;
+    default:
+      return replayStatus ? 6 : 0;
+  }
+}
+
+function adoptionForceBoost(adoptionStatus) {
+  switch (adoptionStatus) {
+    case 'mainline':
+      return 8;
+    case 'synthesized':
+      return 4;
+    case 'discarded':
+      return -20;
+    default:
+      return 0;
+  }
+}
+
+function governanceConstraintDrag(governancePressure) {
+  if (!governancePressure?.constrained) {
+    return 0;
+  }
+  return governancePressure.branchBudgetPressure
+    + Math.max(0, governancePressure.workflowTightnessLevel - 1) * 4
+    + Math.max(0, governancePressure.oversightStrengthLevel - 1) * 3;
+}
+
 export function checkpointBranchMetricsState(checkpoint, checkpoints = []) {
   const checkpointId = trimString(checkpoint?.id);
   const branchId = trimString(checkpoint?.data?.branch_id);
@@ -176,6 +227,55 @@ export function checkpointGovernancePressureState(checkpoint) {
     governancePressureScore: policy.constrained
       ? 1000 + (workflowTightnessLevel * 100) + (oversightStrengthLevel * 10) + budgetPressure
       : 0,
+  };
+}
+
+export function checkpointEffectiveForceState(checkpoint, checkpoints = []) {
+  const branchMetrics = checkpointBranchMetricsState(checkpoint, checkpoints);
+  const governancePressure = checkpointGovernancePressureState(checkpoint);
+  const replayStatus = trimString(checkpoint?.data?.replay_state?.status) ?? 'idle';
+  const evidenceCount = uniqueTrimmedStrings(
+    (checkpoint?.data?.evidence_refs ?? []).map((ref) => evidenceRefKey(ref)),
+  ).length;
+  const evidenceMomentum = Math.min(evidenceCount, 5) * 8;
+  const progressMomentum = Math.max(0, branchMetrics.lineageDepth - 1) * 6;
+  const composabilityBoost = branchMetrics.composabilityScore * 5;
+  const adoptionBoost = adoptionForceBoost(governancePressure.adoptionStatus);
+  const divergenceDrag = branchMetrics.divergenceScore * 4;
+  const constraintDrag = governanceConstraintDrag(governancePressure);
+  const replayFriction = replayFrictionScore(replayStatus);
+  const effectiveForceScore = Math.max(
+    0,
+    evidenceMomentum
+      + progressMomentum
+      + composabilityBoost
+      + adoptionBoost
+      - divergenceDrag
+      - constraintDrag
+      - replayFriction,
+  );
+
+  return {
+    checkpointId: branchMetrics.checkpointId,
+    branchId: branchMetrics.branchId,
+    adoptionStatus: governancePressure.adoptionStatus,
+    workflowTightness: governancePressure.workflowTightness,
+    oversightStrength: governancePressure.oversightStrength,
+    branchBudget: governancePressure.branchBudget,
+    replayStatus,
+    evidenceCount,
+    lineageDepth: branchMetrics.lineageDepth,
+    divergenceScore: branchMetrics.divergenceScore,
+    composabilityScore: branchMetrics.composabilityScore,
+    governancePressureScore: governancePressure.governancePressureScore,
+    evidenceMomentum,
+    progressMomentum,
+    composabilityBoost,
+    adoptionBoost,
+    divergenceDrag,
+    constraintDrag,
+    replayFriction,
+    effectiveForceScore,
   };
 }
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
+  checkpointEffectiveForceState,
   checkpointGovernancePressureState,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
@@ -301,6 +302,113 @@ describe('governance policy', () => {
     assert.equal(
       checkpointGovernancePressureState(higherBudgetCheckpoint).governancePressureScore
       < checkpointGovernancePressureState(lowBudgetCheckpoint).governancePressureScore,
+      true,
+    );
+  });
+
+  it('computes effective force from lineage progress evidence accumulation and synthesis composability', () => {
+    const { synthesized, checkpoints } = buildCheckpointGraph();
+    synthesized.data.evidence_refs = [
+      { kind: 'artifact', ref: 'artifacts/branch-a.json', digest: 'sha:a' },
+      { kind: 'artifact', ref: 'artifacts/branch-b.json', digest: 'sha:b' },
+    ];
+
+    assert.deepEqual(checkpointEffectiveForceState(synthesized, checkpoints), {
+      checkpointId: 'cp-synth',
+      branchId: 'main.synth',
+      adoptionStatus: 'synthesized',
+      workflowTightness: 'balanced',
+      oversightStrength: 'normal',
+      branchBudget: null,
+      replayStatus: 'idle',
+      evidenceCount: 2,
+      lineageDepth: 4,
+      divergenceScore: 3,
+      composabilityScore: 2,
+      governancePressureScore: 0,
+      evidenceMomentum: 16,
+      progressMomentum: 18,
+      composabilityBoost: 10,
+      adoptionBoost: 4,
+      divergenceDrag: 12,
+      constraintDrag: 0,
+      replayFriction: 0,
+      effectiveForceScore: 36,
+    });
+  });
+
+  it('normalizes replay state and deduplicates evidence refs before scoring effective force', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.id = ' cp-force-normalized ';
+    checkpoint.data.branch_id = ' mainline ';
+    checkpoint.data.adoption_status = ' mainline ';
+    checkpoint.data.policy_snapshot.workflow_tightness = ' balanced ';
+    checkpoint.data.policy_snapshot.oversight_strength = ' normal ';
+    checkpoint.data.policy_snapshot.branch_budget = null;
+    checkpoint.data.replay_state = { status: ' completed ' };
+    checkpoint.data.evidence_refs = [
+      { kind: ' artifact ', ref: ' evidence/summary.json ', digest: ' sha:1 ' },
+      { kind: 'artifact', ref: 'evidence/summary.json', digest: 'sha:1' },
+      { kind: 'note', ref: ' notes/checkpoint.md ', digest: null },
+    ];
+
+    assert.deepEqual(checkpointEffectiveForceState(checkpoint), {
+      checkpointId: 'cp-force-normalized',
+      branchId: 'mainline',
+      adoptionStatus: 'mainline',
+      workflowTightness: 'balanced',
+      oversightStrength: 'normal',
+      branchBudget: null,
+      replayStatus: 'completed',
+      evidenceCount: 2,
+      lineageDepth: 1,
+      divergenceScore: 0,
+      composabilityScore: 0,
+      governancePressureScore: 0,
+      evidenceMomentum: 16,
+      progressMomentum: 0,
+      composabilityBoost: 0,
+      adoptionBoost: 8,
+      divergenceDrag: 0,
+      constraintDrag: 0,
+      replayFriction: 2,
+      effectiveForceScore: 22,
+    });
+  });
+
+  it('discounts effective force when replay friction and governance constraints stack on the same branch', () => {
+    const { leftContinued, checkpoints } = buildCheckpointGraph();
+    leftContinued.data.adoption_status = 'mainline';
+    leftContinued.data.evidence_refs = [
+      { kind: 'artifact', ref: 'artifacts/left-continued.json', digest: 'sha:left' },
+      { kind: 'note', ref: 'notes/left-continued.md', digest: null },
+    ];
+
+    const lowFriction = structuredClone(leftContinued);
+    lowFriction.id = 'cp-left-low-friction';
+    lowFriction.data.policy_snapshot = {
+      workflow_tightness: 'balanced',
+      oversight_strength: 'normal',
+      branch_budget: null,
+      notes: null,
+    };
+    lowFriction.data.replay_state = { status: 'idle' };
+
+    const constrained = structuredClone(leftContinued);
+    constrained.id = 'cp-left-constrained';
+    constrained.data.policy_snapshot = {
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 1,
+      notes: 'Tight governance carryover.',
+    };
+    constrained.data.replay_state = { status: 'requested' };
+
+    assert.equal(checkpointEffectiveForceState(lowFriction, checkpoints).effectiveForceScore, 32);
+    assert.equal(checkpointEffectiveForceState(constrained, checkpoints).effectiveForceScore, 3);
+    assert.equal(
+      checkpointEffectiveForceState(constrained, checkpoints).effectiveForceScore
+      < checkpointEffectiveForceState(lowFriction, checkpoints).effectiveForceScore,
       true,
     );
   });
