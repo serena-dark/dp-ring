@@ -5,6 +5,7 @@ import {
   createCheckpoint,
   continueFromCheckpoint,
   lineageForCheckpoint,
+  synthesizeCheckpoint,
 } from './checkpoint-tree.mjs';
 import {
   createEmptyCapsuleState,
@@ -539,6 +540,7 @@ function governanceBlockedReuseDispatchContext(session) {
       oversightStrength: null,
       branchBudget: null,
       note: null,
+      summary: null,
     };
   }
 
@@ -553,6 +555,24 @@ function governanceBlockedReuseDispatchContext(session) {
     note:
       `Tightened dispatch for governance-blocked fallback session (${summary}) `
       + 'after automatic workflow reuse was withheld.',
+    summary,
+  };
+}
+
+function governanceBlockedReuseCompletionContext(session) {
+  const dispatchContext = governanceBlockedReuseDispatchContext(session);
+  if (!dispatchContext.tightenedDispatch) {
+    return {
+      preserveSynthesizedLineage: false,
+      note: null,
+    };
+  }
+
+  return {
+    preserveSynthesizedLineage: true,
+    note:
+      `Governance-blocked fallback completion (${dispatchContext.summary ?? dispatchContext.reasons.join(', ')}) `
+      + 'stays on synthesized lineage until an explicit adoption decision promotes it to mainline.',
   };
 }
 
@@ -1364,38 +1384,74 @@ export function createSessionRunner(
       });
     }
 
-    const nextCheckpoint = continueFromCheckpoint(activeCheckpoint, {
-      id: await ring.newId('checkpoint', {
-        name: `${run.id} ${normalizedReport.report.status} ${normalizedReport.report.step_id ?? 'step'}`,
-      }),
-      created_by: worker?.id ?? 'session-runner',
-      session_id: session.id,
-      status:
-        normalizedReport.report.status === 'completed'
-          ? 'mainline'
-          : normalizedReport.report.status === 'failed'
-            ? 'candidate'
-            : activeCheckpoint.status,
-      branch_id: nodeExecution.branch_id,
-      node_id: node.id,
-      scope_ref: { kind: 'workflow-run', id: run.id, path: callback.packet_path ?? null },
-      policy_snapshot: activeCheckpoint.data.policy_snapshot,
-      execution_cursor: {
-        phase:
-          normalizedReport.report.status === 'progress'
-            ? 'running'
-            : normalizedReport.report.status === 'completed'
-              ? 'completed'
-              : 'failed',
-        step_id: normalizedReport.report.step_id ?? null,
-        ordinal: run.data.current_step_index ?? 0,
-      },
-      evidence_refs: capsuleState.last_accepted_evidence_refs,
-      adoption_status:
-        normalizedReport.report.status === 'completed' ? 'mainline' : activeCheckpoint.data.adoption_status,
-      replay_state: capsuleState.replay,
-      synthesis_inputs: [],
-    });
+    const completionGovernance = governanceBlockedReuseCompletionContext(session);
+    const preserveSynthesizedCompletion =
+      normalizedReport.report.status === 'completed' && completionGovernance.preserveSynthesizedLineage;
+    const nextCheckpointPolicy = preserveSynthesizedCompletion
+      ? {
+          ...clone(activeCheckpoint.data.policy_snapshot ?? {}),
+          notes:
+            uniqueStrings([
+              trimString(activeCheckpoint.data?.policy_snapshot?.notes),
+              completionGovernance.note,
+            ]).join(' | ') || null,
+        }
+      : activeCheckpoint.data.policy_snapshot;
+
+    const nextCheckpoint = preserveSynthesizedCompletion
+      ? synthesizeCheckpoint([activeCheckpoint], {
+          id: await ring.newId('checkpoint', {
+            name: `${run.id} ${normalizedReport.report.status} ${normalizedReport.report.step_id ?? 'step'}`,
+          }),
+          created_by: worker?.id ?? 'session-runner',
+          session_id: session.id,
+          status: 'synthesized',
+          branch_id: nodeExecution.branch_id,
+          node_id: node.id,
+          scope_ref: { kind: 'workflow-run', id: run.id, path: callback.packet_path ?? null },
+          policy_snapshot: nextCheckpointPolicy,
+          execution_cursor: {
+            phase: 'completed',
+            step_id: normalizedReport.report.step_id ?? null,
+            ordinal: run.data.current_step_index ?? 0,
+          },
+          evidence_refs: capsuleState.last_accepted_evidence_refs,
+          adoption_status: 'synthesized',
+          replay_state: capsuleState.replay,
+          synthesis_inputs: [activeCheckpoint.id],
+        })
+      : continueFromCheckpoint(activeCheckpoint, {
+          id: await ring.newId('checkpoint', {
+            name: `${run.id} ${normalizedReport.report.status} ${normalizedReport.report.step_id ?? 'step'}`,
+          }),
+          created_by: worker?.id ?? 'session-runner',
+          session_id: session.id,
+          status:
+            normalizedReport.report.status === 'completed'
+              ? 'mainline'
+              : normalizedReport.report.status === 'failed'
+                ? 'candidate'
+                : activeCheckpoint.status,
+          branch_id: nodeExecution.branch_id,
+          node_id: node.id,
+          scope_ref: { kind: 'workflow-run', id: run.id, path: callback.packet_path ?? null },
+          policy_snapshot: nextCheckpointPolicy,
+          execution_cursor: {
+            phase:
+              normalizedReport.report.status === 'progress'
+                ? 'running'
+                : normalizedReport.report.status === 'completed'
+                  ? 'completed'
+                  : 'failed',
+            step_id: normalizedReport.report.step_id ?? null,
+            ordinal: run.data.current_step_index ?? 0,
+          },
+          evidence_refs: capsuleState.last_accepted_evidence_refs,
+          adoption_status:
+            normalizedReport.report.status === 'completed' ? 'mainline' : activeCheckpoint.data.adoption_status,
+          replay_state: capsuleState.replay,
+          synthesis_inputs: [],
+        });
 
     let recoveryEvent = null;
     if (normalizedReport.report.status === 'failed') {
