@@ -2263,7 +2263,7 @@ Split milestone prerequisites into ready and blocked sets.
     );
     assert.match(
       governedBundle.batching.session_group_key,
-      /:governance:warm_semantic_lineage$/,
+      /:governance:warm_semantic_lineage:[a-f0-9]{12}$/,
     );
     assert.notEqual(
       cleanBundle.batching.session_group_key,
@@ -2301,7 +2301,7 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(governedSession.data.governance_context?.isolated_batch, true);
     assert.equal(
       governedSession.data.governance_context?.batch_signature,
-      'warm_semantic_lineage',
+      governedBundle.batching.session_group_key.split(':governance:').at(-1),
     );
     assert.deepEqual(governedSession.data.governance_context?.reasons, [
       'warm_semantic_lineage',
@@ -2339,6 +2339,334 @@ Split milestone prerequisites into ready and blocked sets.
         },
       );
       assert.equal(archivedGenerated.ok, true, JSON.stringify(archivedGenerated.errors));
+    }
+  });
+
+  it('keeps governed fallback bundles with different lineage fingerprints out of the same shared batch', async () => {
+    const requirementId = await ring.newId('requirement', {
+      name: 'Governed Lineage Fingerprint Requirement',
+    });
+    const milestoneId = await ring.newId('milestone', {
+      name: 'Governed Lineage Fingerprint Execution',
+      parentId: requirementId,
+    });
+
+    const requirementResult = await ring.create('requirement', {
+      id: requirementId,
+      status: 'ready',
+      created_by: 'test',
+      data: {
+        name: 'Governed Lineage Fingerprint Requirement',
+        description:
+          'Governance-blocked adaptive bundles should only share a batch when their blocked lineage fingerprint matches.',
+        acceptance_criteria: [],
+        milestone_ids: [milestoneId],
+        priority: 'high',
+      },
+    });
+    assert.equal(requirementResult.ok, true, JSON.stringify(requirementResult.errors));
+
+    const milestoneResult = await ring.create('milestone', {
+      id: milestoneId,
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Governed Lineage Fingerprint Execution',
+        requirement_id: requirementId,
+        description: 'Launch governance-blocked adaptive bundles with a shared session group key.',
+        acceptance_checks: [],
+        prerequisites: [],
+      },
+    });
+    assert.equal(milestoneResult.ok, true, JSON.stringify(milestoneResult.errors));
+
+    const seedWarmLineageWorkflow = async ({
+      workflowId,
+      workflowName,
+      taskType,
+      runId,
+      taskId,
+      sessionId,
+      nodeId,
+      checkpointId,
+      registryScore,
+    }) => {
+      const workflow = await ring.create('workflow', {
+        id: workflowId,
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: workflowName,
+          description:
+            'Reusable workflow that should force a governed fallback because its latest run timed out after semantic progress.',
+          applicable_to: [taskType],
+          steps: [
+            { id: 's1', name: 'inspect', description: 'Inspect the governance context.' },
+            { id: 's2', name: 'verify', description: 'Verify the governed path.' },
+            { id: 's3', name: 'report', description: 'Report the result.' },
+          ],
+        },
+      });
+      assert.equal(workflow.ok, true, JSON.stringify(workflow.errors));
+      await ring.registry.recordScore(taskType, workflowId, registryScore);
+
+      const warmRun = await ring.create('workflow-run', {
+        id: runId,
+        type: 'workflow-run',
+        version: 1,
+        created_at: '2026-04-18T03:00:00Z',
+        updated_at: '2026-04-18T03:01:00Z',
+        created_by: 'session-runner',
+        session_id: sessionId,
+        status: 'failed',
+        data: {
+          workflow_template_id: workflowId,
+          workflow_template_version: 1,
+          task_id: taskId,
+          current_step_index: 1,
+          callback: {
+            auth_scheme: 'bearer',
+            report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+            token: `token-${runId}`,
+            signing_secret: `signing-secret-${runId}`,
+            signature_algorithm: 'hmac-sha256',
+            key_version: 1,
+            status: 'timed_out',
+            issued_at: '2026-04-18T03:00:00Z',
+            prepared_at: '2026-04-18T03:00:05Z',
+            last_report_at: '2026-04-18T03:00:40Z',
+            last_retry_at: null,
+            last_rotated_at: null,
+            next_retry_at: null,
+            report_timeout_ms: 300000,
+            max_retries: 2,
+            retry_count: 1,
+            retry_backoff_ms: 1000,
+            signature_ttl_ms: 60000,
+            timeout_at: '2026-04-18T03:05:00Z',
+            packet_path: `.ring/orchestrator/runner/sessions/${sessionId}/${runId}.json`,
+            allowed_worker_ids: ['worker-agent'],
+            accepted_protocols: ['ring.workflow-run-report.v1'],
+            last_worker_id: 'worker-agent',
+            last_protocol: 'ring.workflow-run-report.v1',
+            last_error: 'Timed out after semantic progress was already reported.',
+          },
+          reports: [
+            {
+              at: '2026-04-18T03:00:40Z',
+              status: 'progress',
+              actor: 'worker-agent',
+              step_id: 'verify',
+              note: 'The checkpoint lineage advanced before timeout.',
+              commit_sha: null,
+              worker_id: 'worker-agent',
+              protocol: 'ring.workflow-run-report.v1',
+              authenticated: true,
+              outputs: {
+                summary: 'Semantic progress exists.',
+              },
+            },
+          ],
+          node_execution: {
+            node_id: nodeId,
+            branch_id: 'main',
+            active_checkpoint_id: checkpointId,
+            checkpoint_ids: [`${checkpointId}-root`, `${checkpointId}-lineage-1`, checkpointId],
+            branch_event_ids: [`be-${runId}`],
+            capsule_state: createEmptyCapsuleState({
+              node_id: nodeId,
+              runtime_status: 'recovering',
+              current_checkpoint_id: checkpointId,
+              replay: {
+                status: 'requested',
+                requested_at: '2026-04-18T03:00:45Z',
+                completed_at: null,
+                requested_by: 'session-runner',
+                reason: 'workflow_timeout',
+                source_checkpoint_id: checkpointId,
+                target_checkpoint_id: checkpointId,
+                cursor: { phase: 'execute', step_id: 'verify' },
+                journal_state: {
+                  mode: 'semantic',
+                  last_applied_entry_id: `journal-${runId}-1`,
+                  pending_entry_ids: [`journal-${runId}-2`],
+                },
+              },
+            }),
+          },
+          steps: [
+            {
+              step_id: 'inspect',
+              status: 'completed',
+              started_at: '2026-04-18T03:00:10Z',
+              ended_at: '2026-04-18T03:00:20Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'verify',
+              status: 'failed',
+              started_at: '2026-04-18T03:00:21Z',
+              ended_at: '2026-04-18T03:01:00Z',
+              outputs: {},
+              notes: 'Timed out after semantic progress.',
+            },
+          ],
+        },
+      });
+      assert.equal(warmRun.ok, true, JSON.stringify(warmRun.errors));
+    };
+
+    await seedWarmLineageWorkflow({
+      workflowId: 'wf-shared-refactor-lineage-hold-a',
+      workflowName: 'Shared Refactor Warm Lineage Hold A',
+      taskType: 'refactoring',
+      runId: 'run-shared-refactor-lineage-hold-a',
+      taskId: 'task-shared-refactor-lineage-hold-a',
+      sessionId: 'session-shared-refactor-lineage-hold-a',
+      nodeId: 'n-shared-refactor-lineage-hold-a',
+      checkpointId: 'cp-shared-refactor-lineage-hold-a',
+      registryScore: 9.97,
+    });
+    await seedWarmLineageWorkflow({
+      workflowId: 'wf-shared-bugfix-lineage-hold-b',
+      workflowName: 'Shared Bugfix Warm Lineage Hold B',
+      taskType: 'bug-fix',
+      runId: 'run-shared-bugfix-lineage-hold-b',
+      taskId: 'task-shared-bugfix-lineage-hold-b',
+      sessionId: 'session-shared-bugfix-lineage-hold-b',
+      nodeId: 'n-shared-bugfix-lineage-hold-b',
+      checkpointId: 'cp-shared-bugfix-lineage-hold-b',
+      registryScore: 9.98,
+    });
+
+    const submitGovernedBundle = ({ title, description, includePath, materialId, inlineData }) =>
+      ring.orchestrator.submitDispatchBundle({
+        bundle_protocol: 'ring.goal.v1',
+        bundle_version: '1',
+        artifact_transport: 'inline',
+        submitted_by: 'bundle-test',
+        payload: {
+          goal: {
+            title,
+            description,
+            acceptance_criteria: ['One task is created and routed into a governance-sensitive batch session.'],
+          },
+          environment: {
+            project_id: 'shared-governed-lineage-project',
+            repo_root: tempDir,
+            target_scope: {
+              level: 'file',
+              include_paths: [includePath],
+              exclude_paths: [],
+            },
+            constraints: {
+              must_build: false,
+              must_cleanup: false,
+              merge_policy: 'judge_then_merge',
+              session_group_key: 'shared-governed-batch',
+            },
+          },
+          materials: [
+            {
+              material_id: materialId,
+              kind: 'preparation_package',
+              uri: null,
+              format: 'json',
+              mount_to: 'workspace/shared',
+              required: true,
+              inline_data: inlineData,
+            },
+          ],
+          context: {
+            artifact_refs: [],
+            brief_ref: null,
+            requirement_id: requirementId,
+            milestone_id: milestoneId,
+          },
+        },
+      });
+
+    const refactorBundle = await submitGovernedBundle({
+      title: 'Refactor cleanup after lineage review',
+      description: 'Refactor the shared orchestration path after governance review without mixing governed lineages.',
+      includePath: 'docs/governed-refactor.md',
+      materialId: 'mat-governed-refactor',
+      inlineData: '{"refactor":true}',
+    });
+    const bugfixBundle = await submitGovernedBundle({
+      title: 'Regression bug fix after warm lineage timeout',
+      description: 'Fix the governed regression without automatically reusing the blocked template.',
+      includePath: 'tests/governed-bugfix.test.mjs',
+      materialId: 'mat-governed-bugfix',
+      inlineData: '{"bugfix":true}',
+    });
+
+    assert.equal(refactorBundle.status, 'ready_queued');
+    assert.equal(refactorBundle.workflows.waiting_tasks[0].workflow_source, 'custom_generated');
+    assert.equal(refactorBundle.workflows.waiting_tasks[0].governance_blocked_reuse.length, 1);
+    assert.equal(
+      refactorBundle.workflows.waiting_tasks[0].governance_blocked_reuse[0].id,
+      'wf-shared-refactor-lineage-hold-a',
+    );
+    assert.match(
+      refactorBundle.batching.session_group_key,
+      /:governance:warm_semantic_lineage:[a-f0-9]{12}$/,
+    );
+
+    assert.equal(bugfixBundle.status, 'ready_queued');
+    assert.equal(bugfixBundle.workflows.waiting_tasks[0].workflow_source, 'custom_generated');
+    assert.equal(bugfixBundle.workflows.waiting_tasks[0].governance_blocked_reuse.length, 1);
+    assert.equal(
+      bugfixBundle.workflows.waiting_tasks[0].governance_blocked_reuse[0].id,
+      'wf-shared-bugfix-lineage-hold-b',
+    );
+    assert.match(
+      bugfixBundle.batching.session_group_key,
+      /:governance:warm_semantic_lineage:[a-f0-9]{12}$/,
+    );
+    assert.notEqual(
+      refactorBundle.batching.session_group_key,
+      bugfixBundle.batching.session_group_key,
+    );
+
+    await ring.orchestrator.tick();
+
+    const launchedRefactor = await ring.orchestrator.readDispatchBundle(refactorBundle.id);
+    const launchedBugfix = await ring.orchestrator.readDispatchBundle(bugfixBundle.id);
+    assert.equal(launchedRefactor.status, 'session_launched');
+    assert.equal(launchedBugfix.status, 'session_launched');
+    assert.ok(launchedRefactor.batching.session_id);
+    assert.ok(launchedBugfix.batching.session_id);
+    assert.notEqual(launchedRefactor.batching.session_id, launchedBugfix.batching.session_id);
+
+    const launchedSessions = await Promise.all([
+      ring.read('session', launchedRefactor.batching.session_id),
+      ring.read('session', launchedBugfix.batching.session_id),
+    ]);
+    assert.match(
+      launchedSessions[0].data.governance_context?.batch_signature ?? '',
+      /^warm_semantic_lineage:[a-f0-9]{12}$/,
+    );
+    assert.match(
+      launchedSessions[1].data.governance_context?.batch_signature ?? '',
+      /^warm_semantic_lineage:[a-f0-9]{12}$/,
+    );
+    assert.notEqual(
+      launchedSessions[0].data.governance_context?.batch_signature,
+      launchedSessions[1].data.governance_context?.batch_signature,
+    );
+
+    for (const workflowId of new Set([
+      'wf-shared-refactor-lineage-hold-a',
+      'wf-shared-bugfix-lineage-hold-b',
+      ...refactorBundle.workflows.generated_workflow_ids,
+      ...bugfixBundle.workflows.generated_workflow_ids,
+    ])) {
+      const archivedWorkflow = await ring.update('workflow', workflowId, {
+        status: 'archived',
+      });
+      assert.equal(archivedWorkflow.ok, true, JSON.stringify(archivedWorkflow.errors));
     }
   });
 
