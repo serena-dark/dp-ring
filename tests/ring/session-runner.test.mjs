@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import { createCheckpoint } from '../../ring/lib/checkpoint-tree.mjs';
 import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -145,6 +146,94 @@ async function createRedispatchSession(ring, task, workflow) {
   return {
     sessionId,
     runId,
+  };
+}
+
+async function createPreparingTaskFixture(ring, repoRoot, name, workflow, taskPatch = {}) {
+  const requirementResult = await ring.create('requirement', {
+    id: await ring.newId('requirement', { name }),
+    status: 'ready',
+    created_by: 'session-runner-test',
+    data: {
+      name,
+      description: `${name} requirement`,
+      acceptance_criteria: [{ id: 'ac1', description: 'Done', satisfied: false }],
+      milestone_ids: [],
+      priority: 'high',
+    },
+  });
+  assert.equal(requirementResult.ok, true, JSON.stringify(requirementResult.errors));
+
+  const milestoneId = await ring.newId('milestone', {
+    name: `${name} milestone`,
+    parentId: requirementResult.artifact.id,
+  });
+  const milestoneResult = await ring.create('milestone', {
+    id: milestoneId,
+    status: 'active',
+    created_by: 'session-runner-test',
+    data: {
+      name: `${name} milestone`,
+      requirement_id: requirementResult.artifact.id,
+      description: `${name} milestone`,
+      prerequisites: [],
+    },
+  });
+  assert.equal(milestoneResult.ok, true, JSON.stringify(milestoneResult.errors));
+
+  const taskId = await ring.newId('task', { name });
+  const taskResult = await ring.create('task', {
+    id: taskId,
+    status: 'ready',
+    created_by: 'session-runner-test',
+    session_id: null,
+    data: {
+      name,
+      description: `${name} task`,
+      task_type: workflow.data.applicable_to[0] ?? 'feature-implementation',
+      requirement_id: requirementResult.artifact.id,
+      milestone_id: milestoneId,
+      workflow_template_id: workflow.id,
+      workflow_run_id: null,
+      execution_mode: 'serial',
+      scope: {
+        target_type: 'file',
+        target_path: 'README.md',
+        repo_root: repoRoot,
+        file_paths: ['README.md'],
+      },
+      execution: {
+        judge_agent_id: null,
+        review_status: 'pending',
+        completion_commit_sha: null,
+        changed_files: [],
+        scope_match: null,
+        build_required: false,
+        build_command: null,
+        build_status: 'skipped',
+        cleanup_paths: [],
+        cleanup_status: 'skipped',
+        merge_status: 'blocked',
+        summary_path: null,
+        review_packet: null,
+        failure_feedback_id: null,
+        failure_distillation_id: null,
+        completion_distillation_id: null,
+        last_error: null,
+        checked_at: null,
+        reviewed_at: null,
+        note: null,
+      },
+      acceptance_criteria: [{ id: 'ac1', description: 'Done', satisfied: false }],
+      ...taskPatch,
+    },
+  });
+  assert.equal(taskResult.ok, true, JSON.stringify(taskResult.errors));
+
+  return {
+    requirement: requirementResult.artifact,
+    milestone: milestoneResult.artifact,
+    task: taskResult.artifact,
   };
 }
 
@@ -301,6 +390,192 @@ describe('session runner', async () => {
 
     const stagedMaterial = await readFile(join(tempDir, packet.materials[0].resolved_path), 'utf-8');
     assert.match(stagedMaterial, /runner/);
+  });
+
+  it('inherits adopted mainline checkpoint policy when reusing a workflow template', async () => {
+    const workflowResult = await ring.create('workflow', {
+      id: 'wf-runner-mainline-policy-reuse',
+      status: 'active',
+      created_by: 'session-runner-test',
+      data: {
+        name: 'Runner Mainline Policy Reuse',
+        description: 'Reusable workflow whose adopted mainline checkpoint should shape the next dispatch contract.',
+        applicable_to: ['feature-implementation'],
+        steps: [
+          { id: 'inspect', name: 'Inspect', description: 'Inspect the governed context.' },
+          { id: 'execute', name: 'Execute', description: 'Execute the reusable workflow.' },
+          { id: 'report', name: 'Report', description: 'Report the governed result.' },
+        ],
+      },
+    });
+    assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+    const workflow = workflowResult.artifact;
+
+    const priorCheckpoint = createCheckpoint({
+      id: 'cp-runner-mainline-policy-active',
+      created_at: '2026-04-18T05:00:00Z',
+      updated_at: '2026-04-18T05:00:45Z',
+      created_by: 'session-runner-test',
+      session_id: 'session-runner-mainline-policy-prior',
+      status: 'mainline',
+      node_id: 'n-runner-mainline-policy',
+      scope_ref: { kind: 'workflow-run', id: 'run-runner-mainline-policy-prior', path: null },
+      execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 3 },
+      adoption_status: 'mainline',
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        notes: 'Adopted mainline checkpoint still requires tight oversight for the next reuse.',
+      },
+    });
+    const priorCheckpointResult = await ring.create('checkpoint', {
+      id: priorCheckpoint.id,
+      status: priorCheckpoint.status,
+      created_at: priorCheckpoint.created_at,
+      updated_at: priorCheckpoint.updated_at,
+      created_by: priorCheckpoint.created_by,
+      session_id: priorCheckpoint.session_id,
+      data: priorCheckpoint.data,
+    });
+    assert.equal(priorCheckpointResult.ok, true, JSON.stringify(priorCheckpointResult.errors));
+
+    const priorRunResult = await ring.create('workflow-run', {
+      id: 'run-runner-mainline-policy-prior',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-18T05:00:00Z',
+      updated_at: '2026-04-18T05:01:00Z',
+      created_by: 'session-runner-test',
+      session_id: 'session-runner-mainline-policy-prior',
+      status: 'completed',
+      data: {
+        workflow_template_id: workflow.id,
+        workflow_template_version: workflow.version,
+        task_id: 'task-runner-mainline-policy-prior',
+        current_step_index: 2,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url: `http://127.0.0.1:3100/api/workflow-run/run-runner-mainline-policy-prior/report`,
+          token: 'token-runner-mainline-policy-prior',
+          signing_secret: 'secret-runner-mainline-policy-prior',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'completed',
+          issued_at: '2026-04-18T05:00:00Z',
+          prepared_at: '2026-04-18T05:00:05Z',
+          last_report_at: '2026-04-18T05:00:50Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 0,
+          retry_count: 0,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-18T05:05:00Z',
+          packet_path: '.ring/orchestrator/runner/sessions/session-runner-mainline-policy-prior/run-runner-mainline-policy-prior.json',
+          allowed_worker_ids: ['worker-agent'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-agent',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: null,
+        },
+        reports: [
+          {
+            at: '2026-04-18T05:00:50Z',
+            status: 'completed',
+            actor: 'worker-agent',
+            step_id: 'report',
+            note: 'Completed under an adopted mainline checkpoint policy.',
+            commit_sha: null,
+            worker_id: 'worker-agent',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Governed reusable workflow completed.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-runner-mainline-policy',
+          branch_id: 'main',
+          active_checkpoint_id: priorCheckpoint.id,
+          checkpoint_ids: [priorCheckpoint.id],
+          branch_event_ids: ['be-runner-mainline-policy-prior'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-runner-mainline-policy',
+            runtime_status: 'completed',
+            current_checkpoint_id: priorCheckpoint.id,
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-18T05:00:10Z',
+            ended_at: '2026-04-18T05:00:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'execute',
+            status: 'completed',
+            started_at: '2026-04-18T05:00:21Z',
+            ended_at: '2026-04-18T05:00:35Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'report',
+            status: 'completed',
+            started_at: '2026-04-18T05:00:36Z',
+            ended_at: '2026-04-18T05:00:50Z',
+            outputs: {},
+            notes: 'Completed under inherited mainline checkpoint policy.',
+          },
+        ],
+      },
+    });
+    assert.equal(priorRunResult.ok, true, JSON.stringify(priorRunResult.errors));
+
+    const fixture = await createPreparingTaskFixture(
+      ring,
+      tempDir,
+      'Mainline checkpoint policy reuse',
+      workflow,
+    );
+    const { sessionId, runId } = await createRedispatchSession(ring, fixture.task, workflow);
+
+    await ring.sessionRunner.tick();
+
+    const preparedSession = await ring.read('session', sessionId);
+    const preparedRun = await ring.read('workflow-run', runId);
+    assert.equal(preparedSession.status, 'executing');
+    assert.equal(preparedRun.status, 'running');
+    assert.deepEqual(preparedRun.data.callback.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(preparedRun.data.callback.allowed_worker_ids, ['worker-agent']);
+    assert.equal(preparedRun.data.callback.max_retries, 0);
+
+    const preparedCheckpoint = await ring.read('checkpoint', preparedRun.data.node_execution.active_checkpoint_id);
+    assert.equal(preparedCheckpoint.data.policy_snapshot.workflow_tightness, 'tight');
+    assert.equal(preparedCheckpoint.data.policy_snapshot.oversight_strength, 'strong');
+    assert.equal(preparedCheckpoint.data.policy_snapshot.branch_budget, 1);
+    assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /Inherited mainline checkpoint policy/i);
+    assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /cp-runner-mainline-policy-active/i);
+    assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /branch_budget=1/i);
+    assert.match(preparedCheckpoint.data.policy_snapshot.notes ?? '', /tight oversight for the next reuse/i);
+
+    const preparedPacketPath = join(tempDir, preparedRun.data.steps[0].outputs.execution_packet_path);
+    const preparedPacket = JSON.parse(await readFile(preparedPacketPath, 'utf-8'));
+    assert.deepEqual(preparedPacket.callbacks.workflow_run_report.accepted_protocols, ['ring.workflow-run-report.v1']);
+    assert.deepEqual(preparedPacket.callbacks.workflow_run_report.worker_identity.allowed_worker_ids, ['worker-agent']);
+    assert.equal(preparedPacket.callbacks.workflow_run_report.retry_policy.max_retries, 0);
+
+    const archivedWorkflow = await ring.update('workflow', workflow.id, {
+      status: 'archived',
+    });
+    assert.equal(archivedWorkflow.ok, true, JSON.stringify(archivedWorkflow.errors));
   });
 
   it('tightens governed fallback sessions when automatic workflow reuse was blocked by warm lineage', async () => {
