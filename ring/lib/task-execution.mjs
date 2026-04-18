@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { warmSemanticLineageState } from './governance-policy.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -110,17 +111,14 @@ async function semanticCheckpointGovernanceContext(ring, task, reasonCode) {
   }
 
   const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
-  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
-  const replayStatus = nonEmptyString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
-  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
-    && workflowRun.data.reports.some((report) => report?.status === 'progress');
+  const governance = warmSemanticLineageState(workflowRun);
 
   return {
     workflowRunId,
-    checkpointCount,
-    replayStatus,
-    sawProgressReport,
-    explicitWorkflowReuseRequired: sawProgressReport && checkpointCount > 2 && replayStatus === 'requested',
+    checkpointCount: governance.checkpointCount,
+    replayStatus: governance.replayStatus,
+    sawProgressReport: governance.sawProgressReport,
+    explicitWorkflowReuseRequired: governance.hasWarmSemanticLineage,
   };
 }
 

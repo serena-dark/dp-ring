@@ -19,6 +19,7 @@ import {
   requestReplay,
   completeReplay,
 } from './node-capsule.mjs';
+import { warmSemanticLineageState } from './governance-policy.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -617,20 +618,17 @@ async function semanticCheckpointDispatchGovernanceContext(ring, task) {
   }
 
   const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
-  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
-  const replayStatus = trimString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
-  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
-    && workflowRun.data.reports.some((report) => report?.status === 'progress');
+  const governance = warmSemanticLineageState(workflowRun);
 
   return {
     source: 'warm_semantic_lineage',
     reasons: ['warm_semantic_lineage'],
     parentTaskId,
     workflowRunId,
-    checkpointCount,
-    replayStatus,
-    sawProgressReport,
-    tightenedDispatch: sawProgressReport && checkpointCount > 2 && replayStatus === 'requested',
+    checkpointCount: governance.checkpointCount,
+    replayStatus: governance.replayStatus,
+    sawProgressReport: governance.sawProgressReport,
+    tightenedDispatch: governance.hasWarmSemanticLineage,
     workflowTightness: 'tight',
     oversightStrength: 'strong',
     branchBudget: 0,

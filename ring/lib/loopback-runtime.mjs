@@ -3,6 +3,7 @@ import { createHmac } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { warmSemanticLineageState } from './governance-policy.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -649,18 +650,14 @@ async function semanticRecoveryAutoRedispatchContext(ring, task, reason) {
   }
 
   const workflowRun = await ring.read('workflow-run', workflowRunId).catch(() => null);
-  const checkpointCount = workflowRun?.data?.node_execution?.checkpoint_ids?.length ?? 0;
-  const replayStatus = trimString(workflowRun?.data?.node_execution?.capsule_state?.replay?.status) ?? 'idle';
-  const sawProgressReport = Array.isArray(workflowRun?.data?.reports)
-    && workflowRun.data.reports.some((report) => report?.status === 'progress');
-  const blocked = sawProgressReport && checkpointCount > 2 && replayStatus === 'requested';
+  const governance = warmSemanticLineageState(workflowRun);
 
   return {
-    blocked,
+    blocked: governance.hasWarmSemanticLineage,
     workflowRunId,
-    checkpointCount,
-    replayStatus,
-    sawProgressReport,
+    checkpointCount: governance.checkpointCount,
+    replayStatus: governance.replayStatus,
+    sawProgressReport: governance.sawProgressReport,
   };
 }
 
