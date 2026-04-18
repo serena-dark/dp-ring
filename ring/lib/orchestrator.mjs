@@ -5,6 +5,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path
 import { promisify } from 'node:util';
 import {
   checkpointAutomaticReusePolicyState,
+  checkpointGovernancePressureState,
   workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
 } from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
@@ -276,22 +277,29 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
 }
 
 function checkpointAutomaticReusePolicy(checkpoint) {
-  const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
+  const checkpointPressure = checkpointGovernancePressureState(checkpoint);
 
   return {
-    constrained: checkpointPolicy.constrained,
-    adoption_status: checkpointPolicy.adoptionStatus,
-    workflow_tightness: checkpointPolicy.constrained ? checkpointPolicy.workflowTightness : null,
-    oversight_strength: checkpointPolicy.constrained ? checkpointPolicy.oversightStrength : null,
-    branch_budget: checkpointPolicy.constrained ? checkpointPolicy.branchBudget : null,
+    constrained: checkpointPressure.constrained,
+    adoption_status: checkpointPressure.adoptionStatus,
+    workflow_tightness: checkpointPressure.constrained ? checkpointPressure.workflowTightness : null,
+    oversight_strength: checkpointPressure.constrained ? checkpointPressure.oversightStrength : null,
+    branch_budget: checkpointPressure.constrained ? checkpointPressure.branchBudget : null,
+    governance_pressure_score: checkpointPressure.governancePressureScore,
   };
 }
 
-function automaticReusePolicyLevelIndex(value, orderedLevels, fallback) {
-  const normalized = trimString(value) || fallback;
-  const levelIndex = orderedLevels.indexOf(normalized);
-  const fallbackIndex = orderedLevels.indexOf(fallback);
-  return levelIndex >= 0 ? levelIndex : fallbackIndex;
+function automaticReusePolicyGovernancePressure(policy) {
+  if (Number.isFinite(policy?.governance_pressure_score)) {
+    return policy.governance_pressure_score;
+  }
+  return policy?.constrained ? Number.POSITIVE_INFINITY : 0;
+}
+
+function automaticReusePolicyBranchBudget(policy) {
+  return Number.isInteger(policy?.branch_budget) && policy.branch_budget >= 0
+    ? policy.branch_budget
+    : Number.POSITIVE_INFINITY;
 }
 
 function compareAutomaticReusePolicies(leftPolicy, rightPolicy) {
@@ -301,40 +309,14 @@ function compareAutomaticReusePolicies(leftPolicy, rightPolicy) {
     return leftConstrained ? 1 : -1;
   }
 
-  const leftWorkflowTightness = automaticReusePolicyLevelIndex(
-    leftPolicy?.workflow_tightness,
-    ['loose', 'balanced', 'tight'],
-    'balanced',
-  );
-  const rightWorkflowTightness = automaticReusePolicyLevelIndex(
-    rightPolicy?.workflow_tightness,
-    ['loose', 'balanced', 'tight'],
-    'balanced',
-  );
-  if (leftWorkflowTightness !== rightWorkflowTightness) {
-    return leftWorkflowTightness - rightWorkflowTightness;
+  const pressureComparison = automaticReusePolicyGovernancePressure(leftPolicy)
+    - automaticReusePolicyGovernancePressure(rightPolicy);
+  if (pressureComparison !== 0) {
+    return pressureComparison;
   }
 
-  const leftOversightStrength = automaticReusePolicyLevelIndex(
-    leftPolicy?.oversight_strength,
-    ['weak', 'normal', 'strong'],
-    'normal',
-  );
-  const rightOversightStrength = automaticReusePolicyLevelIndex(
-    rightPolicy?.oversight_strength,
-    ['weak', 'normal', 'strong'],
-    'normal',
-  );
-  if (leftOversightStrength !== rightOversightStrength) {
-    return leftOversightStrength - rightOversightStrength;
-  }
-
-  const leftBranchBudget = typeof leftPolicy?.branch_budget === 'number' && Number.isFinite(leftPolicy.branch_budget)
-    ? leftPolicy.branch_budget
-    : Number.POSITIVE_INFINITY;
-  const rightBranchBudget = typeof rightPolicy?.branch_budget === 'number' && Number.isFinite(rightPolicy.branch_budget)
-    ? rightPolicy.branch_budget
-    : Number.POSITIVE_INFINITY;
+  const leftBranchBudget = automaticReusePolicyBranchBudget(leftPolicy);
+  const rightBranchBudget = automaticReusePolicyBranchBudget(rightPolicy);
   if (leftBranchBudget !== rightBranchBudget) {
     return rightBranchBudget - leftBranchBudget;
   }

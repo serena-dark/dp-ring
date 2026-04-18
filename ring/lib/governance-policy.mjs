@@ -10,6 +10,17 @@ function nonNegativeInteger(value) {
   return Number.isInteger(value) && value >= 0 ? value : null;
 }
 
+function orderedLevelIndex(value, orderedLevels, fallback) {
+  const normalized = trimString(value) ?? fallback;
+  const levelIndex = orderedLevels.indexOf(normalized);
+  const fallbackIndex = orderedLevels.indexOf(fallback);
+  return levelIndex >= 0 ? levelIndex : fallbackIndex;
+}
+
+function branchBudgetPressure(branchBudget) {
+  return branchBudget === null ? 0 : Math.max(0, 9 - Math.min(branchBudget, 9));
+}
+
 export function warmSemanticLineageState(workflowRun) {
   const checkpointIds = workflowRun?.data?.node_execution?.checkpoint_ids;
   const checkpointCount = Array.isArray(checkpointIds) ? checkpointIds.length : 0;
@@ -43,6 +54,31 @@ export function checkpointAutomaticReusePolicyState(checkpoint) {
     branchBudget,
     notes,
     constrained,
+  };
+}
+
+export function checkpointGovernancePressureState(checkpoint) {
+  const policy = checkpointAutomaticReusePolicyState(checkpoint);
+  const workflowTightnessLevel = orderedLevelIndex(
+    policy.workflowTightness,
+    ['loose', 'balanced', 'tight'],
+    'balanced',
+  );
+  const oversightStrengthLevel = orderedLevelIndex(
+    policy.oversightStrength,
+    ['weak', 'normal', 'strong'],
+    'normal',
+  );
+  const budgetPressure = branchBudgetPressure(policy.branchBudget);
+
+  return {
+    ...policy,
+    workflowTightnessLevel,
+    oversightStrengthLevel,
+    branchBudgetPressure: budgetPressure,
+    governancePressureScore: policy.constrained
+      ? 1000 + (workflowTightnessLevel * 100) + (oversightStrengthLevel * 10) + budgetPressure
+      : 0,
   };
 }
 

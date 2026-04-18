@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkpointAutomaticReusePolicyState,
+  checkpointGovernancePressureState,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
@@ -131,6 +132,67 @@ describe('governance policy', () => {
       notes: null,
       constrained: false,
     });
+  });
+
+  it('computes governance pressure from normalized checkpoint policy carryover', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.id = ' cp-governance-pressure ';
+    checkpoint.data.adoption_status = ' mainline ';
+    checkpoint.data.policy_snapshot.workflow_tightness = ' tight ';
+    checkpoint.data.policy_snapshot.oversight_strength = ' strong ';
+    checkpoint.data.policy_snapshot.branch_budget = 1;
+    checkpoint.data.policy_snapshot.notes = ' Tight governance carryover. ';
+
+    assert.deepEqual(checkpointGovernancePressureState(checkpoint), {
+      checkpointId: 'cp-governance-pressure',
+      adoptionStatus: 'mainline',
+      workflowTightness: 'tight',
+      oversightStrength: 'strong',
+      branchBudget: 1,
+      notes: 'Tight governance carryover.',
+      constrained: true,
+      workflowTightnessLevel: 2,
+      oversightStrengthLevel: 2,
+      branchBudgetPressure: 8,
+      governancePressureScore: 1228,
+    });
+  });
+
+  it('keeps unconstrained mainline checkpoints at zero governance pressure', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.data.policy_snapshot.workflow_tightness = 'balanced';
+    checkpoint.data.policy_snapshot.oversight_strength = 'normal';
+    checkpoint.data.policy_snapshot.branch_budget = null;
+    checkpoint.data.policy_snapshot.notes = null;
+
+    assert.deepEqual(checkpointGovernancePressureState(checkpoint), {
+      checkpointId: 'cp-mainline-policy',
+      adoptionStatus: 'mainline',
+      workflowTightness: 'balanced',
+      oversightStrength: 'normal',
+      branchBudget: null,
+      notes: null,
+      constrained: false,
+      workflowTightnessLevel: 1,
+      oversightStrengthLevel: 1,
+      branchBudgetPressure: 0,
+      governancePressureScore: 0,
+    });
+  });
+
+  it('assigns lower governance pressure when more branch budget remains under the same policy envelope', () => {
+    const lowBudgetCheckpoint = buildCheckpoint();
+    lowBudgetCheckpoint.data.policy_snapshot.branch_budget = 1;
+
+    const higherBudgetCheckpoint = buildCheckpoint();
+    higherBudgetCheckpoint.id = 'cp-mainline-policy-roomier';
+    higherBudgetCheckpoint.data.policy_snapshot.branch_budget = 5;
+
+    assert.equal(
+      checkpointGovernancePressureState(higherBudgetCheckpoint).governancePressureScore
+      < checkpointGovernancePressureState(lowBudgetCheckpoint).governancePressureScore,
+      true,
+    );
   });
 
   it('requires failed status before automatic reuse is governance-blocked', () => {
