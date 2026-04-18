@@ -1056,6 +1056,155 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(blockedWorkflow.ok, true, JSON.stringify(blockedWorkflow.errors));
     await ring.registry.recordScore('documentation', 'wf-guidance-docs-lineage-hold', 0.99);
 
+    const branchBudgetBlockedWorkflow = await ring.create('workflow', {
+      id: 'wf-guidance-docs-budget-hold',
+      status: 'active',
+      created_by: 'test',
+      data: {
+        name: 'Guidance Docs Branch Budget Template',
+        description:
+          'Reusable workflow for documentation tasks that should stay off automatic reuse once inherited mainline branch budget is exhausted.',
+        applicable_to: ['documentation'],
+        steps: [
+          { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+          { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+          { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+        ],
+      },
+    });
+    assert.equal(branchBudgetBlockedWorkflow.ok, true, JSON.stringify(branchBudgetBlockedWorkflow.errors));
+    await ring.registry.recordScore('documentation', 'wf-guidance-docs-budget-hold', 0.98);
+
+    const branchBudgetCheckpoint = createWorkflowRunCheckpoint({
+      id: 'cp-guidance-docs-budget-hold',
+      status: 'mainline',
+      created_by: 'session-runner',
+      node_id: 'n-guidance-docs-budget-hold',
+      scope_ref: { kind: 'workflow-run', id: 'run-guidance-docs-budget-hold', path: null },
+      execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+      adoption_status: 'mainline',
+      policy_snapshot: {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 0,
+        notes: 'Inherited mainline checkpoint policy already consumed the reusable branch budget.',
+      },
+    });
+
+    const branchBudgetCheckpointResult = await ring.create('checkpoint', {
+      id: branchBudgetCheckpoint.id,
+      status: branchBudgetCheckpoint.status,
+      created_by: branchBudgetCheckpoint.created_by,
+      session_id: branchBudgetCheckpoint.session_id,
+      data: branchBudgetCheckpoint.data,
+    });
+    assert.equal(
+      branchBudgetCheckpointResult.ok,
+      true,
+      JSON.stringify(branchBudgetCheckpointResult.errors),
+    );
+
+    const branchBudgetRun = await ring.create('workflow-run', {
+      id: 'run-guidance-docs-budget-hold',
+      type: 'workflow-run',
+      version: 1,
+      created_at: '2026-04-17T00:10:00Z',
+      updated_at: '2026-04-17T00:11:00Z',
+      created_by: 'session-runner',
+      session_id: 'session-guidance-docs-budget-hold',
+      status: 'completed',
+      data: {
+        workflow_template_id: 'wf-guidance-docs-budget-hold',
+        workflow_template_version: 1,
+        task_id: 'task-guidance-docs-budget-hold',
+        current_step_index: 2,
+        callback: {
+          auth_scheme: 'bearer',
+          report_url:
+            'http://127.0.0.1:3100/api/workflow-run/run-guidance-docs-budget-hold/report',
+          token: 'token-guidance-docs-budget-hold',
+          signing_secret: 'signing-secret-guidance-docs-budget-hold',
+          signature_algorithm: 'hmac-sha256',
+          key_version: 1,
+          status: 'completed',
+          issued_at: '2026-04-17T00:10:00Z',
+          prepared_at: '2026-04-17T00:10:05Z',
+          last_report_at: '2026-04-17T00:10:50Z',
+          last_retry_at: null,
+          last_rotated_at: null,
+          next_retry_at: null,
+          report_timeout_ms: 300000,
+          max_retries: 0,
+          retry_count: 0,
+          retry_backoff_ms: 1000,
+          signature_ttl_ms: 60000,
+          timeout_at: '2026-04-17T00:15:00Z',
+          packet_path:
+            '.ring/orchestrator/runner/sessions/session-guidance-docs-budget-hold/run-guidance-docs-budget-hold.json',
+          allowed_worker_ids: ['worker-guidance'],
+          accepted_protocols: ['ring.workflow-run-report.v1'],
+          last_worker_id: 'worker-guidance',
+          last_protocol: 'ring.workflow-run-report.v1',
+          last_error: null,
+        },
+        reports: [
+          {
+            at: '2026-04-17T00:10:50Z',
+            status: 'completed',
+            actor: 'worker-guidance',
+            step_id: 'verify',
+            note: 'Completed under a root checkpoint that already exhausted branch budget.',
+            commit_sha: null,
+            worker_id: 'worker-guidance',
+            protocol: 'ring.workflow-run-report.v1',
+            authenticated: true,
+            outputs: {
+              summary: 'Completed under inherited branch-budget exhaustion.',
+            },
+          },
+        ],
+        node_execution: {
+          node_id: 'n-guidance-docs-budget-hold',
+          branch_id: 'main',
+          active_checkpoint_id: 'cp-guidance-docs-budget-hold',
+          checkpoint_ids: ['cp-guidance-docs-budget-hold'],
+          branch_event_ids: ['be-guidance-docs-budget-hold-1'],
+          capsule_state: createEmptyCapsuleState({
+            node_id: 'n-guidance-docs-budget-hold',
+            runtime_status: 'completed',
+            current_checkpoint_id: 'cp-guidance-docs-budget-hold',
+          }),
+        },
+        steps: [
+          {
+            step_id: 'inspect',
+            status: 'completed',
+            started_at: '2026-04-17T00:10:10Z',
+            ended_at: '2026-04-17T00:10:20Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'draft',
+            status: 'completed',
+            started_at: '2026-04-17T00:10:21Z',
+            ended_at: '2026-04-17T00:10:35Z',
+            outputs: {},
+            notes: null,
+          },
+          {
+            step_id: 'verify',
+            status: 'completed',
+            started_at: '2026-04-17T00:10:36Z',
+            ended_at: '2026-04-17T00:10:50Z',
+            outputs: {},
+            notes: 'Completed under branch_budget=0 inherited policy.',
+          },
+        ],
+      },
+    });
+    assert.equal(branchBudgetRun.ok, true, JSON.stringify(branchBudgetRun.errors));
+
     const warmLineageRun = await ring.create('workflow-run', {
       id: 'run-guidance-docs-lineage-hold',
       type: 'workflow-run',
@@ -1187,6 +1336,12 @@ Split milestone prerequisites into ready and blocked sets.
       ),
       false,
     );
+    assert.equal(
+      prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+        'wf-guidance-docs-budget-hold',
+      ),
+      false,
+    );
 
     const jobPath = join(
       tempDir,
@@ -1216,11 +1371,19 @@ Split milestone prerequisites into ready and blocked sets.
     );
     assert.match(
       scaffold,
-      /Governance-blocked reuse: wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+      /Governance-blocked reuse: .*wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+    );
+    assert.match(
+      scaffold,
+      /Governance re-enable guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
     );
     assert.match(
       retried.workflow_preparation.dispatch.packet.body,
-      /governance_blocked_reuse: wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+      /governance_blocked_reuse: .*wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+    );
+    assert.match(
+      retried.workflow_preparation.dispatch.packet.body,
+      /governance_reenable_guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
     );
   });
 
