@@ -46,13 +46,19 @@
         "governance_context": {
           "type": ["object", "null"],
           "additionalProperties": false,
+          "required": ["source", "isolated_batch", "batch_signature", "reasons", "blocked_reuse"],
           "properties": {
             "source": { "type": "string" },
             "isolated_batch": { "type": "boolean" },
             "batch_signature": { "type": ["string", "null"] },
-            "reasons": { "type": "array", "items": { "type": "string" } },
+            "reasons": {
+              "type": "array",
+              "items": { "type": "string" },
+              "minItems": 1
+            },
             "blocked_reuse": {
               "type": "array",
+              "minItems": 1,
               "items": {
                 "type": "object",
                 "additionalProperties": false,
@@ -65,7 +71,7 @@
                   "reason": { "type": "string" },
                   "checkpoint_id": { "type": ["string", "null"] },
                   "adoption_status": { "type": ["string", "null"] },
-                  "branch_budget": { "type": ["number", "null"] },
+                  "branch_budget": { "type": ["integer", "null"], "minimum": 0 },
                   "workflow_tightness": { "type": ["string", "null"] },
                   "oversight_strength": { "type": ["string", "null"] },
                   "detail": { "type": "string" }

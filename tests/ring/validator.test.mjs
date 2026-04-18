@@ -108,6 +108,62 @@ function buildWorkflowRunDoc() {
   };
 }
 
+function buildGovernedSessionDoc() {
+  return {
+    id: 's2-governed',
+    type: 'session',
+    version: 1,
+    created_at: '2026-04-18T00:00:00Z',
+    updated_at: '2026-04-18T00:00:00Z',
+    created_by: 'dispatcher',
+    session_id: 's2-governed',
+    status: 'preparing',
+    data: {
+      requirement_id: 'r1-test',
+      milestone_id: 'r1m1-test',
+      milestone_ids: ['r1m1-test'],
+      task_ids: ['t1-test'],
+      workflow_run_ids: ['run-1-test'],
+      evaluation_id: null,
+      distillation_id: null,
+      context_injected: {
+        workflow_template: 'wf-1-test',
+        distillations_applied: [],
+        registry_rank_at_selection: null,
+      },
+      governance_context: {
+        source: 'governance_blocked_reuse',
+        isolated_batch: true,
+        batch_signature: 'warm_semantic_lineage',
+        reasons: ['warm_semantic_lineage'],
+        blocked_reuse: [
+          {
+            task_id: 't1-test',
+            task_name: 'Governed task',
+            workflow_template_id: 'wf-1-test',
+            workflow_name: 'Governed Workflow',
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-root',
+            adoption_status: 'mainline',
+            branch_budget: 0,
+            workflow_tightness: 'tight',
+            oversight_strength: 'strong',
+            detail: 'The latest reusable workflow run still carries a governed warm-lineage hold.',
+          },
+        ],
+      },
+      execution_log: [
+        {
+          timestamp: '2026-04-18T00:00:00Z',
+          event: 'governance_context_injected',
+          actor: 'session-dispatcher',
+          detail: 'Session carries governance-sensitive fallback context.',
+        },
+      ],
+    },
+  };
+}
+
 describe('validator', async () => {
   const validator = await createValidator(ringDir);
 
@@ -135,6 +191,12 @@ describe('validator', async () => {
           execution_log: [],
         },
       };
+      const { valid, errors } = validator.validate('session', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a valid governed session context', () => {
+      const doc = buildGovernedSessionDoc();
       const { valid, errors } = validator.validate('session', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
@@ -386,6 +448,20 @@ describe('validator', async () => {
         created_by: 'test', session_id: 's1-bad', status: 'invalid_status',
         data: { requirement_id: 'r1', milestone_id: 'm1', task_ids: [], workflow_run_ids: [], execution_log: [] },
       };
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session context when required fields are missing', () => {
+      const doc = buildGovernedSessionDoc();
+      delete doc.data.governance_context.blocked_reuse;
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session context with a non-integer branch budget', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.governance_context.blocked_reuse[0].branch_budget = 0.5;
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
     });
