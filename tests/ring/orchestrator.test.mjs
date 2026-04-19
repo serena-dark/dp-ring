@@ -3971,6 +3971,374 @@ ${workflowPlan}
     }
   });
 
+  it('persists multiple governed automatic-reuse selection contexts when batched bundles launch into one session', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const requirementId = await isolatedRing.newId('requirement', {
+        name: 'Governed Selection Batch Requirement',
+      });
+      const milestoneId = await isolatedRing.newId('milestone', {
+        name: 'Governed Selection Batch Execution',
+        parentId: requirementId,
+      });
+
+      const requirementResult = await isolatedRing.create('requirement', {
+        id: requirementId,
+        status: 'ready',
+        created_by: 'test',
+        data: {
+          name: 'Governed Selection Batch Requirement',
+          description:
+            'Batch-launch two governed automatic-reuse selections into one session and preserve both comparison contexts.',
+          acceptance_criteria: [],
+          milestone_ids: [milestoneId],
+          priority: 'high',
+        },
+      });
+      assert.equal(requirementResult.ok, true, JSON.stringify(requirementResult.errors));
+
+      const milestoneResult = await isolatedRing.create('milestone', {
+        id: milestoneId,
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Governed Selection Batch Execution',
+          requirement_id: requirementId,
+          description: 'Launch shared batch work with two governed registry-reuse comparisons.',
+          acceptance_checks: [],
+          prerequisites: [],
+        },
+      });
+      assert.equal(milestoneResult.ok, true, JSON.stringify(milestoneResult.errors));
+
+      async function seedPolicyCarryoverWorkflow({
+        workflowId,
+        workflowName,
+        taskType,
+        runId,
+        checkpointId,
+        nodeId,
+        workerId,
+        registryScore,
+        policySnapshot,
+      }) {
+        const workflowResult = await isolatedRing.create('workflow', {
+          id: workflowId,
+          status: 'active',
+          created_by: 'test',
+          data: {
+            name: workflowName,
+            description: `${workflowName} preserves inherited checkpoint policy for governed automatic reuse testing.`,
+            applicable_to: [taskType],
+            steps: [
+              { id: 'inspect', name: 'Inspect', description: 'Inspect the governed target.' },
+              { id: 'verify', name: 'Verify', description: 'Verify the governed path.' },
+              { id: 'report', name: 'Report', description: 'Summarize the result.' },
+            ],
+          },
+        });
+        assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+        await isolatedRing.registry.recordScore(taskType, workflowId, registryScore);
+
+        const checkpoint = createWorkflowRunCheckpoint({
+          id: checkpointId,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: nodeId,
+          scope_ref: { kind: 'workflow-run', id: runId, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: policySnapshot,
+        });
+        const checkpointResult = await isolatedRing.create('checkpoint', {
+          id: checkpoint.id,
+          status: checkpoint.status,
+          created_by: checkpoint.created_by,
+          session_id: checkpoint.session_id,
+          data: checkpoint.data,
+        });
+        assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-18T07:00:00Z',
+              prepared_at: '2026-04-18T07:00:05Z',
+              last_report_at: '2026-04-18T07:00:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-18T07:05:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: [workerId],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: workerId,
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-18T07:00:40Z',
+                status: 'completed',
+                actor: workerId,
+                step_id: 'report',
+                note: policySnapshot.notes,
+                commit_sha: null,
+                worker_id: workerId,
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: 'main',
+              active_checkpoint_id: checkpointId,
+              checkpoint_ids: [checkpointId],
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: checkpointId,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-18T07:00:10Z',
+                ended_at: '2026-04-18T07:00:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-18T07:00:21Z',
+                ended_at: '2026-04-18T07:00:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'report',
+                status: 'completed',
+                started_at: '2026-04-18T07:00:31Z',
+                ended_at: '2026-04-18T07:00:40Z',
+                outputs: {},
+                notes: policySnapshot.notes,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      await seedPolicyCarryoverWorkflow({
+        workflowId: 'wf-docs-tight-policy-carryover-batch',
+        workflowName: 'Docs Tight Policy Carryover Batch',
+        taskType: 'documentation',
+        runId: 'run-docs-tight-policy-carryover-batch',
+        checkpointId: 'cp-docs-tight-policy-carryover-batch',
+        nodeId: 'n-docs-tight-policy-carryover-batch',
+        workerId: 'worker-docs-tight-policy-batch',
+        registryScore: 9.99,
+        policySnapshot: {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          notes: 'Documentation reuse previously tightened governance and left only branch_budget=1.',
+        },
+      });
+      await seedPolicyCarryoverWorkflow({
+        workflowId: 'wf-docs-budget-policy-carryover-batch',
+        workflowName: 'Docs Budget Policy Carryover Batch',
+        taskType: 'documentation',
+        runId: 'run-docs-budget-policy-carryover-batch',
+        checkpointId: 'cp-docs-budget-policy-carryover-batch',
+        nodeId: 'n-docs-budget-policy-carryover-batch',
+        workerId: 'worker-docs-budget-policy-batch',
+        registryScore: 8.75,
+        policySnapshot: {
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: 3,
+          notes: 'Documentation reuse keeps a lighter inherited branch budget.',
+        },
+      });
+      await seedPolicyCarryoverWorkflow({
+        workflowId: 'wf-testing-tight-policy-carryover-batch',
+        workflowName: 'Testing Tight Policy Carryover Batch',
+        taskType: 'testing',
+        runId: 'run-testing-tight-policy-carryover-batch',
+        checkpointId: 'cp-testing-tight-policy-carryover-batch',
+        nodeId: 'n-testing-tight-policy-carryover-batch',
+        workerId: 'worker-testing-tight-policy-batch',
+        registryScore: 9.94,
+        policySnapshot: {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          notes: 'Testing reuse previously tightened governance and left only branch_budget=1.',
+        },
+      });
+      await seedPolicyCarryoverWorkflow({
+        workflowId: 'wf-testing-budget-policy-carryover-batch',
+        workflowName: 'Testing Budget Policy Carryover Batch',
+        taskType: 'testing',
+        runId: 'run-testing-budget-policy-carryover-batch',
+        checkpointId: 'cp-testing-budget-policy-carryover-batch',
+        nodeId: 'n-testing-budget-policy-carryover-batch',
+        workerId: 'worker-testing-budget-policy-batch',
+        registryScore: 8.7,
+        policySnapshot: {
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: 2,
+          notes: 'Testing reuse keeps more branch budget and lower carryover pressure.',
+        },
+      });
+
+      const submitSharedBundle = ({ title, description, includePath, materialId, inlineData }) =>
+        isolatedRing.orchestrator.submitDispatchBundle({
+          bundle_protocol: 'ring.goal.v1',
+          bundle_version: '1',
+          artifact_transport: 'inline',
+          submitted_by: 'bundle-test',
+          payload: {
+            goal: {
+              title,
+              description,
+              acceptance_criteria: ['One governed task is created and shared batch launch preserves its selection context.'],
+            },
+            environment: {
+              project_id: 'governed-selection-batch-project',
+              repo_root: repoRoot,
+              target_scope: {
+                level: 'file',
+                include_paths: [includePath],
+                exclude_paths: [],
+              },
+              constraints: {
+                must_build: false,
+                must_cleanup: false,
+                merge_policy: 'judge_then_merge',
+                session_group_key: 'governed-selection-batch',
+              },
+            },
+            materials: [
+              {
+                material_id: materialId,
+                kind: 'preparation_package',
+                uri: null,
+                format: 'json',
+                mount_to: 'workspace/shared',
+                required: true,
+                inline_data: inlineData,
+              },
+            ],
+            context: {
+              artifact_refs: [],
+              brief_ref: null,
+              requirement_id: requirementId,
+              milestone_id: milestoneId,
+            },
+          },
+        });
+
+      const docsBundle = await submitSharedBundle({
+        title: 'Update governed selection guide',
+        description: 'Document how automatic reuse minimizes inherited governance cost when a guide task is dispatched in a shared batch.',
+        includePath: 'docs/governed-selection-batch.md',
+        materialId: 'mat-governed-selection-docs-batch',
+        inlineData: '{"docs":true}',
+      });
+      const testingBundle = await submitSharedBundle({
+        title: 'Verify governed selection batch coverage',
+        description: 'Verify the shared batch keeps both testing and documentation governed reuse comparisons visible after launch.',
+        includePath: 'tests/governed-selection-batch.test.mjs',
+        materialId: 'mat-governed-selection-testing-batch',
+        inlineData: '{"testing":true}',
+      });
+
+      assert.equal(docsBundle.status, 'ready_queued');
+      assert.equal(testingBundle.status, 'ready_queued');
+      assert.equal(docsBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(testingBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(
+        docsBundle.workflows.waiting_tasks[0].governance_selection_context?.basis,
+        'governance_minimize_policy_carryover',
+      );
+      assert.equal(
+        testingBundle.workflows.waiting_tasks[0].governance_selection_context?.basis,
+        'governance_minimize_policy_carryover',
+      );
+      assert.equal(docsBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-budget-policy-carryover-batch');
+      assert.equal(testingBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-testing-budget-policy-carryover-batch');
+
+      await isolatedRing.orchestrator.tick();
+
+      const launchedDocsBundle = await isolatedRing.orchestrator.readDispatchBundle(docsBundle.id);
+      const launchedTestingBundle = await isolatedRing.orchestrator.readDispatchBundle(testingBundle.id);
+      assert.equal(launchedDocsBundle.status, 'session_launched');
+      assert.equal(launchedTestingBundle.status, 'session_launched');
+      assert.ok(launchedDocsBundle.batching.session_id);
+      assert.equal(launchedDocsBundle.batching.session_id, launchedTestingBundle.batching.session_id);
+
+      const launchedSession = await isolatedRing.read('session', launchedDocsBundle.batching.session_id);
+      assert.deepEqual(
+        new Set(launchedSession.data.task_ids),
+        new Set([
+          launchedDocsBundle.workflows.waiting_tasks[0].task_id,
+          launchedTestingBundle.workflows.waiting_tasks[0].task_id,
+        ]),
+      );
+      assert.equal(launchedSession.data.context_injected.workflow_template, null);
+      assert.equal(launchedSession.data.context_injected.governance_selection_contexts.length, 2);
+
+      const launchedSelectionContexts = new Map(
+        launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
+      );
+      for (const waitingTask of [
+        launchedDocsBundle.workflows.waiting_tasks[0],
+        launchedTestingBundle.workflows.waiting_tasks[0],
+      ]) {
+        assert.deepEqual(launchedSelectionContexts.get(waitingTask.task_id), {
+          task_id: waitingTask.task_id,
+          task_name: waitingTask.task_name,
+          workflow_template_id: waitingTask.workflow_template_id,
+          workflow_name: waitingTask.workflow_name,
+          selection_context: waitingTask.governance_selection_context,
+        });
+      }
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
   it('isolates governance-forced fallback bundles into their own batch session groups', async () => {
     const requirementId = await ring.newId('requirement', {
       name: 'Shared Governance Batch Requirement',
