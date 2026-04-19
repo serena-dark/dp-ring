@@ -11,6 +11,7 @@ import {
   lineageForCheckpoint,
   synthesizeCheckpoint,
 } from '../../ring/lib/checkpoint-tree.mjs';
+import { createBranchCommitStatement } from '../../ring/lib/governance-statement.mjs';
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
 
@@ -48,10 +49,21 @@ describe('checkpoint tree groundwork', async () => {
       status: 'recorded',
       data: {
         event_type: 'checkpoint_created',
+        message_class: 'commit',
         branch_id: 'main',
         checkpoint_id: 'cp-root',
         actor: 'test-agent',
         occurred_at: '2026-04-17T00:00:00Z',
+        statement: createBranchCommitStatement({
+          event_type: 'checkpoint_created',
+          branch_id: 'main',
+          checkpoint_id: 'cp-root',
+          actor: 'test-agent',
+          occurred_at: '2026-04-17T00:00:00Z',
+          parent_checkpoint_id: null,
+          synthesis_inputs: [],
+          reason: null,
+        }),
         details: {
           parent_checkpoint_id: null,
           synthesis_inputs: [],

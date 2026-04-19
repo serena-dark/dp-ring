@@ -105,6 +105,10 @@ function evidenceRefs(values = []) {
   }));
 }
 
+function publicationStatements(values = []) {
+  return [...values].map((item) => clone(item));
+}
+
 function checkpointScope(scopeRef = {}) {
   return {
     kind: scopeRef.kind ?? 'node',
@@ -122,6 +126,7 @@ function checkpointData(fields = {}, defaults = {}) {
     policy_snapshot: policySnapshot(fields.policy_snapshot ?? defaults.policy_snapshot),
     execution_cursor: executionCursor(fields.execution_cursor ?? defaults.execution_cursor),
     evidence_refs: evidenceRefs(fields.evidence_refs ?? defaults.evidence_refs ?? []),
+    publication_statements: publicationStatements(fields.publication_statements ?? defaults.publication_statements ?? []),
     adoption_status: fields.adoption_status ?? defaults.adoption_status ?? 'candidate',
     replay_state: replayState(fields.replay_state ?? defaults.replay_state),
     synthesis_inputs: clone(fields.synthesis_inputs ?? defaults.synthesis_inputs ?? []),
@@ -146,6 +151,7 @@ export function createCheckpoint(fields = {}) {
       policy_snapshot: fields.policy_snapshot,
       execution_cursor: fields.execution_cursor,
       evidence_refs: fields.evidence_refs,
+      publication_statements: fields.publication_statements,
       adoption_status: fields.adoption_status,
       replay_state: fields.replay_state,
       synthesis_inputs: fields.synthesis_inputs,
@@ -163,6 +169,7 @@ export function continueFromCheckpoint(parent, fields = {}) {
     policy_snapshot: fields.policy_snapshot ?? parent.data.policy_snapshot,
     execution_cursor: fields.execution_cursor ?? parent.data.execution_cursor,
     evidence_refs: fields.evidence_refs ?? parent.data.evidence_refs,
+    publication_statements: fields.publication_statements ?? [],
     replay_state: fields.replay_state ?? parent.data.replay_state,
     synthesis_inputs: fields.synthesis_inputs ?? [],
     parent_checkpoint_id: parent.id,
@@ -178,6 +185,7 @@ export function forkCheckpoint(parent, fields = {}) {
     policy_snapshot: fields.policy_snapshot ?? parent.data.policy_snapshot,
     execution_cursor: fields.execution_cursor ?? parent.data.execution_cursor,
     evidence_refs: fields.evidence_refs ?? parent.data.evidence_refs,
+    publication_statements: fields.publication_statements ?? [],
     replay_state: fields.replay_state ?? parent.data.replay_state,
     adoption_status: fields.adoption_status ?? 'candidate',
     parent_checkpoint_id: parent.id,
@@ -236,6 +244,7 @@ export function synthesizeCheckpoint(inputs, fields = {}) {
     policy_snapshot: mergedPolicySnapshot,
     execution_cursor: fields.execution_cursor ?? parent.data.execution_cursor,
     evidence_refs: fields.evidence_refs ?? mergedEvidence,
+    publication_statements: fields.publication_statements ?? [],
     replay_state: fields.replay_state ?? parent.data.replay_state,
     adoption_status: fields.adoption_status ?? 'synthesized',
     status: fields.status ?? 'synthesized',

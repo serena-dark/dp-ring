@@ -366,6 +366,9 @@ describe('session runner', async () => {
 
     const branchEvent = await ring.read('branch-event', workflowRun.data.node_execution.branch_event_ids[0]);
     assert.equal(branchEvent.data.event_type, 'checkpoint_created');
+    assert.equal(branchEvent.data.message_class, 'commit');
+    assert.equal(branchEvent.data.statement.predicateType, 'https://dp-ring.dev/predicate/branch-event-commit/v1');
+    assert.equal(branchEvent.data.statement.predicate.context.checkpoint_id, workflowRun.data.node_execution.active_checkpoint_id);
 
     const packetPath = join(tempDir, workflowRun.data.steps[0].outputs.execution_packet_path);
     const packet = JSON.parse(await readFile(packetPath, 'utf-8'));

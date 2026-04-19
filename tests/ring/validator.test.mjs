@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import { createValidator } from '../../ring/lib/validator.mjs';
 import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
+import { createBranchCommitStatement, createGovernanceStatement } from '../../ring/lib/governance-statement.mjs';
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
 
@@ -359,6 +360,34 @@ describe('validator', async () => {
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
 
+    it('accepts a valid governance-statement', () => {
+      const doc = createGovernanceStatement({
+        predicateType: 'https://dp-ring.dev/predicate/checkpoint-publication/v1',
+        predicate: {
+          checkpoint_id: 'cp-root',
+          status: 'published',
+          evidence: [{ kind: 'summary', ref: 'docs/tasks/reviews/t1.md' }],
+        },
+        subjects: [
+          {
+            name: 'checkpoint-publication/cp-root',
+            mediaType: 'application/vnd.dp-ring.checkpoint-publication+json',
+            body: {
+              checkpoint_id: 'cp-root',
+              branch_id: 'main',
+              output_ref: 'docs/tasks/reviews/t1.md',
+            },
+            locator: {
+              checkpoint_id: 'cp-root',
+              branch_id: 'main',
+            },
+          },
+        ],
+      });
+      const { valid, errors } = validator.validate('governance-statement', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
     it('accepts a valid checkpoint', () => {
       const doc = {
         id: 'cp-root', type: 'checkpoint', version: 1,
@@ -383,6 +412,7 @@ describe('validator', async () => {
           evidence_refs: [
             { kind: 'summary', ref: 'docs/tasks/reviews/t1.md', digest: null },
           ],
+          publication_statements: [],
           adoption_status: 'candidate',
           replay_state: {
             status: 'idle',
@@ -413,10 +443,21 @@ describe('validator', async () => {
         created_by: 'test', session_id: null, status: 'recorded',
         data: {
           event_type: 'checkpoint_created',
+          message_class: 'commit',
           branch_id: 'main',
           checkpoint_id: 'cp-root',
           actor: 'test',
           occurred_at: '2026-04-17T00:00:00Z',
+          statement: createBranchCommitStatement({
+            event_type: 'checkpoint_created',
+            branch_id: 'main',
+            checkpoint_id: 'cp-root',
+            actor: 'test',
+            occurred_at: '2026-04-17T00:00:00Z',
+            parent_checkpoint_id: null,
+            synthesis_inputs: [],
+            reason: null,
+          }),
           details: {
             parent_checkpoint_id: null,
             synthesis_inputs: [],

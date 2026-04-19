@@ -164,6 +164,7 @@ describe('store', async () => {
             ordinal: 0,
           },
           evidence_refs: [],
+          publication_statements: [],
           adoption_status: 'candidate',
           replay_state: {
             status: 'idle',

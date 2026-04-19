@@ -18,7 +18,7 @@
     "data": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event_type", "branch_id", "checkpoint_id", "actor", "occurred_at", "details"],
+      "required": ["event_type", "message_class", "branch_id", "checkpoint_id", "actor", "occurred_at", "details"],
       "properties": {
         "event_type": {
           "type": "string",
@@ -33,10 +33,15 @@
             "recovery_completed"
           ]
         },
+        "message_class": {
+          "type": "string",
+          "enum": ["observe", "advise", "commit"]
+        },
         "branch_id": { "type": "string", "minLength": 1 },
         "checkpoint_id": { "type": "string", "minLength": 1 },
         "actor": { "type": "string", "minLength": 1 },
         "occurred_at": { "type": "string", "format": "date-time" },
+        "statement": { "$ref": "governance-statement.schema.json#" },
         "details": {
           "type": "object",
           "additionalProperties": true,
@@ -48,5 +53,25 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "data": {
+            "properties": {
+              "message_class": { "const": "commit" }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "required": ["statement"]
+          }
+        }
+      }
+    }
+  ]
 }
