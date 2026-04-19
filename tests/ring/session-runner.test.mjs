@@ -363,6 +363,8 @@ describe('session runner', async () => {
     assert.equal(checkpoint.type, 'checkpoint');
     assert.equal(checkpoint.status, 'mainline');
     assert.equal(checkpoint.data.scope_ref.kind, 'workflow-run');
+    assert.equal(checkpoint.data.publication_statements.length, 1);
+    assert.equal(checkpoint.data.publication_statements[0].predicateType, 'https://dp-ring.dev/predicate/checkpoint-publication/v1');
 
     const branchEvent = await ring.read('branch-event', workflowRun.data.node_execution.branch_event_ids[0]);
     assert.equal(branchEvent.data.event_type, 'checkpoint_created');

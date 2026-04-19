@@ -103,6 +103,59 @@ export function createGovernanceStatement(fields = {}) {
   };
 }
 
+export function createCheckpointPublicationStatement(checkpoint, fields = {}) {
+  const checkpointId = normalizedString(checkpoint?.id);
+  const branchId = normalizedString(checkpoint?.data?.branch_id);
+  const nodeId = normalizedString(checkpoint?.data?.node_id);
+  if (!checkpointId || !branchId || !nodeId) {
+    throw new Error('Checkpoint publication statements require checkpoint id, branch id, and node id.');
+  }
+
+  const scopeRef = checkpoint?.data?.scope_ref == null ? null : clone(checkpoint.data.scope_ref);
+  const executionCursor = checkpoint?.data?.execution_cursor == null ? null : clone(checkpoint.data.execution_cursor);
+  const evidenceRefs = Array.isArray(checkpoint?.data?.evidence_refs)
+    ? checkpoint.data.evidence_refs.map((item) => ({
+      kind: item.kind,
+      ref: item.ref,
+      digest: item.digest ?? null,
+    }))
+    : [];
+  const replayState = checkpoint?.data?.replay_state == null ? null : clone(checkpoint.data.replay_state);
+
+  return createGovernanceStatement({
+    predicateType: 'https://dp-ring.dev/predicate/checkpoint-publication/v1',
+    subjects: [
+      {
+        name: `checkpoint-publication/${checkpointId}`,
+        mediaType: 'application/vnd.dp-ring.checkpoint-publication+json',
+        body: {
+          checkpoint_id: checkpointId,
+          branch_id: branchId,
+          node_id: nodeId,
+          scope_ref: scopeRef,
+        },
+        locator: {
+          checkpoint_id: checkpointId,
+          branch_id: branchId,
+          node_id: nodeId,
+        },
+      },
+    ],
+    predicate: {
+      checkpoint: {
+        id: checkpointId,
+        status: normalizedString(checkpoint?.status),
+        adoption_status: normalizedString(checkpoint?.data?.adoption_status),
+        execution: executionCursor,
+        scope_ref: scopeRef,
+        evidence_refs: evidenceRefs,
+        replay_state: replayState,
+      },
+    },
+    profile: fields.profile,
+  });
+}
+
 export function createBranchCommitStatement(fields = {}) {
   const eventType = normalizedString(fields.event_type);
   const branchId = normalizedString(fields.branch_id);
