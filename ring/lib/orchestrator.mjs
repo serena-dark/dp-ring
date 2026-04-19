@@ -418,6 +418,42 @@ function buildGovernanceSelectionContext(
   };
 }
 
+function describeGovernanceSelectionBasis(basis) {
+  if (basis === 'governance_minimize_policy_carryover') {
+    return `${basis} (preferred the lower inherited governance cost)`;
+  }
+  if (basis === 'governance_prefer_effective_force') {
+    return `${basis} (preferred the stronger checkpoint effective force after governance cost tied)`;
+  }
+  return trimString(basis) || 'unknown';
+}
+
+function describeGovernanceSelectionContextEntry(entry) {
+  if (!entry) {
+    return 'none';
+  }
+
+  const governancePressure = Number.isFinite(entry.governance_pressure_score)
+    ? entry.governance_pressure_score
+    : 'n/a';
+  const effectiveForce = Number.isFinite(entry.effective_force_score)
+    ? entry.effective_force_score
+    : 'n/a';
+  return `${entry.workflow_id} (${entry.workflow_name}) | policy: ${entry.policy} | governance_pressure_score: ${governancePressure} | effective_force_score: ${effectiveForce}`;
+}
+
+function describeGovernanceSelectionContext(selectionContext) {
+  if (!selectionContext) {
+    return 'none';
+  }
+
+  return [
+    `basis: ${describeGovernanceSelectionBasis(selectionContext.basis)}`,
+    `preferred: ${describeGovernanceSelectionContextEntry(selectionContext.preferred)}`,
+    `compared: ${describeGovernanceSelectionContextEntry(selectionContext.compared)}`,
+  ].join(' | ');
+}
+
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
   const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
   const checkpointId = checkpointPolicy.checkpointId
@@ -1880,12 +1916,15 @@ function buildWorkflowPreparationPacket(
             : 'none';
           const governanceReenableGuidance =
             describeWorkflowGovernanceReenableGuidanceList(blockedCandidateItems);
+          const governanceSelectionContext =
+            describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
           return [
             `- ${task.id}: ${task.data.name}`,
             `  task_type: ${task.data.task_type}`,
             `  milestone: ${task.data.milestone_id}`,
             `  task_document: docs/tasks/${task.id}/${task.id}.md`,
             `  preferred_reuse: ${summarizeWorkflowRecommendation(recommendation)}`,
+            `  governance_selection_context: ${governanceSelectionContext}`,
             `  reusable_candidates: ${candidates}`,
             `  governance_blocked_reuse: ${blockedCandidates}`,
             `  governance_reenable_guidance: ${governanceReenableGuidance}`,
@@ -1950,6 +1989,8 @@ function buildWorkflowPreparationScaffold(
         const blockedCandidates = recommendation?.governance_blocked_candidates ?? [];
         const governanceReenableGuidance =
           describeWorkflowGovernanceReenableGuidanceList(blockedCandidates);
+        const governanceSelectionContext =
+          describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
         const action = preferred ? 'reuse' : 'create';
         const headerLines = [
           `## Task ${task.id}: ${task.data.name}`,
@@ -1963,6 +2004,7 @@ function buildWorkflowPreparationScaffold(
           headerLines.push(`Workflow ID: ${preferred.id}`);
           headerLines.push('');
           headerLines.push(`Preferred reuse: ${summarizeWorkflowRecommendation(recommendation)}`);
+          headerLines.push(`Governance selection context: ${governanceSelectionContext}`);
           headerLines.push(
             recommendation?.candidates?.length
               ? `Other candidates: ${recommendation.candidates.map((item) => item.id).join(', ')}`
