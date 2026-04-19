@@ -131,6 +131,31 @@ function buildGovernedSessionDoc() {
         workflow_template: 'wf-1-test',
         distillations_applied: [],
         registry_rank_at_selection: null,
+        governance_selection_contexts: [
+          {
+            task_id: 't1-test',
+            task_name: 'Governed task',
+            workflow_template_id: 'wf-1-test',
+            workflow_name: 'Governed Workflow',
+            selection_context: {
+              basis: 'governance_prefer_effective_force',
+              preferred: {
+                workflow_id: 'wf-1-test',
+                workflow_name: 'Governed Workflow',
+                policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+                governance_pressure_score: 1228,
+                effective_force_score: 25,
+              },
+              compared: {
+                workflow_id: 'wf-2-test',
+                workflow_name: 'Comparison Workflow',
+                policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+                governance_pressure_score: 1228,
+                effective_force_score: 0,
+              },
+            },
+          },
+        ],
       },
       governance_context: {
         source: 'governance_blocked_reuse',
@@ -503,6 +528,13 @@ describe('validator', async () => {
     it('rejects a governed session context with a non-integer branch budget', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.governance_context.blocked_reuse[0].branch_budget = 0.5;
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session selection context when task linkage is missing', () => {
+      const doc = buildGovernedSessionDoc();
+      delete doc.data.context_injected.governance_selection_contexts[0].task_id;
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
     });

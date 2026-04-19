@@ -454,6 +454,40 @@ function describeGovernanceSelectionContext(selectionContext) {
   ].join(' | ');
 }
 
+function sessionGovernanceSelectionContexts(readyTasks = []) {
+  return readyTasks.flatMap((item) => {
+    const selectionContext = item?.governance_selection_context ?? null;
+    const taskId = trimString(item?.task_id);
+    const workflowTemplateId = trimString(item?.workflow_template_id);
+    if (!selectionContext || !taskId || !workflowTemplateId) {
+      return [];
+    }
+
+    return [{
+      task_id: taskId,
+      task_name: trimString(item?.task_name) || null,
+      workflow_template_id: workflowTemplateId,
+      workflow_name: trimString(item?.workflow_name) || workflowTemplateId,
+      selection_context: clone(selectionContext),
+    }];
+  });
+}
+
+function buildSessionContextInjected(readyTasks = []) {
+  const singleWorkflowTemplate =
+    [...new Set(readyTasks.map((item) => trimString(item?.workflow_template_id) || null).filter(Boolean))]
+      .length === 1
+      ? trimString(readyTasks[0]?.workflow_template_id) || null
+      : null;
+
+  return {
+    workflow_template: singleWorkflowTemplate,
+    distillations_applied: [],
+    registry_rank_at_selection: null,
+    governance_selection_contexts: sessionGovernanceSelectionContexts(readyTasks),
+  };
+}
+
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
   const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
   const checkpointId = checkpointPolicy.checkpointId
@@ -5498,10 +5532,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       });
       const workflowRunIds = [];
       const governanceContext = buildSessionGovernanceContext(readyTasks);
-      const singleWorkflowTemplate =
-        [...new Set(readyTasks.map((item) => item.workflow_template_id))].length === 1
-          ? readyTasks[0].workflow_template_id
-          : null;
+      const sessionContextInjected = buildSessionContextInjected(readyTasks);
 
       const createSessionResult = await ring.create('session', {
         id: sessionId,
@@ -5516,11 +5547,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           workflow_run_ids: [],
           evaluation_id: null,
           distillation_id: null,
-          context_injected: {
-            workflow_template: singleWorkflowTemplate,
-            distillations_applied: [],
-            registry_rank_at_selection: null,
-          },
+          context_injected: sessionContextInjected,
           execution_log: [
             {
               timestamp: nowIso(),
@@ -5733,10 +5760,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       });
       const workflowRunIds = [];
       const governanceContext = buildSessionGovernanceContext(readyTasks);
-      const singleWorkflowTemplate =
-        [...new Set(readyTasks.map((item) => item.workflow_template_id))].length === 1
-          ? readyTasks[0].workflow_template_id
-          : null;
+      const sessionContextInjected = buildSessionContextInjected(readyTasks);
 
       const createSessionResult = await ring.create('session', {
         id: sessionId,
@@ -5751,11 +5775,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           workflow_run_ids: [],
           evaluation_id: null,
           distillation_id: null,
-          context_injected: {
-            workflow_template: singleWorkflowTemplate,
-            distillations_applied: [],
-            registry_rank_at_selection: null,
-          },
+          context_injected: sessionContextInjected,
           execution_log: [
             {
               timestamp: nowIso(),
