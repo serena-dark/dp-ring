@@ -23,7 +23,10 @@ import {
   checkpointAutomaticReusePolicyState,
   warmSemanticLineageState,
 } from './governance-policy.mjs';
-import { createBranchCommitStatement } from './governance-statement.mjs';
+import {
+  createBranchCommitStatement,
+  createCheckpointPublicationStatement,
+} from './governance-statement.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -825,6 +828,11 @@ async function appendBranchEvent(ring, fields) {
   return result.artifact;
 }
 
+function publishCheckpointStatements(checkpoint) {
+  checkpoint.data.publication_statements = [createCheckpointPublicationStatement(checkpoint)];
+  return checkpoint;
+}
+
 export function createSessionRunner(
   repoRoot,
   ring,
@@ -931,7 +939,7 @@ export function createSessionRunner(
     const rootCheckpointId = await ring.newId('checkpoint', {
       name: `${workflowRun.id} root`,
     });
-    const rootCheckpoint = createCheckpoint({
+    const rootCheckpoint = publishCheckpointStatements(createCheckpoint({
       id: rootCheckpointId,
       created_by: 'session-runner',
       session_id: session.id,
@@ -955,7 +963,7 @@ export function createSessionRunner(
       },
       synthesis_inputs: [],
       parent_checkpoint_id: null,
-    });
+    }));
     const nodeArtifact = workflowRunNodeArtifact(nodeId, session.id, workflowRun, task, workflow, preparedAt);
     nodeArtifact.data.runtime.capsule_state = recordCheckpoint(
       createEmptyCapsuleState({
@@ -1629,6 +1637,8 @@ export function createSessionRunner(
         parent_checkpoint_id: activeCheckpoint.id,
       });
     }
+
+    publishCheckpointStatements(nextCheckpoint);
 
     const checkpointResult = await ring.create('checkpoint', {
       id: nextCheckpoint.id,

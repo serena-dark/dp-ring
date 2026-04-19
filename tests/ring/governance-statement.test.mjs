@@ -5,6 +5,7 @@ import { createValidator } from '../../ring/lib/validator.mjs';
 import {
   canonicalizeGovernanceValue,
   createBranchCommitStatement,
+  createCheckpointPublicationStatement,
   createGovernanceStatement,
 } from '../../ring/lib/governance-statement.mjs';
 
@@ -65,6 +66,32 @@ describe('governance statement', async () => {
     assert.match(statement.subject[0].digest, /^sha256:/);
     assert.ok(statement.subject[0].size > 0);
     assert.match(statement.canonicalization.predicate_digest, /^sha256:/);
+  });
+
+  it('creates checkpoint publication statements that project checkpoint evidence without leaking internal state', () => {
+    const statement = createCheckpointPublicationStatement({
+      id: 'cp-root',
+      status: 'mainline',
+      data: {
+        branch_id: 'main',
+        node_id: 'n1-router',
+        scope_ref: { kind: 'workflow-run', id: 'run-1', path: 'workspace/run-1' },
+        execution_cursor: { phase: 'completed', step_id: 'finalize', ordinal: 2 },
+        evidence_refs: [
+          { kind: 'summary', ref: 'docs/tasks/reviews/t1.md', digest: null },
+        ],
+        adoption_status: 'mainline',
+        replay_state: { status: 'idle', requested_at: null, completed_at: null },
+      },
+    });
+
+    assert.equal(statement.predicateType, 'https://dp-ring.dev/predicate/checkpoint-publication/v1');
+    assert.equal(statement.predicate.checkpoint.id, 'cp-root');
+    assert.equal(statement.predicate.checkpoint.execution.phase, 'completed');
+    assert.deepEqual(statement.predicate.checkpoint.evidence_refs, [
+      { kind: 'summary', ref: 'docs/tasks/reviews/t1.md', digest: null },
+    ]);
+    assert.match(statement.subject[0].digest, /^sha256:/);
   });
 
   it('builds commit statements for branch-event decisions from tree lineage context', () => {
