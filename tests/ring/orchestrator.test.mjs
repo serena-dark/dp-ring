@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
 import {
+  continueFromCheckpoint,
   createCheckpoint,
   forkCheckpoint,
   synthesizeCheckpoint,
@@ -2702,6 +2703,324 @@ Split milestone prerequisites into ready and blocked sets.
         bundle.workflows.waiting_tasks[0].registry_mode,
         'governance_minimize_policy_carryover',
       );
+      assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
+  it('prefers the stronger checkpoint effective-force candidate when constrained reusable workflows have equal governance cost', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const lowForceWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-low-force-policy-carryover',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing Low Force Policy Carryover',
+          description: 'Reusable testing workflow whose latest mainline checkpoint carries equal policy cost but weak checkpoint force.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the governed verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(lowForceWorkflow.ok, true, JSON.stringify(lowForceWorkflow.errors));
+      await isolatedRing.registry.recordScore('testing', 'wf-testing-low-force-policy-carryover', 9.99);
+
+      const highForceWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-testing-high-force-policy-carryover',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Testing High Force Policy Carryover',
+          description: 'Reusable testing workflow whose latest mainline checkpoint carries equal policy cost but stronger synthesized checkpoint force.',
+          applicable_to: ['testing'],
+          steps: [
+            { id: 'inspect', name: 'Inspect', description: 'Inspect the regression target.' },
+            { id: 'verify', name: 'Verify', description: 'Run the governed verification path.' },
+            { id: 'report', name: 'Report', description: 'Summarize the result.' },
+          ],
+        },
+      });
+      assert.equal(highForceWorkflow.ok, true, JSON.stringify(highForceWorkflow.errors));
+      await isolatedRing.registry.recordScore('testing', 'wf-testing-high-force-policy-carryover', 8.75);
+
+      async function createCompletedReusableRun({
+        workflowId,
+        runId,
+        activeCheckpoint,
+        checkpoints,
+        nodeId,
+        workerId,
+        note,
+      }) {
+        for (const checkpoint of checkpoints) {
+          const checkpointResult = await isolatedRing.create('checkpoint', {
+            id: checkpoint.id,
+            status: checkpoint.status,
+            created_by: checkpoint.created_by,
+            session_id: checkpoint.session_id,
+            data: checkpoint.data,
+          });
+          assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+        }
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-18T06:30:00Z',
+              prepared_at: '2026-04-18T06:30:05Z',
+              last_report_at: '2026-04-18T06:30:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-18T06:35:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: [workerId],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: workerId,
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-18T06:30:40Z',
+                status: 'completed',
+                actor: workerId,
+                step_id: 'report',
+                note,
+                commit_sha: null,
+                worker_id: workerId,
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under equivalent inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: activeCheckpoint.data.branch_id,
+              active_checkpoint_id: activeCheckpoint.id,
+              checkpoint_ids: checkpoints.map((checkpoint) => checkpoint.id),
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: activeCheckpoint.id,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-18T06:30:10Z',
+                ended_at: '2026-04-18T06:30:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-18T06:30:21Z',
+                ended_at: '2026-04-18T06:30:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'report',
+                status: 'completed',
+                started_at: '2026-04-18T06:30:31Z',
+                ended_at: '2026-04-18T06:30:40Z',
+                outputs: {},
+                notes: note,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      const sharedPolicySnapshot = {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        notes: 'Equivalent governed reuse policy should let checkpoint force break ties after policy cost is already equal.',
+      };
+
+      const lowForceCheckpoint = createWorkflowRunCheckpoint({
+        id: 'cp-testing-low-force-active',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-testing-low-force',
+        scope_ref: { kind: 'workflow-run', id: 'run-testing-low-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+        evidence_refs: [],
+      });
+      await createCompletedReusableRun({
+        workflowId: 'wf-testing-low-force-policy-carryover',
+        runId: 'run-testing-low-force',
+        activeCheckpoint: lowForceCheckpoint,
+        checkpoints: [lowForceCheckpoint],
+        nodeId: 'n-testing-low-force',
+        workerId: 'worker-testing-low-force',
+        note: 'The low-force checkpoint path completed under the shared constrained policy without extra branch evidence.',
+      });
+
+      const highForceRoot = createWorkflowRunCheckpoint({
+        id: 'cp-testing-high-force-root',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-testing-high-force',
+        scope_ref: { kind: 'workflow-run', id: 'run-testing-high-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'inspect', ordinal: 0 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceLeft = forkCheckpoint(highForceRoot, {
+        id: 'cp-testing-high-force-left',
+        created_by: 'worker-testing-left',
+        branch_id: 'testing.left',
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/testing-left-progress.json', digest: 'sha256:testing-left-progress' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceLeftContinued = continueFromCheckpoint(highForceLeft, {
+        id: 'cp-testing-high-force-left-continued',
+        created_by: 'worker-testing-left',
+        execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 1 },
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/testing-left-progress.json', digest: 'sha256:testing-left-progress' },
+          { kind: 'report', ref: 'reports/testing-left-verify.json', digest: 'sha256:testing-left-verify' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceRight = forkCheckpoint(highForceRoot, {
+        id: 'cp-testing-high-force-right',
+        created_by: 'worker-testing-right',
+        branch_id: 'testing.right',
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/testing-right-review.json', digest: 'sha256:testing-right-review' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceCheckpoint = synthesizeCheckpoint([highForceLeftContinued, highForceRight], {
+        id: 'cp-testing-high-force-active',
+        status: 'mainline',
+        created_by: 'session-runner',
+        branch_id: 'main.testing.force',
+        scope_ref: { kind: 'workflow-run', id: 'run-testing-high-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/testing-force-summary.json', digest: 'sha256:testing-force-summary' },
+          { kind: 'report', ref: 'reports/testing-force-summary.json', digest: 'sha256:testing-force-summary' },
+          { kind: 'artifact', ref: 'artifacts/testing-force-proof.json', digest: 'sha256:testing-force-proof' },
+        ],
+      });
+      await createCompletedReusableRun({
+        workflowId: 'wf-testing-high-force-policy-carryover',
+        runId: 'run-testing-high-force',
+        activeCheckpoint: highForceCheckpoint,
+        checkpoints: [
+          highForceRoot,
+          highForceLeft,
+          highForceLeftContinued,
+          highForceRight,
+          highForceCheckpoint,
+        ],
+        nodeId: 'n-testing-high-force',
+        workerId: 'worker-testing-high-force',
+        note: 'The high-force checkpoint path completed under the same constrained policy after collecting stronger synthesized branch evidence.',
+      });
+
+      const bundle = await isolatedRing.orchestrator.submitDispatchBundle({
+        bundle_protocol: 'ring.goal.v1',
+        bundle_version: '1',
+        artifact_transport: 'inline',
+        submitted_by: 'bundle-test',
+        payload: {
+          goal: {
+            title: 'Verify constrained effective-force selection',
+            description:
+              'Verify that automatic reuse prefers the stronger checkpoint effective-force candidate when constrained reusable workflows otherwise carry the same inherited policy cost.',
+            acceptance_criteria: [
+              'A testing task is created',
+              'Automatic selection prefers the stronger checkpoint force when governance cost is otherwise equal',
+            ],
+          },
+          environment: {
+            project_id: 'bundle-project-governance-effective-force-selection',
+            repo_root: repoRoot,
+            target_scope: {
+              level: 'file',
+              include_paths: ['tests/governance-effective-force-selection.test.mjs'],
+              exclude_paths: [],
+            },
+            constraints: {
+              must_build: false,
+              must_cleanup: false,
+              merge_policy: 'judge_then_merge',
+            },
+          },
+          materials: [
+            {
+              material_id: 'mat-governance-effective-force-selection',
+              kind: 'preparation_package',
+              uri: null,
+              format: 'json',
+              mount_to: 'workspace/selection',
+              required: true,
+              inline_data: '{"selection":true}',
+            },
+          ],
+          context: {
+            artifact_refs: [],
+            brief_ref: null,
+          },
+        },
+      });
+
+      assert.equal(bundle.status, 'ready_queued');
+      assert.deepEqual(bundle.workflows.reused_workflow_ids, ['wf-testing-high-force-policy-carryover']);
+      assert.equal(bundle.workflows.generated_workflow_ids.length, 0);
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-testing-high-force-policy-carryover');
+      assert.equal(bundle.workflows.waiting_tasks[0].workflow_source, 'registry_reuse');
+      assert.equal(bundle.workflows.waiting_tasks[0].registry_rank, 2);
+      assert.equal(
+        bundle.workflows.waiting_tasks[0].registry_mode,
+        'governance_prefer_effective_force',
+      );
+      assert.match(bundle.workflows.waiting_tasks[0].selection_note ?? '', /stronger checkpoint effective force/i);
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
     } finally {
       await isolated.cleanup();

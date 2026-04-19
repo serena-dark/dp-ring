@@ -5,6 +5,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path
 import { promisify } from 'node:util';
 import {
   checkpointAutomaticReusePolicyState,
+  checkpointEffectiveForceState,
   checkpointGovernancePressureState,
   workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
 } from './governance-policy.mjs';
@@ -254,6 +255,29 @@ function normalizeStringList(value) {
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+async function workflowRunCheckpointContext(ring, workflowRun, activeCheckpoint = null) {
+  const checkpointsById = new Map();
+  const activeCheckpointId = trimString(activeCheckpoint?.id);
+  if (activeCheckpointId && activeCheckpoint) {
+    checkpointsById.set(activeCheckpointId, activeCheckpoint);
+  }
+
+  const checkpointIds = [...new Set(normalizeStringList(workflowRun?.data?.node_execution?.checkpoint_ids))];
+  const missingCheckpointIds = checkpointIds.filter((checkpointId) => !checkpointsById.has(checkpointId));
+  const loadedCheckpoints = await Promise.all(
+    missingCheckpointIds.map((checkpointId) => ring.read('checkpoint', checkpointId).catch(() => null)),
+  );
+
+  for (const checkpoint of loadedCheckpoints) {
+    const checkpointId = trimString(checkpoint?.id);
+    if (checkpointId) {
+      checkpointsById.set(checkpointId, checkpoint);
+    }
+  }
+
+  return checkpointsById;
 }
 
 function workflowRunRecencyValue(run) {
@@ -3998,6 +4022,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       let workflowSource = 'custom_generated';
       let registryRank = null;
       let registryMode = null;
+      let selectionNote = recommendation?.note ?? null;
 
       if (recommendation?.workflow && strategy !== 'hybrid') {
         workflow = activeWorkflows.find((item) => item.id === recommendation.workflow.id) ?? recommendation.workflow;
@@ -4060,6 +4085,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         workflow_source: workflowSource,
         registry_rank: registryRank,
         registry_mode: registryMode,
+        selection_note: selectionNote,
         governance_blocked_reuse: governanceBlockedReuse,
         ready_at: nowIso(),
         dispatched_at: null,
@@ -4824,6 +4850,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     const latestWorkflowRuns = latestWorkflowRunsByTemplate(await ring.list('workflow-run'));
     const governanceBlocksByTemplate = new Map();
     const automaticReusePolicyByTemplate = new Map();
+    const effectiveForceByTemplate = new Map();
     const recommendations = new Map();
 
     for (const workflow of activeWorkflows) {
@@ -4832,14 +4859,19 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const activeCheckpoint = activeCheckpointId
         ? await ring.read('checkpoint', activeCheckpointId).catch(() => null)
         : null;
-      governanceBlocksByTemplate.set(
-        workflow.id,
-        workflowReuseGovernanceBlock(latestRun, activeCheckpoint),
-      );
-      automaticReusePolicyByTemplate.set(
-        workflow.id,
-        checkpointAutomaticReusePolicy(activeCheckpoint),
-      );
+      const governanceBlock = workflowReuseGovernanceBlock(latestRun, activeCheckpoint);
+      const automaticReusePolicy = checkpointAutomaticReusePolicy(activeCheckpoint);
+      governanceBlocksByTemplate.set(workflow.id, governanceBlock);
+      automaticReusePolicyByTemplate.set(workflow.id, automaticReusePolicy);
+      if (latestRun && activeCheckpoint && automaticReusePolicy.constrained && !governanceBlock) {
+        const checkpointContext = await workflowRunCheckpointContext(ring, latestRun, activeCheckpoint);
+        effectiveForceByTemplate.set(
+          workflow.id,
+          checkpointEffectiveForceState(activeCheckpoint, checkpointContext).effectiveForceScore,
+        );
+      } else {
+        effectiveForceByTemplate.set(workflow.id, 0);
+      }
     }
 
     for (const task of tasks) {
@@ -4909,6 +4941,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
               return policyComparison;
             }
 
+            const leftEffectiveForce = effectiveForceByTemplate.get(left.id) ?? 0;
+            const rightEffectiveForce = effectiveForceByTemplate.get(right.id) ?? 0;
+            if (leftEffectiveForce !== rightEffectiveForce) {
+              return rightEffectiveForce - leftEffectiveForce;
+            }
+
             const leftRank = registryRanksByWorkflowId.get(left.id) ?? Number.POSITIVE_INFINITY;
             const rightRank = registryRanksByWorkflowId.get(right.id) ?? Number.POSITIVE_INFINITY;
             if (leftRank !== rightRank) {
@@ -4934,12 +4972,21 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             const preferredPolicy = automaticReusePolicyByTemplate.get(preferredWorkflow.id) ?? {
               constrained: false,
             };
+            const preferredEffectiveForce = effectiveForceByTemplate.get(preferredWorkflow.id) ?? 0;
+            const recommendedEffectiveForce = effectiveForceByTemplate.get(defaultWorkflow.id) ?? 0;
             recommendedWorkflow = preferredWorkflow;
             recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
-            recommendedMode = 'governance_minimize_policy_carryover';
-            recommendedNote =
-              `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
-              + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${defaultWorkflow.id} (${describeAutomaticReusePolicy(recommendedPolicy)}).`;
+            if (compareAutomaticReusePolicies(preferredPolicy, recommendedPolicy) < 0) {
+              recommendedMode = 'governance_minimize_policy_carryover';
+              recommendedNote =
+                `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
+                + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${defaultWorkflow.id} (${describeAutomaticReusePolicy(recommendedPolicy)}).`;
+            } else {
+              recommendedMode = 'governance_prefer_effective_force';
+              recommendedNote =
+                `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
+                + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${defaultWorkflow.id} (${recommendedEffectiveForce}).`;
+            }
           }
         }
       }
@@ -5118,6 +5165,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         let workflowSource;
         let registryRank = null;
         let registryMode = null;
+        let selectionNote = null;
         const recommendationEntry = recommendations.get(task.id) ?? null;
         const recommendation = recommendationEntry?.recommended ?? null;
         if (
@@ -5149,6 +5197,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             workflowSource = 'registry_reuse';
             registryRank = recommendation.rank ?? null;
             registryMode = recommendation.mode ?? null;
+            selectionNote = recommendation.note ?? null;
           } else {
             workflowSource = 'existing_reuse';
           }
@@ -5206,6 +5255,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           workflow_source: workflowSource,
           registry_rank: registryRank,
           registry_mode: registryMode,
+          selection_note: selectionNote,
           governance_blocked_reuse: governanceBlockedReuse,
           ready_at: nowIso(),
           dispatched_at: null,
