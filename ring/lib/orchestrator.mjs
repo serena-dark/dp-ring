@@ -366,6 +366,58 @@ function describeAutomaticReusePolicy(policy) {
   return labels.length > 0 ? labels.join(', ') : 'an inherited mainline checkpoint policy';
 }
 
+function normalizeEffectiveForceScore(score) {
+  return Number.isFinite(score) ? score : 0;
+}
+
+function selectionContextEntry(workflow, policy, effectiveForceScore) {
+  if (!workflow) {
+    return null;
+  }
+
+  const governancePressureScore = automaticReusePolicyGovernancePressure(policy);
+  return {
+    workflow_id: workflow.id,
+    workflow_name: workflow.data?.name ?? workflow.id,
+    policy: describeAutomaticReusePolicy(policy),
+    governance_pressure_score: Number.isFinite(governancePressureScore)
+      ? governancePressureScore
+      : null,
+    effective_force_score: normalizeEffectiveForceScore(effectiveForceScore),
+  };
+}
+
+function buildGovernanceSelectionContext(
+  basis,
+  preferredWorkflow,
+  preferredPolicy,
+  preferredEffectiveForceScore,
+  comparedWorkflow,
+  comparedPolicy,
+  comparedEffectiveForceScore,
+) {
+  const preferred = selectionContextEntry(
+    preferredWorkflow,
+    preferredPolicy,
+    preferredEffectiveForceScore,
+  );
+  const compared = selectionContextEntry(
+    comparedWorkflow,
+    comparedPolicy,
+    comparedEffectiveForceScore,
+  );
+
+  if (!basis || !preferred || !compared) {
+    return null;
+  }
+
+  return {
+    basis,
+    preferred,
+    compared,
+  };
+}
+
 function workflowReuseGovernanceBlock(run, checkpoint = null) {
   const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
   const checkpointId = checkpointPolicy.checkpointId
@@ -4023,6 +4075,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       let registryRank = null;
       let registryMode = null;
       let selectionNote = recommendation?.note ?? null;
+      let governanceSelectionContext = recommendation?.selection_context ?? null;
 
       if (recommendation?.workflow && strategy !== 'hybrid') {
         workflow = activeWorkflows.find((item) => item.id === recommendation.workflow.id) ?? recommendation.workflow;
@@ -4086,6 +4139,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         registry_rank: registryRank,
         registry_mode: registryMode,
         selection_note: selectionNote,
+        governance_selection_context: governanceSelectionContext,
         governance_blocked_reuse: governanceBlockedReuse,
         ready_at: nowIso(),
         dispatched_at: null,
@@ -4912,6 +4966,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           : null;
       let recommendedMode = rankedWorkflow ? registryPick?.mode ?? null : null;
       let recommendedNote = null;
+      let recommendedSelectionContext = null;
 
       if (defaultWorkflow) {
         const recommendedPolicy = automaticReusePolicyByTemplate.get(defaultWorkflow.id) ?? {
@@ -4978,11 +5033,29 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
             if (compareAutomaticReusePolicies(preferredPolicy, recommendedPolicy) < 0) {
               recommendedMode = 'governance_minimize_policy_carryover';
+              recommendedSelectionContext = buildGovernanceSelectionContext(
+                recommendedMode,
+                preferredWorkflow,
+                preferredPolicy,
+                preferredEffectiveForce,
+                defaultWorkflow,
+                recommendedPolicy,
+                recommendedEffectiveForce,
+              );
               recommendedNote =
                 `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
                 + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${defaultWorkflow.id} (${describeAutomaticReusePolicy(recommendedPolicy)}).`;
             } else {
               recommendedMode = 'governance_prefer_effective_force';
+              recommendedSelectionContext = buildGovernanceSelectionContext(
+                recommendedMode,
+                preferredWorkflow,
+                preferredPolicy,
+                preferredEffectiveForce,
+                defaultWorkflow,
+                recommendedPolicy,
+                recommendedEffectiveForce,
+              );
               recommendedNote =
                 `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
                 + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${defaultWorkflow.id} (${recommendedEffectiveForce}).`;
@@ -4998,6 +5071,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
               rank: recommendedRank,
               mode: recommendedMode,
               note: recommendedNote,
+              selection_context: recommendedSelectionContext,
             }
           : null,
         candidates: reusableCandidates.map((workflow) => ({
@@ -5166,6 +5240,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         let registryRank = null;
         let registryMode = null;
         let selectionNote = null;
+        let governanceSelectionContext = null;
         const recommendationEntry = recommendations.get(task.id) ?? null;
         const recommendation = recommendationEntry?.recommended ?? null;
         if (
@@ -5198,6 +5273,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             registryRank = recommendation.rank ?? null;
             registryMode = recommendation.mode ?? null;
             selectionNote = recommendation.note ?? null;
+            governanceSelectionContext = recommendation.selection_context ?? null;
           } else {
             workflowSource = 'existing_reuse';
           }
@@ -5256,6 +5332,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           registry_rank: registryRank,
           registry_mode: registryMode,
           selection_note: selectionNote,
+          governance_selection_context: governanceSelectionContext,
           governance_blocked_reuse: governanceBlockedReuse,
           ready_at: nowIso(),
           dispatched_at: null,
