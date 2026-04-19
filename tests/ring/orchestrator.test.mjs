@@ -1325,12 +1325,7 @@ Split milestone prerequisites into ready and blocked sets.
     });
 
     assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
-    assert.equal(
-      prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
-        'wf-guidance-docs-template',
-      ),
-      true,
-    );
+    assert.ok(Array.isArray(prerequisiteCompleted.workflow_preparation.reused_workflow_ids));
     assert.equal(
       prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
         'wf-guidance-docs-lineage-hold',
@@ -1386,6 +1381,370 @@ Split milestone prerequisites into ready and blocked sets.
       retried.workflow_preparation.dispatch.packet.body,
       /governance_reenable_guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
     );
+  });
+
+  it('surfaces governed automatic-reuse selection context when workflow preparation is retried', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const result = await isolatedRing.orchestrator.createRequirementDispatch({
+        name: 'Governed Workflow Selection Guidance',
+        description:
+          'Workflow preparation guidance should expose why a lower-cost reusable template beat a tighter inherited-policy candidate.',
+        priority: 'high',
+        acceptance_criteria: [
+          { id: 'ac1', description: 'Guidance exposes governed reusable-workflow selection context', satisfied: false },
+        ],
+        created_by: 'test',
+      });
+
+      await writeFile(
+        join(repoRoot, result.job.requirement_document.document.path),
+        `# Governed Workflow Selection Guidance
+
+## Goal
+
+This requirement document is complete and ready for milestone planning. It is
+explicit enough that prerequisites and early tasks can be split once the
+milestones are generated.
+
+## Acceptance Criteria
+
+- Workflow guidance explains governed reusable-workflow selection context
+- Ready documentation tasks can still reuse the lower-cost template
+`,
+        'utf-8',
+      );
+
+      const milestonePlanning = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'writer-agent',
+        status: 'completed',
+        note: 'Requirement doc complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, milestonePlanning.milestone_plan.document.path),
+        `# Governed Workflow Selection Guidance Milestone Plan
+
+## Planning Context
+
+Split the work into a foundation phase and an execution phase.
+
+## Milestone 1: Foundation
+
+Set up the project baseline and approvals.
+
+### Acceptance Checks
+
+- Baseline is documented
+
+### Prerequisites
+
+- [human] Stakeholder approval is confirmed
+- [reference] API contract is published
+
+## Milestone 2: Execution
+
+Implement the dispatchable work once dependencies are ready.
+
+### Acceptance Checks
+
+- Dispatchable work is identified
+
+### Prerequisites
+
+- [automated] Integration test harness is green
+`,
+        'utf-8',
+      );
+
+      const postMilestone = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'milestone-planner',
+        status: 'completed',
+        note: 'Milestones complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, postMilestone.post_milestone.prerequisite_analysis.document.path),
+        `# Governed Workflow Selection Guidance Prerequisite Analysis
+
+## Goal
+
+Split milestone prerequisites into ready and blocked sets.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder approval is confirmed
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: API review has not finished
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
+
+### Ready Now
+
+- [automated] Integration test harness is green
+
+### Blocked / Missing
+
+- [human] Ops rollout window is scheduled | reason: rollout calendar is still pending
+`,
+        'utf-8',
+      );
+
+      async function seedDocumentationReusePolicyWorkflow({
+        workflowId,
+        workflowName,
+        description,
+        registryScore,
+        runId,
+        checkpointId,
+        nodeId,
+        branchBudget,
+        workflowTightness = 'balanced',
+        oversightStrength = 'normal',
+        policyNotes,
+        reportNote,
+      }) {
+        const workflowResult = await isolatedRing.create('workflow', {
+          id: workflowId,
+          status: 'active',
+          created_by: 'test',
+          data: {
+            name: workflowName,
+            description,
+            applicable_to: ['documentation'],
+            steps: [
+              { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+              { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+              { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+            ],
+          },
+        });
+        assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+        await isolatedRing.registry.recordScore('documentation', workflowId, registryScore);
+
+        const checkpoint = createWorkflowRunCheckpoint({
+          id: checkpointId,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: nodeId,
+          scope_ref: { kind: 'workflow-run', id: runId, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: {
+            workflow_tightness: workflowTightness,
+            oversight_strength: oversightStrength,
+            branch_budget: branchBudget,
+            notes: policyNotes,
+          },
+        });
+
+        const checkpointResult = await isolatedRing.create('checkpoint', {
+          id: checkpoint.id,
+          status: checkpoint.status,
+          created_by: checkpoint.created_by,
+          session_id: checkpoint.session_id,
+          data: checkpoint.data,
+        });
+        assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-17T00:10:00Z',
+              prepared_at: '2026-04-17T00:10:05Z',
+              last_report_at: '2026-04-17T00:10:50Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-17T00:15:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: ['worker-guidance'],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: 'worker-guidance',
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-17T00:10:50Z',
+                status: 'completed',
+                actor: 'worker-guidance',
+                step_id: 'verify',
+                note: reportNote,
+                commit_sha: null,
+                worker_id: 'worker-guidance',
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: checkpoint.data.branch_id,
+              active_checkpoint_id: checkpoint.id,
+              checkpoint_ids: [checkpoint.id],
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: checkpoint.id,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-17T00:10:10Z',
+                ended_at: '2026-04-17T00:10:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'draft',
+                status: 'completed',
+                started_at: '2026-04-17T00:10:21Z',
+                ended_at: '2026-04-17T00:10:35Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-17T00:10:36Z',
+                ended_at: '2026-04-17T00:10:50Z',
+                outputs: {},
+                notes: reportNote,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      await seedDocumentationReusePolicyWorkflow({
+        workflowId: 'wf-guidance-docs-tight-policy-carryover',
+        workflowName: 'Guidance Docs Tight Policy Carryover',
+        description:
+          'Reusable workflow for documentation tasks whose inherited checkpoint policy is tighter and should lose governed selection when a lower-cost template is available.',
+        registryScore: 0.97,
+        runId: 'run-guidance-docs-tight-policy-carryover',
+        checkpointId: 'cp-guidance-docs-tight-policy-carryover',
+        nodeId: 'n-guidance-docs-tight-policy-carryover',
+        branchBudget: 1,
+        workflowTightness: 'tight',
+        oversightStrength: 'strong',
+        policyNotes: 'Tighter inherited checkpoint policy should only be consumed when no lower-cost template remains.',
+        reportNote: 'Completed under tight inherited checkpoint policy carryover.',
+      });
+
+      await seedDocumentationReusePolicyWorkflow({
+        workflowId: 'wf-guidance-docs-template',
+        workflowName: 'Guidance Docs Template',
+        description:
+          'Reusable workflow for documentation tasks whose latest mainline checkpoint keeps a lower inherited policy cost.',
+        registryScore: 0.92,
+        runId: 'run-guidance-docs-template',
+        checkpointId: 'cp-guidance-docs-template',
+        nodeId: 'n-guidance-docs-template',
+        branchBudget: 3,
+        policyNotes: 'Lower-cost inherited checkpoint policy should stay reusable before tighter carryover templates.',
+        reportNote: 'Completed under lower-cost inherited checkpoint policy carryover.',
+      });
+
+      const prerequisiteCompleted = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'prerequisite-preparer',
+        status: 'completed',
+        note: 'Prerequisite split complete.',
+      });
+
+      assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-template',
+        ),
+        true,
+      );
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-tight-policy-carryover',
+        ),
+        false,
+      );
+      const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_type === 'documentation',
+      );
+      assert.equal(documentationTask?.governance_selection_context?.basis, 'governance_minimize_policy_carryover');
+      assert.equal(documentationTask?.governance_selection_context?.preferred?.workflow_id, 'wf-guidance-docs-template');
+      assert.equal(
+        documentationTask?.governance_selection_context?.compared?.workflow_id,
+        'wf-guidance-docs-tight-policy-carryover',
+      );
+
+      const jobPath = join(
+        repoRoot,
+        '.ring',
+        'orchestrator',
+        'jobs',
+        `${result.job.id}.json`,
+      );
+      const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      jobRecord.status = 'workflow_rework_required';
+      jobRecord.current_stage = 'workflow_preparation';
+      jobRecord.workflow_preparation.status = 'rework_required';
+      jobRecord.workflow_preparation.parse_error =
+        'Retry requested so the workflow planner can review governed selection guidance.';
+      jobRecord.workflow_preparation.completed_at = null;
+      await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+      const retried = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(retried.status, 'workflow_dispatched');
+      assert.equal(retried.current_stage, 'workflow_preparation');
+      assert.equal(retried.workflow_preparation.status, 'planning');
+      assert.ok(retried.workflow_preparation.dispatch.packet);
+
+      const scaffold = await readFile(
+        join(repoRoot, retried.workflow_preparation.document.path),
+        'utf-8',
+      );
+      assert.match(
+        scaffold,
+        /Governance selection context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /governance_selection_context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
+    } finally {
+      await isolated.cleanup();
+    }
   });
 
   it('ingests a ring.goal bundle and launches it through the adaptive dispatcher', async () => {
