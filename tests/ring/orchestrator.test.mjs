@@ -1747,6 +1747,439 @@ Split milestone prerequisites into ready and blocked sets.
     }
   });
 
+  it('surfaces effective-force governance selection context when workflow preparation is retried', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const result = await isolatedRing.orchestrator.createRequirementDispatch({
+        name: 'Governed Effective-Force Workflow Guidance',
+        description:
+          'Workflow preparation guidance should expose why a stronger-force reusable template beat an equal-cost governed candidate.',
+        priority: 'high',
+        acceptance_criteria: [
+          { id: 'ac1', description: 'Guidance exposes effective-force governed reusable-workflow selection context', satisfied: false },
+        ],
+        created_by: 'test',
+      });
+
+      await writeFile(
+        join(repoRoot, result.job.requirement_document.document.path),
+        `# Governed Effective-Force Workflow Guidance
+
+## Goal
+
+This requirement document is complete and ready for milestone planning. It is
+explicit enough that prerequisites and early tasks can be split once the
+milestones are generated.
+
+## Acceptance Criteria
+
+- Workflow guidance explains effective-force governed reusable-workflow selection context
+- Ready documentation tasks can still reuse the stronger-force template when inherited policy cost is tied
+`,
+        'utf-8',
+      );
+
+      const milestonePlanning = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'writer-agent',
+        status: 'completed',
+        note: 'Requirement doc complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, milestonePlanning.milestone_plan.document.path),
+        `# Governed Effective-Force Workflow Guidance Milestone Plan
+
+## Planning Context
+
+Split the work into a foundation phase and an execution phase.
+
+## Milestone 1: Foundation
+
+Set up the project baseline and approvals.
+
+### Acceptance Checks
+
+- Baseline is documented
+
+### Prerequisites
+
+- [human] Stakeholder approval is confirmed
+- [reference] API contract is published
+
+## Milestone 2: Execution
+
+Implement the dispatchable work once dependencies are ready.
+
+### Acceptance Checks
+
+- Dispatchable work is identified
+
+### Prerequisites
+
+- [automated] Integration test harness is green
+`,
+        'utf-8',
+      );
+
+      const postMilestone = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'milestone-planner',
+        status: 'completed',
+        note: 'Milestones complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, postMilestone.post_milestone.prerequisite_analysis.document.path),
+        `# Governed Effective-Force Workflow Guidance Prerequisite Analysis
+
+## Goal
+
+Split milestone prerequisites into ready and blocked sets.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder approval is confirmed
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: API review has not finished
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
+
+### Ready Now
+
+- [automated] Integration test harness is green
+
+### Blocked / Missing
+
+- [human] Ops rollout window is scheduled | reason: rollout calendar is still pending
+`,
+        'utf-8',
+      );
+
+      async function seedDocumentationEffectiveForceWorkflow({
+        workflowId,
+        workflowName,
+        description,
+        registryScore,
+        runId,
+        nodeId,
+        workerId,
+        activeCheckpoint,
+        checkpoints,
+        reportNote,
+      }) {
+        const workflowResult = await isolatedRing.create('workflow', {
+          id: workflowId,
+          status: 'active',
+          created_by: 'test',
+          data: {
+            name: workflowName,
+            description,
+            applicable_to: ['documentation'],
+            steps: [
+              { id: 'inspect', name: 'inspect', description: 'Inspect the task document.' },
+              { id: 'draft', name: 'draft', description: 'Produce the documentation output.' },
+              { id: 'verify', name: 'verify', description: 'Check acceptance criteria.' },
+            ],
+          },
+        });
+        assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+        await isolatedRing.registry.recordScore('documentation', workflowId, registryScore);
+
+        for (const checkpoint of checkpoints) {
+          const checkpointResult = await isolatedRing.create('checkpoint', {
+            id: checkpoint.id,
+            status: checkpoint.status,
+            created_by: checkpoint.created_by,
+            session_id: checkpoint.session_id,
+            data: checkpoint.data,
+          });
+          assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+        }
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-19T10:20:00Z',
+              prepared_at: '2026-04-19T10:20:05Z',
+              last_report_at: '2026-04-19T10:20:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-19T10:25:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: [workerId],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: workerId,
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-19T10:20:40Z',
+                status: 'completed',
+                actor: workerId,
+                step_id: 'verify',
+                note: reportNote,
+                commit_sha: null,
+                worker_id: workerId,
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under equivalent inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: activeCheckpoint.data.branch_id,
+              active_checkpoint_id: activeCheckpoint.id,
+              checkpoint_ids: checkpoints.map((checkpoint) => checkpoint.id),
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: activeCheckpoint.id,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-19T10:20:10Z',
+                ended_at: '2026-04-19T10:20:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'draft',
+                status: 'completed',
+                started_at: '2026-04-19T10:20:21Z',
+                ended_at: '2026-04-19T10:20:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-19T10:20:31Z',
+                ended_at: '2026-04-19T10:20:40Z',
+                outputs: {},
+                notes: reportNote,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      const sharedPolicySnapshot = {
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        notes: 'Equivalent governed reuse policy should let checkpoint force break ties after policy cost is already equal.',
+      };
+
+      const lowForceCheckpoint = createWorkflowRunCheckpoint({
+        id: 'cp-guidance-docs-low-force-active',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-guidance-docs-low-force',
+        scope_ref: { kind: 'workflow-run', id: 'run-guidance-docs-low-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+        evidence_refs: [],
+      });
+      await seedDocumentationEffectiveForceWorkflow({
+        workflowId: 'wf-guidance-docs-low-force-policy-carryover',
+        workflowName: 'Guidance Docs Low Force Policy Carryover',
+        description: 'Reusable documentation workflow whose latest mainline checkpoint carries equal policy cost but weak checkpoint force.',
+        registryScore: 0.97,
+        runId: 'run-guidance-docs-low-force',
+        nodeId: 'n-guidance-docs-low-force',
+        workerId: 'worker-guidance-low-force',
+        activeCheckpoint: lowForceCheckpoint,
+        checkpoints: [lowForceCheckpoint],
+        reportNote: 'The low-force checkpoint path completed under the shared constrained policy without extra branch evidence.',
+      });
+
+      const highForceRoot = createWorkflowRunCheckpoint({
+        id: 'cp-guidance-docs-high-force-root',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-guidance-docs-high-force',
+        scope_ref: { kind: 'workflow-run', id: 'run-guidance-docs-high-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'inspect', ordinal: 0 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceLeft = forkCheckpoint(highForceRoot, {
+        id: 'cp-guidance-docs-high-force-left',
+        created_by: 'worker-guidance-left',
+        branch_id: 'guidance.left',
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/guidance-left-progress.json', digest: 'sha256:guidance-left-progress' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceLeftContinued = continueFromCheckpoint(highForceLeft, {
+        id: 'cp-guidance-docs-high-force-left-continued',
+        created_by: 'worker-guidance-left',
+        execution_cursor: { phase: 'completed', step_id: 'draft', ordinal: 1 },
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/guidance-left-progress.json', digest: 'sha256:guidance-left-progress' },
+          { kind: 'report', ref: 'reports/guidance-left-verify.json', digest: 'sha256:guidance-left-verify' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceRight = forkCheckpoint(highForceRoot, {
+        id: 'cp-guidance-docs-high-force-right',
+        created_by: 'worker-guidance-right',
+        branch_id: 'guidance.right',
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/guidance-right-review.json', digest: 'sha256:guidance-right-review' },
+        ],
+        policy_snapshot: sharedPolicySnapshot,
+      });
+      const highForceCheckpoint = synthesizeCheckpoint([highForceLeftContinued, highForceRight], {
+        id: 'cp-guidance-docs-high-force-active',
+        status: 'mainline',
+        created_by: 'session-runner',
+        branch_id: 'main.guidance.force',
+        scope_ref: { kind: 'workflow-run', id: 'run-guidance-docs-high-force', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: sharedPolicySnapshot,
+        evidence_refs: [
+          { kind: 'report', ref: 'reports/guidance-force-summary.json', digest: 'sha256:guidance-force-summary' },
+          { kind: 'report', ref: 'reports/guidance-force-summary.json', digest: 'sha256:guidance-force-summary' },
+          { kind: 'artifact', ref: 'artifacts/guidance-force-proof.json', digest: 'sha256:guidance-force-proof' },
+        ],
+      });
+      await seedDocumentationEffectiveForceWorkflow({
+        workflowId: 'wf-guidance-docs-high-force-policy-carryover',
+        workflowName: 'Guidance Docs High Force Policy Carryover',
+        description: 'Reusable documentation workflow whose latest mainline checkpoint carries equal policy cost but stronger synthesized checkpoint force.',
+        registryScore: 0.92,
+        runId: 'run-guidance-docs-high-force',
+        nodeId: 'n-guidance-docs-high-force',
+        workerId: 'worker-guidance-high-force',
+        activeCheckpoint: highForceCheckpoint,
+        checkpoints: [
+          highForceRoot,
+          highForceLeft,
+          highForceLeftContinued,
+          highForceRight,
+          highForceCheckpoint,
+        ],
+        reportNote: 'The high-force checkpoint path completed under the same constrained policy after collecting stronger synthesized branch evidence.',
+      });
+
+      const prerequisiteCompleted = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'prerequisite-preparer',
+        status: 'completed',
+        note: 'Prerequisite split complete.',
+      });
+
+      assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-high-force-policy-carryover',
+        ),
+        true,
+      );
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-low-force-policy-carryover',
+        ),
+        false,
+      );
+      const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_type === 'documentation',
+      );
+      const effectiveForceSelectionContext = documentationTask?.governance_selection_context;
+      assert.equal(effectiveForceSelectionContext?.basis, 'governance_prefer_effective_force');
+      assert.equal(
+        effectiveForceSelectionContext?.preferred?.workflow_id,
+        'wf-guidance-docs-high-force-policy-carryover',
+      );
+      assert.equal(
+        effectiveForceSelectionContext?.compared?.workflow_id,
+        'wf-guidance-docs-low-force-policy-carryover',
+      );
+      assert.equal(
+        effectiveForceSelectionContext?.preferred?.governance_pressure_score,
+        effectiveForceSelectionContext?.compared?.governance_pressure_score,
+      );
+      assert.ok(
+        (effectiveForceSelectionContext?.preferred?.effective_force_score ?? 0)
+          > (effectiveForceSelectionContext?.compared?.effective_force_score ?? 0),
+      );
+
+      const jobPath = join(
+        repoRoot,
+        '.ring',
+        'orchestrator',
+        'jobs',
+        `${result.job.id}.json`,
+      );
+      const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      jobRecord.status = 'workflow_rework_required';
+      jobRecord.current_stage = 'workflow_preparation';
+      jobRecord.workflow_preparation.status = 'rework_required';
+      jobRecord.workflow_preparation.parse_error =
+        'Retry requested so the workflow planner can review effective-force governed selection guidance.';
+      jobRecord.workflow_preparation.completed_at = null;
+      await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+      const retried = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(retried.status, 'workflow_dispatched');
+      assert.equal(retried.current_stage, 'workflow_preparation');
+      assert.equal(retried.workflow_preparation.status, 'planning');
+      assert.ok(retried.workflow_preparation.dispatch.packet);
+
+      const scaffold = await readFile(
+        join(repoRoot, retried.workflow_preparation.document.path),
+        'utf-8',
+      );
+      assert.match(
+        scaffold,
+        /Governance selection context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
   it('ingests a ring.goal bundle and launches it through the adaptive dispatcher', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
