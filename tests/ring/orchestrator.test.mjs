@@ -3594,6 +3594,21 @@ ${workflowPlan}
         costSelectionContext.preferred.governance_pressure_score
           < costSelectionContext.compared.governance_pressure_score,
       );
+
+      const tickResult = await isolatedRing.orchestrator.tick();
+      const launchedBundle = tickResult.processed_bundles.find((item) => item.id === bundle.id);
+      assert.ok(launchedBundle);
+      assert.equal(launchedBundle.status, 'session_launched');
+      const launchedSession = await isolatedRing.read('session', launchedBundle.batching.session_id);
+      assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
+        {
+          task_id: bundle.workflows.waiting_tasks[0].task_id,
+          task_name: bundle.workflows.waiting_tasks[0].task_name,
+          workflow_template_id: 'wf-testing-budget-policy-carryover',
+          workflow_name: 'Testing Budget Policy Carryover',
+          selection_context: costSelectionContext,
+        },
+      ]);
     } finally {
       await isolated.cleanup();
     }
@@ -3936,6 +3951,21 @@ ${workflowPlan}
         effectiveForceSelectionContext.preferred.effective_force_score
           > effectiveForceSelectionContext.compared.effective_force_score,
       );
+
+      const tickResult = await isolatedRing.orchestrator.tick();
+      const launchedBundle = tickResult.processed_bundles.find((item) => item.id === bundle.id);
+      assert.ok(launchedBundle);
+      assert.equal(launchedBundle.status, 'session_launched');
+      const launchedSession = await isolatedRing.read('session', launchedBundle.batching.session_id);
+      assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
+        {
+          task_id: bundle.workflows.waiting_tasks[0].task_id,
+          task_name: bundle.workflows.waiting_tasks[0].task_name,
+          workflow_template_id: 'wf-testing-high-force-policy-carryover',
+          workflow_name: 'Testing High Force Policy Carryover',
+          selection_context: effectiveForceSelectionContext,
+        },
+      ]);
     } finally {
       await isolated.cleanup();
     }
