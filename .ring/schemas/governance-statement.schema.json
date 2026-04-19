@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "governance-statement.schema.json",
+  "title": "Governance Statement",
+  "description": "Typed governance statement binding immutable subject descriptors to a canonicalized predicate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_type", "subject", "predicateType", "predicate", "canonicalization"],
+  "properties": {
+    "_type": { "const": "https://dp-ring.dev/schemas/governance-statement/v1" },
+    "subject": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "mediaType", "digest", "size", "locator"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "mediaType": { "type": "string", "minLength": 1 },
+          "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "size": { "type": "integer", "minimum": 0 },
+          "locator": {
+            "type": ["object", "null"],
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "predicateType": { "type": "string", "minLength": 1 },
+    "predicate": {},
+    "canonicalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "subject_digest", "predicate_digest"],
+      "properties": {
+        "profile": { "type": "string", "minLength": 1 },
+        "subject_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "predicate_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    }
+  }
+}

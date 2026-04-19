@@ -23,6 +23,7 @@ import {
   checkpointAutomaticReusePolicyState,
   warmSemanticLineageState,
 } from './governance-policy.mjs';
+import { createBranchCommitStatement } from './governance-statement.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -785,6 +786,19 @@ function checkpointEvidenceRefsFromReport(normalizedReport, callback) {
 async function appendBranchEvent(ring, fields) {
   const id = await ring.newId('branch-event', { name: fields.event_type.replace(/_/g, ' ') });
   const createdAt = fields.occurred_at ?? nowIso();
+  const messageClass = fields.message_class ?? 'commit';
+  const statement = messageClass === 'commit'
+    ? fields.statement ?? createBranchCommitStatement({
+      event_type: fields.event_type,
+      branch_id: fields.branch_id,
+      checkpoint_id: fields.checkpoint_id,
+      actor: fields.actor ?? 'session-runner',
+      occurred_at: createdAt,
+      parent_checkpoint_id: fields.parent_checkpoint_id ?? null,
+      synthesis_inputs: clone(fields.synthesis_inputs ?? []),
+      reason: fields.reason ?? null,
+    })
+    : fields.statement ?? null;
   const result = await ring.create('branch-event', {
     id,
     status: 'recorded',
@@ -792,10 +806,12 @@ async function appendBranchEvent(ring, fields) {
     session_id: fields.session_id ?? null,
     data: {
       event_type: fields.event_type,
+      message_class: messageClass,
       branch_id: fields.branch_id,
       checkpoint_id: fields.checkpoint_id,
       actor: fields.actor ?? 'session-runner',
       occurred_at: createdAt,
+      statement,
       details: {
         parent_checkpoint_id: fields.parent_checkpoint_id ?? null,
         synthesis_inputs: clone(fields.synthesis_inputs ?? []),

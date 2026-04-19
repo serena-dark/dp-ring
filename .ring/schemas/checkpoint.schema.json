@@ -29,6 +29,7 @@
         "policy_snapshot",
         "execution_cursor",
         "evidence_refs",
+        "publication_statements",
         "adoption_status",
         "replay_state",
         "synthesis_inputs"
@@ -80,6 +81,10 @@
               "digest": { "type": ["string", "null"] }
             }
           }
+        },
+        "publication_statements": {
+          "type": "array",
+          "items": { "$ref": "governance-statement.schema.json#" }
         },
         "adoption_status": {
           "type": "string",
