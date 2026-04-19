@@ -2704,6 +2704,26 @@ Split milestone prerequisites into ready and blocked sets.
         'governance_minimize_policy_carryover',
       );
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+      const costSelectionContext = bundle.workflows.waiting_tasks[0].governance_selection_context;
+      assert.equal(costSelectionContext?.basis, 'governance_minimize_policy_carryover');
+      assert.deepEqual(costSelectionContext?.preferred, {
+        workflow_id: 'wf-testing-budget-policy-carryover',
+        workflow_name: 'Testing Budget Policy Carryover',
+        policy: 'branch_budget=3',
+        governance_pressure_score: 1116,
+        effective_force_score: 2,
+      });
+      assert.deepEqual(costSelectionContext?.compared, {
+        workflow_id: 'wf-testing-tight-policy-carryover',
+        workflow_name: 'Testing Tight Policy Carryover',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 0,
+      });
+      assert.ok(
+        costSelectionContext.preferred.governance_pressure_score
+          < costSelectionContext.compared.governance_pressure_score,
+      );
     } finally {
       await isolated.cleanup();
     }
@@ -3022,6 +3042,30 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(bundle.workflows.waiting_tasks[0].selection_note ?? '', /stronger checkpoint effective force/i);
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
+      const effectiveForceSelectionContext = bundle.workflows.waiting_tasks[0].governance_selection_context;
+      assert.equal(effectiveForceSelectionContext?.basis, 'governance_prefer_effective_force');
+      assert.deepEqual(effectiveForceSelectionContext?.preferred, {
+        workflow_id: 'wf-testing-high-force-policy-carryover',
+        workflow_name: 'Testing High Force Policy Carryover',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 25,
+      });
+      assert.deepEqual(effectiveForceSelectionContext?.compared, {
+        workflow_id: 'wf-testing-low-force-policy-carryover',
+        workflow_name: 'Testing Low Force Policy Carryover',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 0,
+      });
+      assert.equal(
+        effectiveForceSelectionContext.preferred.governance_pressure_score,
+        effectiveForceSelectionContext.compared.governance_pressure_score,
+      );
+      assert.ok(
+        effectiveForceSelectionContext.preferred.effective_force_score
+          > effectiveForceSelectionContext.compared.effective_force_score,
+      );
     } finally {
       await isolated.cleanup();
     }
