@@ -1742,6 +1742,45 @@ Split milestone prerequisites into ready and blocked sets.
         retried.workflow_preparation.dispatch.packet.body,
         /governance_selection_context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
       );
+
+      const workflowPlan = prerequisiteCompleted.workflow_preparation.waiting_tasks
+        .map(
+          (task) => `## Task ${task.task_id}: ${task.task_name}
+Workflow Action: reuse
+Workflow ID: ${task.workflow_template_id}`,
+        )
+        .join('\n\n');
+      await writeFile(
+        join(repoRoot, retried.workflow_preparation.document.path),
+        `# Governed Workflow Selection Finalization
+
+## Goal
+
+Finalize the workflow plan by reusing the recommended waiting-area workflows.
+
+${workflowPlan}
+`,
+        'utf-8',
+      );
+
+      const finalized = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'workflow-architect',
+        status: 'completed',
+        note: 'Workflow plan finalized for governed selection context coverage.',
+      });
+      assert.equal(finalized.status, 'waiting_for_session_dispatch');
+      assert.equal(finalized.workflow_preparation.status, 'completed');
+      const finalizedDocumentationTask = finalized.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_type === 'documentation',
+      );
+      assert.deepEqual(
+        finalizedDocumentationTask?.governance_selection_context,
+        documentationTask?.governance_selection_context,
+      );
+      assert.match(
+        finalized.session_dispatch.dispatch.packet.body,
+        /governance_selection_context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
     } finally {
       await isolated.cleanup();
     }

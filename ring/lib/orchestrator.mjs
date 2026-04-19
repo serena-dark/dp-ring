@@ -2078,7 +2078,10 @@ function buildSessionBatchPacket(job, requirement, waitingTasks) {
     ? waitingTasks
         .map((item) => {
           const governance = describeWaitingTaskGovernance(item);
-          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}`;
+          const governanceSelectionContext = describeGovernanceSelectionContext(
+            item?.governance_selection_context ?? null,
+          );
+          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}${governanceSelectionContext !== 'none' ? ` | governance_selection_context: ${governanceSelectionContext}` : ''}`;
         })
         .join('\n')
     : '- no waiting tasks';
