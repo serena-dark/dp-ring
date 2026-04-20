@@ -4,9 +4,12 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
+  automaticReusePolicyGovernancePressureScore as automaticReusePolicyGovernancePressure,
   checkpointAutomaticReusePolicyState,
+  checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
-  checkpointGovernancePressureState,
+  compareAutomaticReusePolicies,
+  describeAutomaticReusePolicy,
   normalizeWorkflowReuseGovernanceBlock,
   workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
 } from './governance-policy.mjs';
@@ -299,72 +302,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function checkpointAutomaticReusePolicy(checkpoint) {
-  const checkpointPressure = checkpointGovernancePressureState(checkpoint);
-
-  return {
-    constrained: checkpointPressure.constrained,
-    adoption_status: checkpointPressure.adoptionStatus,
-    workflow_tightness: checkpointPressure.constrained ? checkpointPressure.workflowTightness : null,
-    oversight_strength: checkpointPressure.constrained ? checkpointPressure.oversightStrength : null,
-    branch_budget: checkpointPressure.constrained ? checkpointPressure.branchBudget : null,
-    governance_pressure_score: checkpointPressure.governancePressureScore,
-  };
-}
-
-function automaticReusePolicyGovernancePressure(policy) {
-  if (Number.isFinite(policy?.governance_pressure_score)) {
-    return policy.governance_pressure_score;
-  }
-  return policy?.constrained ? Number.POSITIVE_INFINITY : 0;
-}
-
-function automaticReusePolicyBranchBudget(policy) {
-  return Number.isInteger(policy?.branch_budget) && policy.branch_budget >= 0
-    ? policy.branch_budget
-    : Number.POSITIVE_INFINITY;
-}
-
-function compareAutomaticReusePolicies(leftPolicy, rightPolicy) {
-  const leftConstrained = leftPolicy?.constrained ?? false;
-  const rightConstrained = rightPolicy?.constrained ?? false;
-  if (leftConstrained !== rightConstrained) {
-    return leftConstrained ? 1 : -1;
-  }
-
-  const pressureComparison = automaticReusePolicyGovernancePressure(leftPolicy)
-    - automaticReusePolicyGovernancePressure(rightPolicy);
-  if (pressureComparison !== 0) {
-    return pressureComparison;
-  }
-
-  const leftBranchBudget = automaticReusePolicyBranchBudget(leftPolicy);
-  const rightBranchBudget = automaticReusePolicyBranchBudget(rightPolicy);
-  if (leftBranchBudget !== rightBranchBudget) {
-    return rightBranchBudget - leftBranchBudget;
-  }
-
-  return 0;
-}
-
-function describeAutomaticReusePolicy(policy) {
-  if (!policy?.constrained) {
-    return 'no active inherited checkpoint policy';
-  }
-
-  const labels = [
-    policy.workflow_tightness && policy.workflow_tightness !== 'balanced'
-      ? `${policy.workflow_tightness} workflow_tightness`
-      : null,
-    policy.oversight_strength && policy.oversight_strength !== 'normal'
-      ? `${policy.oversight_strength} oversight`
-      : null,
-    policy.branch_budget !== null ? `branch_budget=${policy.branch_budget}` : null,
-  ].filter(Boolean);
-
-  return labels.length > 0 ? labels.join(', ') : 'an inherited mainline checkpoint policy';
 }
 
 function normalizeEffectiveForceScore(score) {
