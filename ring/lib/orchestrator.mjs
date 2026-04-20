@@ -4,12 +4,13 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
-  automaticReusePolicyGovernancePressureScore as automaticReusePolicyGovernancePressure,
+  buildGovernanceSelectionContext,
   checkpointAutomaticReusePolicyState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
+  describeGovernanceSelectionContext,
   normalizeWorkflowReuseGovernanceBlock,
   workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
 } from './governance-policy.mjs';
@@ -302,94 +303,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function normalizeEffectiveForceScore(score) {
-  return Number.isFinite(score) ? score : 0;
-}
-
-function selectionContextEntry(workflow, policy, effectiveForceScore) {
-  if (!workflow) {
-    return null;
-  }
-
-  const governancePressureScore = automaticReusePolicyGovernancePressure(policy);
-  return {
-    workflow_id: workflow.id,
-    workflow_name: workflow.data?.name ?? workflow.id,
-    policy: describeAutomaticReusePolicy(policy),
-    governance_pressure_score: Number.isFinite(governancePressureScore)
-      ? governancePressureScore
-      : null,
-    effective_force_score: normalizeEffectiveForceScore(effectiveForceScore),
-  };
-}
-
-function buildGovernanceSelectionContext(
-  basis,
-  preferredWorkflow,
-  preferredPolicy,
-  preferredEffectiveForceScore,
-  comparedWorkflow,
-  comparedPolicy,
-  comparedEffectiveForceScore,
-) {
-  const preferred = selectionContextEntry(
-    preferredWorkflow,
-    preferredPolicy,
-    preferredEffectiveForceScore,
-  );
-  const compared = selectionContextEntry(
-    comparedWorkflow,
-    comparedPolicy,
-    comparedEffectiveForceScore,
-  );
-
-  if (!basis || !preferred || !compared) {
-    return null;
-  }
-
-  return {
-    basis,
-    preferred,
-    compared,
-  };
-}
-
-function describeGovernanceSelectionBasis(basis) {
-  if (basis === 'governance_minimize_policy_carryover') {
-    return `${basis} (preferred the lower inherited governance cost)`;
-  }
-  if (basis === 'governance_prefer_effective_force') {
-    return `${basis} (preferred the stronger checkpoint effective force after governance cost tied)`;
-  }
-  return trimString(basis) || 'unknown';
-}
-
-function describeGovernanceSelectionContextEntry(entry) {
-  if (!entry) {
-    return 'none';
-  }
-
-  const governancePressure = Number.isFinite(entry.governance_pressure_score)
-    ? entry.governance_pressure_score
-    : 'n/a';
-  const effectiveForce = Number.isFinite(entry.effective_force_score)
-    ? entry.effective_force_score
-    : 'n/a';
-  return `${entry.workflow_id} (${entry.workflow_name}) | policy: ${entry.policy} | governance_pressure_score: ${governancePressure} | effective_force_score: ${effectiveForce}`;
-}
-
-function describeGovernanceSelectionContext(selectionContext) {
-  if (!selectionContext) {
-    return 'none';
-  }
-
-  return [
-    `basis: ${describeGovernanceSelectionBasis(selectionContext.basis)}`,
-    `preferred: ${describeGovernanceSelectionContextEntry(selectionContext.preferred)}`,
-    `compared: ${describeGovernanceSelectionContextEntry(selectionContext.compared)}`,
-  ].join(' | ');
 }
 
 function sessionGovernanceSelectionContexts(readyTasks = []) {

@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   automaticReusePolicyGovernancePressureScore,
+  buildGovernanceSelectionContext,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -9,6 +10,7 @@ import {
   checkpointGovernancePressureState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
+  describeGovernanceSelectionContext,
   normalizeWorkflowReuseGovernanceBlock,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
@@ -410,6 +412,79 @@ describe('governance policy', () => {
       automaticReusePolicyGovernancePressureScore({ constrained: true, governance_pressure_score: 1228 }),
       1228,
     );
+  });
+
+  it('builds governance selection context from workflow/policy comparison state', () => {
+    assert.deepEqual(
+      buildGovernanceSelectionContext(
+        ' governance_minimize_policy_carryover ',
+        { id: ' wf-roomier-template ', data: { name: ' Roomier Template ' } },
+        {
+          constrained: true,
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: 3,
+          governance_pressure_score: 1206,
+        },
+        14,
+        { id: 'wf-tight-template', data: { name: 'Tight Template' } },
+        {
+          constrained: true,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          governance_pressure_score: 1228,
+        },
+        Number.NaN,
+      ),
+      {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+    );
+  });
+
+  it('describes governance selection context with stable governed comparison text', () => {
+    const selectionContext = buildGovernanceSelectionContext(
+      'governance_prefer_effective_force',
+      { id: 'wf-high-force', data: { name: 'High Force Template' } },
+      {
+        constrained: true,
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        governance_pressure_score: 1228,
+      },
+      27,
+      { id: 'wf-low-force', data: { name: 'Low Force Template' } },
+      {
+        constrained: true,
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+        branch_budget: 1,
+        governance_pressure_score: 1228,
+      },
+      12,
+    );
+
+    assert.equal(
+      describeGovernanceSelectionContext(selectionContext),
+      'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-high-force (High Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 27 | compared: wf-low-force (Low Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 12',
+    );
+    assert.equal(describeGovernanceSelectionContext(null), 'none');
   });
 
   it('assigns lower governance pressure when more branch budget remains under the same policy envelope', () => {

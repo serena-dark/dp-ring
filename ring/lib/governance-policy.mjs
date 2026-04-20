@@ -302,6 +302,100 @@ export function compareAutomaticReusePolicies(leftPolicy, rightPolicy) {
   return 0;
 }
 
+function normalizeEffectiveForceScore(score) {
+  return Number.isFinite(score) ? score : 0;
+}
+
+function selectionContextEntry(workflow, policy, effectiveForceScore) {
+  const workflowId = trimString(workflow?.id);
+  if (!workflowId) {
+    return null;
+  }
+
+  const governancePressureScore = automaticReusePolicyGovernancePressureScore(policy);
+  return {
+    workflow_id: workflowId,
+    workflow_name: trimString(workflow?.data?.name) ?? workflowId,
+    policy: describeAutomaticReusePolicy(policy),
+    governance_pressure_score: Number.isFinite(governancePressureScore)
+      ? governancePressureScore
+      : null,
+    effective_force_score: normalizeEffectiveForceScore(effectiveForceScore),
+  };
+}
+
+export function buildGovernanceSelectionContext(
+  basis,
+  preferredWorkflow,
+  preferredPolicy,
+  preferredEffectiveForceScore,
+  comparedWorkflow,
+  comparedPolicy,
+  comparedEffectiveForceScore,
+) {
+  const normalizedBasis = trimString(basis);
+  const preferred = selectionContextEntry(
+    preferredWorkflow,
+    preferredPolicy,
+    preferredEffectiveForceScore,
+  );
+  const compared = selectionContextEntry(
+    comparedWorkflow,
+    comparedPolicy,
+    comparedEffectiveForceScore,
+  );
+
+  if (!normalizedBasis || !preferred || !compared) {
+    return null;
+  }
+
+  return {
+    basis: normalizedBasis,
+    preferred,
+    compared,
+  };
+}
+
+function describeGovernanceSelectionBasis(basis) {
+  const normalizedBasis = trimString(basis);
+  if (normalizedBasis === 'governance_minimize_policy_carryover') {
+    return `${normalizedBasis} (preferred the lower inherited governance cost)`;
+  }
+  if (normalizedBasis === 'governance_prefer_effective_force') {
+    return `${normalizedBasis} (preferred the stronger checkpoint effective force after governance cost tied)`;
+  }
+  return normalizedBasis || 'unknown';
+}
+
+function describeGovernanceSelectionContextEntry(entry) {
+  if (!entry) {
+    return 'none';
+  }
+
+  const workflowId = trimString(entry.workflow_id) ?? 'unknown';
+  const workflowName = trimString(entry.workflow_name) ?? workflowId;
+  const policy = trimString(entry.policy) ?? 'unknown policy';
+  const governancePressure = Number.isFinite(entry.governance_pressure_score)
+    ? entry.governance_pressure_score
+    : 'n/a';
+  const effectiveForce = Number.isFinite(entry.effective_force_score)
+    ? entry.effective_force_score
+    : 'n/a';
+  return `${workflowId} (${workflowName}) | policy: ${policy} | governance_pressure_score: ${governancePressure} | effective_force_score: ${effectiveForce}`;
+}
+
+export function describeGovernanceSelectionContext(selectionContext) {
+  if (!selectionContext) {
+    return 'none';
+  }
+
+  return [
+    `basis: ${describeGovernanceSelectionBasis(selectionContext.basis)}`,
+    `preferred: ${describeGovernanceSelectionContextEntry(selectionContext.preferred)}`,
+    `compared: ${describeGovernanceSelectionContextEntry(selectionContext.compared)}`,
+  ].join(' | ');
+}
+
 export function describeAutomaticReusePolicy(policy) {
   if (!policy?.constrained) {
     return 'no active inherited checkpoint policy';
