@@ -305,6 +305,13 @@ export function describeWorkflowReuseGovernanceBlock(block) {
   return `${label} is governance-blocked for automatic reuse`;
 }
 
+export function describeWorkflowReuseGovernanceBlockList(items = []) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 'none';
+  }
+  return items.map((item) => describeWorkflowReuseGovernanceBlock(item)).join('; ');
+}
+
 export function describeWorkflowReuseGovernanceReenableGuidance(block) {
   if (!block) {
     return 'Keep automatic reuse disabled until governance records an explicit re-enable decision.';
@@ -359,13 +366,7 @@ export function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource
 }
 
 export function describeWaitingTaskGovernance(waitingTask) {
-  const blockedCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
-    ? waitingTask.governance_blocked_reuse
-    : [];
-  if (blockedCandidates.length === 0) {
-    return 'none';
-  }
-  return blockedCandidates.map((item) => describeWorkflowReuseGovernanceBlock(item)).join('; ');
+  return describeWorkflowReuseGovernanceBlockList(waitingTask?.governance_blocked_reuse ?? []);
 }
 
 function governanceBatchIdentityEntries(waitingTasks = []) {
