@@ -6,14 +6,15 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
-  checkpointAutomaticReusePolicyState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
+  describeWorkflowReuseGovernanceBlock as describeWorkflowGovernanceBlock,
+  describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   normalizeWorkflowReuseGovernanceBlock,
-  workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
+  workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
 
@@ -304,120 +305,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function workflowReuseGovernanceBlock(run, checkpoint = null) {
-  const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
-  const checkpointId = checkpointPolicy.checkpointId
-    || trimString(run?.data?.node_execution?.active_checkpoint_id)
-    || null;
-
-  if (runRequiresExplicitWorkflowReuse(run)) {
-    return {
-      reason: 'warm_semantic_lineage',
-      checkpoint_id: checkpointId,
-      adoption_status: checkpointPolicy.adoptionStatus,
-    };
-  }
-
-  if (checkpointPolicy.branchBudget !== null && checkpointPolicy.branchBudget <= 0) {
-    return {
-      reason: 'checkpoint_branch_budget_exhausted',
-      checkpoint_id: checkpointId,
-      adoption_status: checkpointPolicy.adoptionStatus,
-      branch_budget: checkpointPolicy.branchBudget,
-      workflow_tightness:
-        checkpointPolicy.workflowTightness !== 'balanced' ? checkpointPolicy.workflowTightness : null,
-      oversight_strength:
-        checkpointPolicy.oversightStrength !== 'normal' ? checkpointPolicy.oversightStrength : null,
-    };
-  }
-
-  if (checkpointPolicy.adoptionStatus && checkpointPolicy.adoptionStatus !== 'mainline') {
-    return {
-      reason: `checkpoint_${checkpointPolicy.adoptionStatus}`,
-      checkpoint_id: checkpointId,
-      adoption_status: checkpointPolicy.adoptionStatus,
-    };
-  }
-
-  return null;
-}
-
-function describeWorkflowGovernanceBlock(item) {
-  if (!item) {
-    return 'automatic reuse is governance-blocked';
-  }
-
-  const label = `${item.id} (${item.name})`;
-  if (item.reason === 'warm_semantic_lineage') {
-    return `${label} already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse`;
-  }
-
-  if (item.reason === 'checkpoint_branch_budget_exhausted') {
-    const checkpointLabel = item.checkpoint_id
-      ? `active checkpoint ${item.checkpoint_id}`
-      : 'the active checkpoint';
-    const governanceLabels = [
-      item.workflow_tightness ? `${item.workflow_tightness} workflow_tightness` : null,
-      item.oversight_strength ? `${item.oversight_strength} oversight` : null,
-    ].filter(Boolean);
-    return `${label} last exhausted branch_budget=${item.branch_budget ?? 0} at ${checkpointLabel}${governanceLabels.length ? ` under ${governanceLabels.join(' / ')}` : ''}, so automatic reuse stays blocked until a later run clears that constraint`;
-  }
-
-  const checkpointLabel = item.checkpoint_id
-    ? `active checkpoint ${item.checkpoint_id}`
-    : 'the active checkpoint';
-  if (item.adoption_status === 'synthesized') {
-    return `${label} still ends on synthesized lineage at ${checkpointLabel}, so adoption into mainline has not happened yet`;
-  }
-  if (item.adoption_status === 'discarded') {
-    return `${label} still ends on discarded lineage at ${checkpointLabel}`;
-  }
-  if (item.adoption_status) {
-    return `${label} still ends on ${item.adoption_status} lineage at ${checkpointLabel} instead of mainline`;
-  }
-  return `${label} is governance-blocked for automatic reuse`;
-}
-
-function describeWorkflowGovernanceReenableGuidance(item) {
-  if (!item) {
-    return 'Keep automatic reuse disabled until governance records an explicit re-enable decision.';
-  }
-
-  const label = `${item.id} (${item.name})`;
-  const checkpointLabel = item.checkpoint_id
-    ? `active checkpoint ${item.checkpoint_id}`
-    : 'the active checkpoint';
-
-  if (item.reason === 'warm_semantic_lineage') {
-    return `${label} should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`;
-  }
-
-  if (item.reason === 'checkpoint_branch_budget_exhausted') {
-    return `${label} should stay off automatic reuse until a later mainline checkpoint clears branch_budget=${item.branch_budget ?? 0} at ${checkpointLabel}.`;
-  }
-
-  if (item.adoption_status === 'synthesized') {
-    return `${label} should stay off automatic reuse until ${checkpointLabel} is explicitly adopted into mainline.`;
-  }
-
-  if (item.adoption_status === 'discarded') {
-    return `${label} should stay off automatic reuse unless governance creates a later mainline checkpoint that supersedes discarded lineage at ${checkpointLabel}.`;
-  }
-
-  if (item.adoption_status) {
-    return `${label} should stay off automatic reuse until ${checkpointLabel} is explicitly adopted into mainline from ${item.adoption_status} lineage.`;
-  }
-
-  return `${label} should stay off automatic reuse until governance records an explicit re-enable decision.`;
-}
-
-function describeWorkflowGovernanceReenableGuidanceList(items = []) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return 'none';
-  }
-  return items.map((item) => describeWorkflowGovernanceReenableGuidance(item)).join('; ');
 }
 
 function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
