@@ -1786,7 +1786,7 @@ ${workflowPlan}
     }
   });
 
-  it('surfaces effective-force governance selection context through workflow preparation retry and finalization', async () => {
+  it('surfaces effective-force governance selection context through workflow preparation retry, finalization, and launch', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -2253,6 +2253,22 @@ ${workflowPlan}
         finalized.session_dispatch.dispatch.packet.body,
         /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
       );
+
+      await isolatedRing.orchestrator.tick();
+      const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
+      assert.equal(launchedJob.status, 'session_dispatched');
+      assert.ok(launchedJob.session_dispatch.session_id);
+
+      const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
+        {
+          task_id: finalizedDocumentationTask.task_id,
+          task_name: finalizedDocumentationTask.task_name,
+          workflow_template_id: finalizedDocumentationTask.workflow_template_id,
+          workflow_name: finalizedDocumentationTask.workflow_name,
+          selection_context: effectiveForceSelectionContext,
+        },
+      ]);
     } finally {
       await isolated.cleanup();
     }
