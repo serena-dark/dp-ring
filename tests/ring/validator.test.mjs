@@ -7,6 +7,88 @@ import { createBranchCommitStatement, createGovernanceStatement } from '../../ri
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
 
+function buildPublicationRootDoc() {
+  return {
+    _type: 'https://dp-ring.dev/schemas/publication-root/v1',
+    id: 'pr-1-test',
+    conforms_to: 'https://dp-ring.dev/publication-root/v1',
+    status: 'published',
+    about: {
+      name: 'checkpoint-publication/cp-root',
+      mediaType: 'application/vnd.dp-ring.governance-statement+json',
+      digest: `sha256:${'a'.repeat(64)}`,
+      size: 256,
+      locator: { kind: 'checkpoint', id: 'cp-root' },
+    },
+    member_descriptors: [
+      {
+        name: 'member/checkpoint-publication',
+        mediaType: 'application/vnd.dp-ring.governance-statement+json',
+        digest: `sha256:${'b'.repeat(64)}`,
+        size: 512,
+        locator: { kind: 'governance-statement', id: 'gs-1-test' },
+        artifact_type: 'governance-statement',
+      },
+    ],
+    membership_digest: `sha256:${'c'.repeat(64)}`,
+  };
+}
+
+function buildValidationResultDoc() {
+  return {
+    id: 'vres-1-test',
+    type: 'validation-result',
+    version: 1,
+    created_at: '2026-04-20T00:00:00Z',
+    updated_at: '2026-04-20T00:00:00Z',
+    created_by: 'validator-test',
+    session_id: 's1-test',
+    status: 'recorded',
+    data: {
+      report_id: 'vrpt-1-test',
+      subject_ref: {
+        type: 'checkpoint',
+        id: 'cp-root',
+      },
+      subject_location: '/data/publication_statements/0',
+      rule_id: 'checkpoint-publication-shape',
+      rule_location: '#/properties/data/required/6',
+      severity: 'violation',
+      message: 'publication_statements entry is missing a required field.',
+      detail_result_ids: [],
+    },
+  };
+}
+
+function buildValidationReportDoc() {
+  return {
+    id: 'vrpt-1-test',
+    type: 'validation-report',
+    version: 1,
+    created_at: '2026-04-20T00:00:01Z',
+    updated_at: '2026-04-20T00:00:01Z',
+    created_by: 'validator-test',
+    session_id: 's1-test',
+    status: 'recorded',
+    data: {
+      subject_ref: {
+        type: 'checkpoint',
+        id: 'cp-root',
+      },
+      profile_id: 'checkpoint-publication-profile-v1',
+      report_level: 'basic',
+      conforms: false,
+      outcome: 'blocking',
+      result_ids: ['vres-1-test'],
+      summary: {
+        info: 0,
+        warning: 0,
+        violation: 1,
+      },
+    },
+  };
+}
+
 function buildWorkflowRunDoc() {
   return {
     id: 'run-1-test',
@@ -413,6 +495,24 @@ describe('validator', async () => {
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
 
+    it('accepts a valid publication-root', () => {
+      const doc = buildPublicationRootDoc();
+      const { valid, errors } = validator.validate('publication-root', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a valid validation-result', () => {
+      const doc = buildValidationResultDoc();
+      const { valid, errors } = validator.validate('validation-result', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a valid validation-report', () => {
+      const doc = buildValidationReportDoc();
+      const { valid, errors } = validator.validate('validation-report', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
     it('accepts a valid checkpoint', () => {
       const doc = {
         id: 'cp-root', type: 'checkpoint', version: 1,
@@ -420,6 +520,11 @@ describe('validator', async () => {
         created_by: 'test', session_id: null, status: 'candidate',
         data: {
           parent_checkpoint_id: null,
+          publication_root_id: 'pr-checkpoint-root',
+          validation_report_id: 'vrpt-checkpoint-root',
+          trace_id: 'trace-checkpoint-root',
+          span_id: 'span-checkpoint-root',
+          parent_span_id: 'span-checkpoint-parent',
           branch_id: 'main',
           node_id: 'n1-router',
           scope_ref: { kind: 'task', id: 't1-test', path: 'docs/tasks/t1-test/t1-test.md' },
@@ -471,6 +576,11 @@ describe('validator', async () => {
           message_class: 'commit',
           branch_id: 'main',
           checkpoint_id: 'cp-root',
+          publication_root_id: 'pr-branch-event-root',
+          validation_report_id: 'vrpt-branch-event-root',
+          trace_id: 'trace-branch-event-root',
+          span_id: 'span-branch-event-root',
+          parent_span_id: 'span-branch-event-parent',
           actor: 'test',
           occurred_at: '2026-04-17T00:00:00Z',
           statement: createBranchCommitStatement({
@@ -573,6 +683,28 @@ describe('validator', async () => {
       const doc = buildWorkflowRunDoc();
       delete doc.data.node_execution.capsule_state;
       const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a publication-root with an invalid membership digest', () => {
+      const doc = buildPublicationRootDoc();
+      doc.membership_digest = 'sha256:not-a-digest';
+      const { valid } = validator.validate('publication-root', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a validation-result with query-style locations', () => {
+      const doc = buildValidationResultDoc();
+      doc.data.subject_location = '$.data.publication_statements[0]';
+      const { valid } = validator.validate('validation-result', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a validation-report with a conformant blocking outcome', () => {
+      const doc = buildValidationReportDoc();
+      doc.data.conforms = true;
+      doc.data.outcome = 'blocking';
+      const { valid } = validator.validate('validation-report', doc);
       assert.equal(valid, false);
     });
 

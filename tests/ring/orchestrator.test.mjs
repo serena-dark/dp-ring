@@ -2658,6 +2658,11 @@ Split milestone prerequisites into ready and blocked sets.
       artifact_transport: 'inline',
       submitted_by: 'bundle-test',
       payload: {
+        trace: {
+          trace_id: 'trace-adaptive-bundle-delivery',
+          span_id: 'span-adaptive-bundle-delivery',
+          parent_span_id: 'span-adaptive-bundle-parent',
+        },
         goal: {
           title: 'Adaptive Bundle Delivery',
           description:
@@ -2702,8 +2707,18 @@ Split milestone prerequisites into ready and blocked sets.
 
     assert.equal(bundle.status, 'ready_queued');
     assert.equal(bundle.canonical.goal.title, 'Adaptive Bundle Delivery');
+    assert.deepEqual(bundle.canonical.trace, {
+      trace_id: 'trace-adaptive-bundle-delivery',
+      job_id: null,
+      source_kind: 'external_bundle',
+      span_id: 'span-adaptive-bundle-delivery',
+      parent_span_id: 'span-adaptive-bundle-parent',
+    });
     assert.equal(bundle.planning.planned_task_ids.length, 1);
     assert.equal(bundle.workflows.waiting_tasks.length, 1);
+
+    const storedBundle = await ring.orchestrator.readDispatchBundle(bundle.id);
+    assert.deepEqual(storedBundle.canonical.trace, bundle.canonical.trace);
 
     const queuedTask = await ring.read('task', bundle.planning.planned_task_ids[0]);
     assert.equal(queuedTask.status, 'ready');
@@ -5403,6 +5418,11 @@ Split milestone prerequisites into ready and blocked sets.
       artifact_transport: 'inline',
       submitted_by: 'bundle-compare',
       payload: {
+        trace: {
+          trace_id: 'trace-ring-goal-canonical',
+          span_id: 'span-ring-goal-canonical',
+          parent_span_id: 'span-ring-goal-parent',
+        },
         goal: {
           title: 'Canonical Mapping',
           description: 'The canonical bundle should be stable across adapters.',
@@ -5438,6 +5458,9 @@ Split milestone prerequisites into ready and blocked sets.
       artifact_transport: 'inline',
       submitted_by: 'bundle-compare',
       payload: {
+        trace_id: 'trace-a2a-canonical',
+        span_id: 'span-a2a-canonical',
+        parent_span_id: 'span-a2a-parent',
         task: {
           id: 'goal-canonical',
           title: 'Canonical Mapping',
@@ -5488,6 +5511,20 @@ Split milestone prerequisites into ready and blocked sets.
         material_formats: ringGoalBundle.canonical.materials.map((item) => item.format),
       },
     );
+    assert.deepEqual(ringGoalBundle.canonical.trace, {
+      trace_id: 'trace-ring-goal-canonical',
+      job_id: null,
+      source_kind: 'external_bundle',
+      span_id: 'span-ring-goal-canonical',
+      parent_span_id: 'span-ring-goal-parent',
+    });
+    assert.deepEqual(a2aBundle.canonical.trace, {
+      trace_id: 'trace-a2a-canonical',
+      job_id: null,
+      source_kind: 'a2a',
+      span_id: 'span-a2a-canonical',
+      parent_span_id: 'span-a2a-parent',
+    });
   });
 
   it('maps MCP resources and prompts into materials and context', async () => {
@@ -5498,6 +5535,9 @@ Split milestone prerequisites into ready and blocked sets.
       artifact_transport: 'inline',
       submitted_by: 'mcp-test',
       payload: {
+        trace_id: 'trace-mcp-mapping',
+        span_id: 'span-mcp-mapping',
+        parent_span_id: 'span-mcp-parent',
         goal: {
           title: 'MCP Mapping',
           description: 'Map resources into materials and prompts into bundle context.',
@@ -5544,6 +5584,13 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(bundle.canonical.materials.length, 1);
     assert.equal(bundle.canonical.context.brief_ref, 'bundle-brief');
     assert.deepEqual(bundle.canonical.context.artifact_refs, ['resource://design-notes']);
+    assert.deepEqual(bundle.canonical.trace, {
+      trace_id: 'trace-mcp-mapping',
+      job_id: null,
+      source_kind: 'mcp',
+      span_id: 'span-mcp-mapping',
+      parent_span_id: 'span-mcp-parent',
+    });
     assert.equal(bundle.staging.materials.length, 1);
   });
 

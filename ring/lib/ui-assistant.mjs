@@ -1,3 +1,5 @@
+import { filterByFields } from './query.mjs';
+
 const ENTITY_DEFINITIONS = [
   {
     type: 'workflow',
@@ -53,6 +55,33 @@ const ENTITY_DEFINITIONS = [
     path: '/knowledge',
     aliases: ['distillation', 'distillations', 'knowledge', '知识', '蒸馏'],
   },
+  {
+    type: 'publication-root',
+    singular: 'publication root',
+    plural: 'publication roots',
+    label_en: 'publication root',
+    label_zh: 'Publication Root',
+    path: '/publication-roots',
+    aliases: ['publication root', 'publication roots', 'publication-root', 'publication-roots'],
+  },
+  {
+    type: 'validation-report',
+    singular: 'validation report',
+    plural: 'validation reports',
+    label_en: 'validation report',
+    label_zh: 'Validation Report',
+    path: '/validation-reports',
+    aliases: ['validation report', 'validation reports', 'validation-report', 'validation-reports'],
+  },
+  {
+    type: 'validation-result',
+    singular: 'validation result',
+    plural: 'validation results',
+    label_en: 'validation result',
+    label_zh: 'Validation Result',
+    path: '/validation-results',
+    aliases: ['validation result', 'validation results', 'validation-result', 'validation-results'],
+  },
 ];
 
 const STATUS_ALIASES = {
@@ -60,6 +89,10 @@ const STATUS_ALIASES = {
   deprecated: ['deprecated', '废弃'],
   archived: ['archived', 'archive', '归档'],
   draft: ['draft', '草稿'],
+  published: ['published', 'publish', '发布'],
+  withheld: ['withheld', 'hold', '暂缓'],
+  superseded: ['superseded', 'replaced', '替代'],
+  recorded: ['recorded', '记录中', '已记录'],
   ready: ['ready', '就绪'],
   in_progress: ['in progress', 'in_progress', '进行中'],
   completed: ['completed', '完成'],
@@ -92,6 +125,18 @@ const FEEDBACK_CATEGORY_ALIASES = {
   process_issue: ['process issue', '流程缺陷'],
 };
 
+const VALIDATION_REPORT_OUTCOME_ALIASES = {
+  conformant: ['conformant', 'passing', 'pass'],
+  advisory: ['advisory'],
+  blocking: ['blocking'],
+};
+
+const VALIDATION_RESULT_SEVERITY_ALIASES = {
+  info: ['info', 'informational'],
+  warning: ['warning', 'warnings'],
+  violation: ['violation', 'violations'],
+};
+
 function containsAny(value, candidates) {
   return candidates.some((candidate) => value.includes(candidate));
 }
@@ -120,6 +165,41 @@ function resolveSection(page, preferred) {
   return page.default_section_id ?? page.sections[0]?.id ?? null;
 }
 
+function fallbackPage(pages, fallbackPath) {
+  return findPage(pages, fallbackPath) ?? findPage(pages, '/') ?? pages[0] ?? null;
+}
+
+function resolveNavigationTarget(pages, path, preferredSectionId, fallbackPath = '/') {
+  const requestedPage = findPage(pages, path);
+  const page = requestedPage ?? fallbackPage(pages, fallbackPath);
+
+  return {
+    matchedRequestedPath: Boolean(requestedPage),
+    path: page?.path ?? fallbackPath ?? path ?? '/',
+    section_id: resolveSection(page, requestedPage ? preferredSectionId : null),
+  };
+}
+
+function buildNavigationPayload(pages, {
+  path,
+  sectionId = null,
+  query = {},
+  adjustments = [],
+  fallbackPath = '/',
+}) {
+  const target = resolveNavigationTarget(pages, path, sectionId, fallbackPath);
+
+  return {
+    navigation: {
+      path: target.path,
+      query: target.matchedRequestedPath ? query : {},
+      section_id: target.section_id,
+      source: 'assistant',
+    },
+    page_adjustments: target.matchedRequestedPath ? adjustments : [],
+  };
+}
+
 function buildReadPlan(prompt, pages, {
   answer,
   confidence = 0.8,
@@ -127,19 +207,22 @@ function buildReadPlan(prompt, pages, {
   sectionId = null,
   query = {},
   adjustments = [],
+  fallbackPath = '/',
 }) {
-  const page = findPage(pages, path);
+  const { navigation, page_adjustments } = buildNavigationPayload(pages, {
+    path,
+    sectionId,
+    query,
+    adjustments,
+    fallbackPath,
+  });
+
   return {
     mode: 'read',
     answer,
     confidence,
-    navigation: {
-      path,
-      query,
-      section_id: resolveSection(page, sectionId),
-      source: 'assistant',
-    },
-    page_adjustments: adjustments,
+    navigation,
+    page_adjustments,
     proposed_action: null,
   };
 }
@@ -152,19 +235,22 @@ function buildMutationPlan(prompt, pages, {
   query = {},
   adjustments = [],
   action,
+  fallbackPath = '/',
 }) {
-  const page = findPage(pages, path);
+  const { navigation, page_adjustments } = buildNavigationPayload(pages, {
+    path,
+    sectionId,
+    query,
+    adjustments,
+    fallbackPath,
+  });
+
   return {
     mode: 'mutate',
     answer,
     confidence,
-    navigation: {
-      path,
-      query,
-      section_id: resolveSection(page, sectionId),
-      source: 'assistant',
-    },
-    page_adjustments: adjustments,
+    navigation,
+    page_adjustments,
     proposed_action: action,
   };
 }
@@ -198,6 +284,62 @@ function detectFeedbackCategory(prompt) {
     }
   }
   return null;
+}
+
+function detectValidationReportOutcome(prompt) {
+  for (const [outcome, aliases] of Object.entries(VALIDATION_REPORT_OUTCOME_ALIASES)) {
+    if (containsAny(prompt, aliases)) {
+      return outcome;
+    }
+  }
+  return null;
+}
+
+function detectValidationResultSeverity(prompt) {
+  for (const [severity, aliases] of Object.entries(VALIDATION_RESULT_SEVERITY_ALIASES)) {
+    if (containsAny(prompt, aliases)) {
+      return severity;
+    }
+  }
+  return null;
+}
+
+function filtersForEntity(entity, prompt) {
+  const status = detectStatus(prompt);
+
+  switch (entity?.type) {
+    case 'feedback': {
+      const severity = detectSeverity(prompt);
+      return [
+        ...(status ? [{ field: 'status', key: 'status', matchValue: status, queryValue: status, label: status }] : []),
+        ...(severity
+          ? [{ field: 'data.severity', key: 'severity', matchValue: severity, queryValue: severity, label: severity }]
+          : []),
+      ];
+    }
+    case 'validation-report': {
+      const outcome = detectValidationReportOutcome(prompt);
+      return [
+        ...(status ? [{ field: 'status', key: 'status', matchValue: status, queryValue: status, label: status }] : []),
+        ...(outcome
+          ? [{ field: 'data.outcome', key: 'outcome', matchValue: outcome, queryValue: outcome, label: outcome }]
+          : []),
+      ];
+    }
+    case 'validation-result': {
+      const severity = detectValidationResultSeverity(prompt);
+      return [
+        ...(status ? [{ field: 'status', key: 'status', matchValue: status, queryValue: status, label: status }] : []),
+        ...(severity
+          ? [{ field: 'data.severity', key: 'severity', matchValue: severity, queryValue: severity, label: severity }]
+          : []),
+      ];
+    }
+    default:
+      return status
+        ? [{ field: 'status', key: 'status', matchValue: status, queryValue: status, label: status }]
+        : [];
+  }
 }
 
 function isCountIntent(prompt) {
@@ -616,7 +758,7 @@ function normalizeQueryItems(items) {
   );
 }
 
-function normalizeCloudPlan(raw, currentPath) {
+function normalizeCloudPlan(raw, { currentPath = '/', pages = [] } = {}) {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -630,24 +772,12 @@ function normalizeCloudPlan(raw, currentPath) {
     0,
     Math.min(1, Number.isFinite(raw.confidence) ? Number(raw.confidence) : 0.5),
   );
-  const navigation =
-    raw.navigation?.should_navigate && typeof raw.navigation?.path === 'string' && raw.navigation.path.trim()
-      ? {
-          path: raw.navigation.path.trim(),
-          query: normalizeQueryItems(raw.navigation.query_items),
-          section_id:
-            typeof raw.navigation.section_id === 'string' && raw.navigation.section_id.trim()
-              ? raw.navigation.section_id.trim()
-              : null,
-          source: 'assistant',
-        }
-      : {
-          path: currentPath,
-          query: {},
-          section_id: null,
-          source: 'assistant',
-        };
-  const pageAdjustments = Array.isArray(raw.page_adjustments)
+  const shouldNavigate = raw.navigation?.should_navigate === true;
+  const requestedPath =
+    shouldNavigate && typeof raw.navigation?.path === 'string' && raw.navigation.path.trim()
+      ? raw.navigation.path.trim()
+      : currentPath;
+  const normalizedAdjustments = Array.isArray(raw.page_adjustments)
     ? raw.page_adjustments
       .filter((item) => item?.scope === 'query' && typeof item?.key === 'string')
       .map((item) => ({
@@ -657,6 +787,16 @@ function normalizeCloudPlan(raw, currentPath) {
       }))
       .filter((item) => item.key)
     : [];
+  const { navigation, page_adjustments: pageAdjustments } = buildNavigationPayload(pages, {
+    path: requestedPath,
+    sectionId:
+      typeof raw.navigation?.section_id === 'string' && raw.navigation.section_id.trim()
+        ? raw.navigation.section_id.trim()
+        : null,
+    query: shouldNavigate ? normalizeQueryItems(raw.navigation.query_items) : {},
+    adjustments: shouldNavigate ? normalizedAdjustments : [],
+    fallbackPath: currentPath,
+  });
 
   if (mode === 'read' || raw.action?.kind === 'none') {
     return {
@@ -770,23 +910,26 @@ export function createUiAssistant({ list, registry, openai = null }) {
     const promptRaw = `${input.prompt ?? ''}`.trim();
     const prompt = promptRaw.toLowerCase();
     const pages = Array.isArray(input.pages) ? input.pages : [];
+    const fallbackPath = input.current_route?.path ?? '/';
+    const createReadPlan = (options) => buildReadPlan(promptRaw, pages, { ...options, fallbackPath });
+    const createMutationPlan = (options) => buildMutationPlan(promptRaw, pages, { ...options, fallbackPath });
 
     if (!promptRaw) {
-      return buildReadPlan(promptRaw, pages, {
+      return createReadPlan({
         answer: localize(
           promptRaw,
           '请输入一个问题或动作。',
           'Enter a question or action.',
         ),
         confidence: 1,
-        path: input.current_route?.path ?? '/',
+        path: fallbackPath,
       });
     }
 
     if (isCreateRequirementIntent(prompt)) {
       const { payload, missing_inputs } = parseRequirementDraft(promptRaw);
       const ready = missing_inputs.length === 0;
-      return buildMutationPlan(promptRaw, pages, {
+      return createMutationPlan({
         answer: ready
           ? localize(
               promptRaw,
@@ -817,7 +960,7 @@ export function createUiAssistant({ list, registry, openai = null }) {
     if (isCreateSessionIntent(prompt)) {
       const { payload, missing_inputs } = parseSessionDraft(promptRaw);
       const ready = missing_inputs.length === 0;
-      return buildMutationPlan(promptRaw, pages, {
+      return createMutationPlan({
         answer: ready
           ? localize(
               promptRaw,
@@ -848,7 +991,7 @@ export function createUiAssistant({ list, registry, openai = null }) {
     if (isCreateFeedbackIntent(prompt)) {
       const { payload, missing_inputs } = parseFeedbackDraft(promptRaw);
       const ready = missing_inputs.length === 0;
-      return buildMutationPlan(promptRaw, pages, {
+      return createMutationPlan({
         answer: ready
           ? localize(
               promptRaw,
@@ -880,7 +1023,7 @@ export function createUiAssistant({ list, registry, openai = null }) {
       const { payload, missing_inputs } = parseTransitionDraft(promptRaw);
       const ready = missing_inputs.length === 0;
       const detailPath = detailPathForArtifact(payload.artifact_type, payload.artifact_id);
-      return buildMutationPlan(promptRaw, pages, {
+      return createMutationPlan({
         answer: ready
           ? localize(
               promptRaw,
@@ -922,7 +1065,7 @@ export function createUiAssistant({ list, registry, openai = null }) {
         taskTypes[0] ??
         '';
 
-      return buildReadPlan(promptRaw, pages, {
+      return createReadPlan({
         answer: selectedTaskType
           ? localize(
               promptRaw,
@@ -944,59 +1087,53 @@ export function createUiAssistant({ list, registry, openai = null }) {
     }
 
     const entity = detectEntity(prompt);
-    const status = detectStatus(prompt);
-    const severity = detectSeverity(prompt);
+    const entityFilters = entity ? filtersForEntity(entity, prompt) : [];
+    const filterCriteria = Object.fromEntries(
+      entityFilters.map(({ field, matchValue }) => [field, matchValue]),
+    );
+    const filterAdjustments = entityFilters.map(({ key, queryValue }) => ({
+      key,
+      value: `${queryValue}`,
+      scope: 'query',
+    }));
+    const filterLabels = entityFilters.map(({ label }) => label);
 
     if (entity && isCountIntent(prompt)) {
       const items = await list(entity.type);
-      const filteredItems = status
-        ? items.filter((item) => item.status === status)
-        : severity && entity.type === 'feedback'
-          ? items.filter((item) => item.data?.severity === severity)
-          : items;
-      const descriptor = status
-        ? `${status} ${entity.label_en}s`
-        : entity.plural;
+      const filteredItems = filterByFields(items, filterCriteria);
+      const descriptor = [...filterLabels, entity.plural].filter(Boolean).join(' ') || entity.plural;
+      const qualifier = filterLabels.join(' ');
 
-      return buildReadPlan(promptRaw, pages, {
+      return createReadPlan({
         answer: localize(
           promptRaw,
-          `当前共有 ${filteredItems.length} 个${status ? `${status} ` : ''}${entity.label_zh}。`,
+          `当前共有 ${filteredItems.length} 个${qualifier ? `${qualifier} ` : ''}${entity.label_zh}。`,
           `There are ${filteredItems.length} ${descriptor}.`,
         ),
         confidence: 0.92,
         path: entity.path,
-        sectionId: status || severity ? 'records' : 'summary',
-        adjustments: [
-          ...(status ? [{ key: 'status', value: status, scope: 'query' }] : []),
-          ...(severity && entity.type === 'feedback'
-            ? [{ key: 'severity', value: severity, scope: 'query' }]
-            : []),
-        ],
+        sectionId: entityFilters.length > 0 ? 'records' : 'summary',
+        adjustments: filterAdjustments,
       });
     }
 
-    if (entity && (status || severity || containsAny(prompt, ['show', '只看', 'filter', '筛选']))) {
-      return buildReadPlan(promptRaw, pages, {
+    if (entity && (entityFilters.length > 0 || containsAny(prompt, ['show', '只看', 'filter', '筛选']))) {
+      const descriptor = [...filterLabels, entity.plural].filter(Boolean).join(' ') || entity.plural;
+      return createReadPlan({
         answer: localize(
           promptRaw,
-          `已跳转到 ${entity.label_zh} 页面，并应用筛选。`,
-          `Opened ${entity.plural} and applied the requested filters.`,
+          `已跳转到 ${filterLabels.length > 0 ? `${filterLabels.join(' ')} ` : ''}${entity.label_zh} 页面。`,
+          `Opened ${descriptor}.`,
         ),
         confidence: 0.82,
         path: entity.path,
         sectionId: 'records',
-        adjustments: [
-          ...(status ? [{ key: 'status', value: status, scope: 'query' }] : []),
-          ...(severity && entity.type === 'feedback'
-            ? [{ key: 'severity', value: severity, scope: 'query' }]
-            : []),
-        ],
+        adjustments: filterAdjustments,
       });
     }
 
     if (entity) {
-      return buildReadPlan(promptRaw, pages, {
+      return createReadPlan({
         answer: localize(
           promptRaw,
           `已跳转到 ${entity.label_zh} 页面。`,
@@ -1008,7 +1145,7 @@ export function createUiAssistant({ list, registry, openai = null }) {
       });
     }
 
-    return buildReadPlan(promptRaw, pages, {
+    return createReadPlan({
       answer: localize(
         promptRaw,
         '我先带你回到 Dashboard，你也可以继续问更具体的问题。',
@@ -1042,7 +1179,10 @@ export function createUiAssistant({ list, registry, openai = null }) {
               feature: 'ui-assistant',
             },
           });
-          const plan = normalizeCloudPlan(remote.parsed, input.current_route?.path ?? '/');
+          const plan = normalizeCloudPlan(remote.parsed, {
+            currentPath: input.current_route?.path ?? '/',
+            pages: Array.isArray(input.pages) ? input.pages : [],
+          });
           if (plan) {
             return plan;
           }

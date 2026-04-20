@@ -29,20 +29,26 @@
     "distillation",
     "node",
     "checkpoint",
-    "branch-event"
+    "branch-event",
+    "publication-root",
+    "validation-report",
+    "validation-result"
   ],
   "artifact_directories": {
-    "requirement":  "requirements",
-    "milestone":    "milestones",
-    "task":         "tasks",
-    "workflow":     "workflows",
-    "workflow-run": "workflow-runs",
-    "session":      "sessions",
-    "evaluation":   "evaluations",
-    "feedback":     "feedback",
-    "distillation": "distillations",
-    "node":         "nodes",
-    "checkpoint":   "checkpoints",
-    "branch-event": "branch-events"
+    "requirement":       "requirements",
+    "milestone":         "milestones",
+    "task":              "tasks",
+    "workflow":          "workflows",
+    "workflow-run":      "workflow-runs",
+    "session":           "sessions",
+    "evaluation":        "evaluations",
+    "feedback":          "feedback",
+    "distillation":      "distillations",
+    "node":              "nodes",
+    "checkpoint":        "checkpoints",
+    "branch-event":      "branch-events",
+    "publication-root":  "publication-roots",
+    "validation-report": "validation-reports",
+    "validation-result": "validation-results"
   }
 }

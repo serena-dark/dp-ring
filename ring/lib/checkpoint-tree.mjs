@@ -117,9 +117,20 @@ function checkpointScope(scopeRef = {}) {
   };
 }
 
+function governanceLinkage(fields = {}, defaults = {}) {
+  return {
+    publication_root_id: fields.publication_root_id ?? defaults.publication_root_id ?? null,
+    validation_report_id: fields.validation_report_id ?? defaults.validation_report_id ?? null,
+    trace_id: fields.trace_id ?? defaults.trace_id ?? null,
+    span_id: fields.span_id ?? defaults.span_id ?? null,
+    parent_span_id: fields.parent_span_id ?? defaults.parent_span_id ?? null,
+  };
+}
+
 function checkpointData(fields = {}, defaults = {}) {
   return {
     parent_checkpoint_id: fields.parent_checkpoint_id ?? defaults.parent_checkpoint_id ?? null,
+    ...governanceLinkage(fields, defaults),
     branch_id: fields.branch_id ?? defaults.branch_id ?? 'main',
     node_id: fields.node_id ?? defaults.node_id ?? 'unknown-node',
     scope_ref: checkpointScope(fields.scope_ref ?? defaults.scope_ref),
@@ -156,6 +167,11 @@ export function createCheckpoint(fields = {}) {
       replay_state: fields.replay_state,
       synthesis_inputs: fields.synthesis_inputs,
       parent_checkpoint_id: fields.parent_checkpoint_id,
+      publication_root_id: fields.publication_root_id,
+      validation_report_id: fields.validation_report_id,
+      trace_id: fields.trace_id,
+      span_id: fields.span_id,
+      parent_span_id: fields.parent_span_id,
     }),
   };
 }
@@ -173,6 +189,11 @@ export function continueFromCheckpoint(parent, fields = {}) {
     replay_state: fields.replay_state ?? parent.data.replay_state,
     synthesis_inputs: fields.synthesis_inputs ?? [],
     parent_checkpoint_id: parent.id,
+    publication_root_id: fields.publication_root_id ?? parent.data.publication_root_id,
+    validation_report_id: fields.validation_report_id ?? parent.data.validation_report_id,
+    trace_id: fields.trace_id ?? parent.data.trace_id,
+    span_id: fields.span_id ?? parent.data.span_id,
+    parent_span_id: fields.parent_span_id ?? parent.data.parent_span_id,
   });
 }
 
@@ -189,6 +210,11 @@ export function forkCheckpoint(parent, fields = {}) {
     replay_state: fields.replay_state ?? parent.data.replay_state,
     adoption_status: fields.adoption_status ?? 'candidate',
     parent_checkpoint_id: parent.id,
+    publication_root_id: fields.publication_root_id ?? parent.data.publication_root_id,
+    validation_report_id: fields.validation_report_id ?? parent.data.validation_report_id,
+    trace_id: fields.trace_id ?? parent.data.trace_id,
+    span_id: fields.span_id ?? parent.data.span_id,
+    parent_span_id: fields.parent_span_id ?? parent.data.parent_span_id,
   });
 }
 
@@ -250,6 +276,11 @@ export function synthesizeCheckpoint(inputs, fields = {}) {
     status: fields.status ?? 'synthesized',
     parent_checkpoint_id: fields.parent_checkpoint_id ?? parent.id,
     synthesis_inputs: fields.synthesis_inputs ?? inputs.map((cp) => cp.id),
+    publication_root_id: fields.publication_root_id ?? parent.data.publication_root_id,
+    validation_report_id: fields.validation_report_id ?? parent.data.validation_report_id,
+    trace_id: fields.trace_id ?? parent.data.trace_id,
+    span_id: fields.span_id ?? parent.data.span_id,
+    parent_span_id: fields.parent_span_id ?? parent.data.parent_span_id,
   });
 }
 

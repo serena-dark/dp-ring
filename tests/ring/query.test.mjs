@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterByField, filterByFieldIn, sortByField, relevantKnowledge, blockingFeedback } from '../../ring/lib/query.mjs';
+import {
+  filterByField,
+  filterByFieldIn,
+  filterByFields,
+  sortByField,
+  relevantKnowledge,
+  blockingFeedback,
+} from '../../ring/lib/query.mjs';
 
 describe('query utilities', () => {
 
@@ -27,6 +34,39 @@ describe('query utilities', () => {
     it('filters by multiple values', () => {
       const result = filterByFieldIn(artifacts, 'data.severity', ['critical', 'major']);
       assert.equal(result.length, 2);
+    });
+  });
+
+  describe('filterByFields()', () => {
+    it('filters with combined top-level and nested criteria, including false boolean values', () => {
+      const artifacts = [
+        {
+          id: 'pr-1',
+          type: 'publication-root',
+          status: 'published',
+          data: { subject: 'cp-root' },
+        },
+        {
+          id: 'vrpt-1',
+          type: 'validation-report',
+          status: 'recorded',
+          data: { outcome: 'blocking', conforms: false },
+        },
+        {
+          id: 'vrpt-2',
+          type: 'validation-report',
+          status: 'recorded',
+          data: { outcome: 'conformant', conforms: true },
+        },
+      ];
+
+      const result = filterByFields(artifacts, {
+        type: 'validation-report',
+        'data.conforms': false,
+        'data.outcome': 'blocking',
+      });
+
+      assert.deepEqual(result.map((artifact) => artifact.id), ['vrpt-1']);
     });
   });
 
@@ -94,12 +134,20 @@ describe('query utilities', () => {
       { id: 'fb-2', status: 'acknowledged', data: { severity: 'major', target: { type: 'requirement', id: 'r1' } } },
       { id: 'fb-3', status: 'open', data: { severity: 'major', target: { type: 'requirement', id: 'r2' } } },
       { id: 'fb-4', status: 'resolved', data: { severity: 'critical', target: { type: 'requirement', id: 'r1' } } },
+      { id: 'fb-5', status: 'open', data: { severity: 'critical', target: { type: 'session', id: 'r1' } } },
+      { id: 'fb-6', status: 'open', data: { severity: 'major' } },
     ];
 
     it('finds critical and major blocking feedback for a requirement', () => {
       const result = blockingFeedback(feedback, 'r1');
       assert.equal(result.critical.length, 1);
       assert.equal(result.major.length, 1); // acknowledged major counts
+    });
+
+    it('ignores non-requirement or missing targets when filtering by requirement', () => {
+      const result = blockingFeedback(feedback, 'r1');
+      assert.deepEqual(result.critical.map(f => f.id), ['fb-1']);
+      assert.deepEqual(result.major.map(f => f.id), ['fb-2']);
     });
 
     it('excludes resolved items', () => {

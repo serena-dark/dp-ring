@@ -65,9 +65,11 @@ npm run v2:web:install
 npm run v2:web:dev
 npm run v2:web:build
 npm run v2:web:typecheck
+npm run test:frontend
+npm run test:backend
 ```
 
-The root regression suite now includes both `npm run v2:web:typecheck` and `npm run v2:web:build`, so a green `npm test` confirms the dedicated operator-web typecheck and production build entrypoints. Run `npm run v2:web:install` before app-local commands if the operator-web dependencies are not installed yet.
+The root regression suite now includes both `npm run v2:web:typecheck` and `npm run v2:web:build`, so a green `npm test` confirms the dedicated operator-web typecheck and production build entrypoints. Use `npm run test:frontend` for the `tests/operator-web/**/*.test.ts` coverage and `npm run test:backend` for the root `node:test` suites. Run `npm run v2:web:install` before app-local commands if the operator-web dependencies are not installed yet.
 
 ## Managed local stack
 
@@ -81,6 +83,7 @@ npm run stack:status
 - `npm run stack:verified-restart` runs the full regression suite first, then rebuilds the preview frontend and starts the managed backend/frontend pair.
 - `npm run stack:status` reports whether the recorded processes are still alive and whether the backend, frontend, and frontend API proxy are healthy.
 - Runtime state and logs live under `.ring/runtime/`, including `backend.log`, `frontend.log`, and `service-stack.json`.
+- To route loopback automation through the Kimi-backed remote agent path, set `DP_RING_REMOTE_AGENT_PROVIDER=kimi` in `.env.local` (see `.env.example`).
 
 The currently validated managed endpoints are:
 

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 
@@ -20,6 +20,7 @@ const DEFAULT_SCOPES = ['openid', 'profile', 'email', 'offline_access'];
 const DEFAULT_AUDIENCE = 'https://api.openai.com/v1';
 const DEFAULT_API_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_MODEL = 'gpt-5.4-mini';
+const PRIVATE_FILE_MODE = 0o600;
 const TOKEN_REFRESH_WINDOW_MS = 60_000;
 
 function trimString(value) {
@@ -121,9 +122,101 @@ function resolveResponseText(payload) {
   return parts.join('\n\n').trim();
 }
 
-function sessionSummary(session) {
+function sessionExpiresAtMs(session) {
+  const expiresAt = Date.parse(trimString(session?.expires_at) ?? '');
+  return Number.isFinite(expiresAt) ? expiresAt : null;
+}
+
+const AUTHORIZATION_PLAN_TYPES = Object.freeze({
+  OAUTH_ACCESS_TOKEN: 'oauth_access_token',
+  OAUTH_REFRESH: 'oauth_refresh',
+  API_KEY: 'api_key',
+  NONE: 'none',
+});
+
+const AUTH_MODE_BY_PLAN_TYPE = Object.freeze({
+  [AUTHORIZATION_PLAN_TYPES.OAUTH_ACCESS_TOKEN]: 'oauth',
+  [AUTHORIZATION_PLAN_TYPES.OAUTH_REFRESH]: 'oauth',
+  [AUTHORIZATION_PLAN_TYPES.API_KEY]: 'api_key',
+  [AUTHORIZATION_PLAN_TYPES.NONE]: 'none',
+});
+
+function sessionAccessToken(session) {
+  return trimString(session?.access_token);
+}
+
+function sessionAccessTokenValid(session, now = Date.now()) {
+  if (!sessionAccessToken(session)) {
+    return false;
+  }
+
+  const expiresAt = sessionExpiresAtMs(session);
+  return expiresAt === null || expiresAt > now;
+}
+
+function sessionNeedsRefresh(session, now = Date.now()) {
+  if (!trimString(session?.refresh_token)) {
+    return false;
+  }
+
+  if (!sessionAccessToken(session)) {
+    return true;
+  }
+
+  const expiresAt = sessionExpiresAtMs(session);
+  return expiresAt !== null && expiresAt - now <= TOKEN_REFRESH_WINDOW_MS;
+}
+
+function sessionRefreshAvailable(session, oauth, now = Date.now()) {
+  return Boolean(oauth?.configured && sessionNeedsRefresh(session, now));
+}
+
+function apiKeyAuthorization(api) {
+  const apiKey = trimString(api?.api_key);
+  return apiKey ? `Bearer ${apiKey}` : null;
+}
+
+function resolveAuthorizationPlan({ session, oauth = null, api = null, now = Date.now() }) {
+  const fallbackAuthorization = apiKeyAuthorization(api);
+
+  if (sessionRefreshAvailable(session, oauth, now)) {
+    return {
+      type: AUTHORIZATION_PLAN_TYPES.OAUTH_REFRESH,
+      fallback_authorization: fallbackAuthorization,
+    };
+  }
+
+  const accessToken = sessionAccessToken(session);
+  if (sessionAccessTokenValid(session, now) && accessToken) {
+    return {
+      type: AUTHORIZATION_PLAN_TYPES.OAUTH_ACCESS_TOKEN,
+      authorization: `Bearer ${accessToken}`,
+    };
+  }
+
+  if (fallbackAuthorization) {
+    return {
+      type: AUTHORIZATION_PLAN_TYPES.API_KEY,
+      authorization: fallbackAuthorization,
+    };
+  }
+
   return {
-    connected: Boolean(trimString(session?.access_token)),
+    type: AUTHORIZATION_PLAN_TYPES.NONE,
+    authorization: null,
+  };
+}
+
+function sessionConnected(session, oauth = null, now = Date.now()) {
+  return Boolean(
+    sessionAccessTokenValid(session, now) ||
+    sessionRefreshAvailable(session, oauth, now),
+  );
+}
+
+function sessionSummary(session, oauth = null) {
+  return {
+    connected: sessionConnected(session, oauth),
     expires_at: trimString(session?.expires_at),
     updated_at: trimString(session?.updated_at),
     scope: Array.isArray(session?.scope) ? session.scope : [],
@@ -215,10 +308,19 @@ export function createOpenAiGateway(repoRoot) {
     return raw ? parseJsonSafe(raw, null) : null;
   }
 
+  async function writePrivateJsonFile(path, value) {
+    const content = JSON.stringify(value, null, 2) + '\n';
+    await writeFile(path, content, {
+      encoding: 'utf-8',
+      mode: PRIVATE_FILE_MODE,
+    });
+    await chmod(path, PRIVATE_FILE_MODE);
+    return value;
+  }
+
   async function writeSession(session) {
     await ensureRuntimeDir();
-    await writeFile(sessionPath, JSON.stringify(session, null, 2) + '\n', 'utf-8');
-    return session;
+    return writePrivateJsonFile(sessionPath, session);
   }
 
   async function clearSession() {
@@ -233,8 +335,7 @@ export function createOpenAiGateway(repoRoot) {
 
   async function writePendingAuthorization(flow) {
     await ensureRuntimeDir();
-    await writeFile(pendingAuthorizationPath, JSON.stringify(flow, null, 2) + '\n', 'utf-8');
-    return flow;
+    return writePrivateJsonFile(pendingAuthorizationPath, flow);
   }
 
   async function clearPendingAuthorization() {
@@ -266,11 +367,9 @@ export function createOpenAiGateway(repoRoot) {
     const session = await readSession();
     const oauth = oauthClientConfig();
     const api = apiConfig();
-    const authMode = sessionSummary(session).connected
-      ? 'oauth'
-      : api.api_key
-        ? 'api_key'
-        : 'none';
+    const summary = sessionSummary(session, oauth);
+    const authPlan = resolveAuthorizationPlan({ session, oauth, api });
+    const authMode = AUTH_MODE_BY_PLAN_TYPE[authPlan.type] ?? 'none';
 
     return {
       provider: 'openai',
@@ -288,7 +387,7 @@ export function createOpenAiGateway(repoRoot) {
         auth_mode: authMode,
         available: authMode !== 'none',
       },
-      session: sessionSummary(session),
+      session: summary,
     };
   }
 
@@ -686,32 +785,58 @@ export function createOpenAiGateway(repoRoot) {
   }
 
   async function ensureAuthorization() {
+    const oauth = oauthClientConfig();
     const api = apiConfig();
     const session = await readSession();
+    const authPlan = resolveAuthorizationPlan({ session, oauth, api });
 
-    if (trimString(session?.access_token)) {
-      const expiresAt = Date.parse(session.expires_at ?? '');
-      const shouldRefresh =
-        Number.isFinite(expiresAt) &&
-        expiresAt - Date.now() <= TOKEN_REFRESH_WINDOW_MS &&
-        trimString(session.refresh_token);
-      if (shouldRefresh) {
-        await refreshSession();
-      }
-      const refreshedSession = await readSession();
-      if (trimString(refreshedSession?.access_token)) {
+    switch (authPlan.type) {
+      case AUTHORIZATION_PLAN_TYPES.OAUTH_ACCESS_TOKEN:
         return {
           mode: 'oauth',
-          authorization: `Bearer ${refreshedSession.access_token}`,
+          authorization: authPlan.authorization,
         };
-      }
-    }
+      case AUTHORIZATION_PLAN_TYPES.OAUTH_REFRESH:
+        try {
+          await refreshSession();
+        } catch (error) {
+          if (authPlan.fallback_authorization) {
+            return {
+              mode: 'api_key',
+              authorization: authPlan.fallback_authorization,
+            };
+          }
+          throw error;
+        }
 
-    if (trimString(api.api_key)) {
-      return {
-        mode: 'api_key',
-        authorization: `Bearer ${api.api_key}`,
-      };
+        {
+          const refreshedSession = await readSession();
+          const refreshedPlan = resolveAuthorizationPlan({
+            session: refreshedSession,
+            oauth,
+            api,
+          });
+          if (refreshedPlan.type === AUTHORIZATION_PLAN_TYPES.OAUTH_ACCESS_TOKEN) {
+            return {
+              mode: 'oauth',
+              authorization: refreshedPlan.authorization,
+            };
+          }
+          if (refreshedPlan.type === AUTHORIZATION_PLAN_TYPES.API_KEY) {
+            return {
+              mode: 'api_key',
+              authorization: refreshedPlan.authorization,
+            };
+          }
+        }
+        break;
+      case AUTHORIZATION_PLAN_TYPES.API_KEY:
+        return {
+          mode: 'api_key',
+          authorization: authPlan.authorization,
+        };
+      default:
+        break;
     }
 
     throw buildError(
@@ -724,8 +849,8 @@ export function createOpenAiGateway(repoRoot) {
     const api = apiConfig();
     const auth = await ensureAuthorization();
     const payload = {
-      model: trimString(body.model) ?? api.default_model,
       ...body,
+      model: trimString(body.model) ?? api.default_model,
     };
 
     const response = await fetchJson(

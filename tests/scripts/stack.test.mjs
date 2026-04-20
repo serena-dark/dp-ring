@@ -7,6 +7,10 @@ describe('stack script parsing helpers', () => {
     assert.deepEqual(parsePidList('123\n456\n\n'), [123, 456]);
   });
 
+  it('parsePidList ignores non-decimal tokens instead of coercing them into pids', () => {
+    assert.deepEqual(parsePidList('123\n1e3\n0x10\n12.0\n+7\nabc\n'), [123]);
+  });
+
   it('parseSsPidOutput extracts unique listener pids from ss output', () => {
     const sample = [
       'State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess',

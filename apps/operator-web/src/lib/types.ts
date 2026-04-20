@@ -107,6 +107,87 @@ export interface ArtifactManifest {
   uri: string;
 }
 
+export type GovernanceLocator = Record<string, unknown> | null;
+
+export interface GovernanceDescriptor {
+  name: string;
+  mediaType: string;
+  digest: string;
+  size: number;
+  locator: GovernanceLocator;
+}
+
+export interface PublicationMemberDescriptor extends GovernanceDescriptor {
+  profile?: string;
+  artifact_type: string;
+}
+
+export interface PublicationRoot {
+  _type: string;
+  id: string;
+  conforms_to: string;
+  status: string;
+  about: GovernanceDescriptor;
+  member_descriptors: PublicationMemberDescriptor[];
+  membership_digest: string;
+}
+
+export interface GovernanceSubjectRef {
+  type: string;
+  id: string;
+}
+
+export interface ValidationResultData {
+  report_id: string;
+  subject_ref: GovernanceSubjectRef;
+  subject_location: string;
+  rule_id: string;
+  rule_location: string;
+  severity: string;
+  message?: string | null;
+  detail_result_ids: string[];
+}
+
+export interface ValidationResult {
+  id: string;
+  type: "validation-result";
+  version: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  session_id?: string | null;
+  status: string;
+  data: ValidationResultData;
+}
+
+export interface ValidationReportSummary {
+  info: number;
+  warning: number;
+  violation: number;
+}
+
+export interface ValidationReportData {
+  subject_ref: GovernanceSubjectRef;
+  profile_id: string;
+  report_level: string;
+  conforms: boolean;
+  outcome: string;
+  result_ids: string[];
+  summary: ValidationReportSummary;
+}
+
+export interface ValidationReport {
+  id: string;
+  type: "validation-report";
+  version: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  session_id?: string | null;
+  status: string;
+  data: ValidationReportData;
+}
+
 export interface Execution {
   id: string;
   work_item_id: string;
@@ -177,6 +258,9 @@ export interface PlatformSnapshot {
   work_items: WorkItem[];
   executions: Execution[];
   reviews: Review[];
+  publication_roots: PublicationRoot[];
+  validation_reports: ValidationReport[];
+  validation_results: ValidationResult[];
   findings: Finding[];
   insights: Insight[];
   workers: Worker[];
@@ -192,6 +276,9 @@ export type ResourceKind =
   | "work-items"
   | "executions"
   | "reviews"
+  | "publication-roots"
+  | "validation-reports"
+  | "validation-results"
   | "findings"
   | "insights"
   | "workers";

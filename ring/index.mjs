@@ -29,6 +29,8 @@ import { createSessionRunner } from './lib/session-runner.mjs';
 import { createTaskExecution } from './lib/task-execution.mjs';
 import { createLoopbackRuntime } from './lib/loopback-runtime.mjs';
 import { createOpenAiGateway } from './lib/openai-gateway.mjs';
+import { createKimiCliGateway } from './lib/kimi-cli-gateway.mjs';
+import { createCloudGateway, resolveGatewayPreference } from './lib/cloud-gateway.mjs';
 import { createUiConfig } from './lib/ui-config.mjs';
 import { createUiAssistant } from './lib/ui-assistant.mjs';
 import { checkTransition, validNextStatuses, extractStateMachine } from './lib/state-machine.mjs';
@@ -58,6 +60,14 @@ import {
   requestReplay,
   completeReplay,
 } from './lib/node-capsule.mjs';
+import {
+  createPublicationMemberDescriptor,
+  createPublicationRoot,
+} from './lib/publication-root.mjs';
+import {
+  createValidationReportArtifact,
+  createValidationResultArtifact,
+} from './lib/validation-artifacts.mjs';
 
 /**
  * Initialise a Ring instance rooted at a repository directory.
@@ -79,10 +89,16 @@ export async function createRing(repoRoot) {
   const registry  = createRegistry(ringDir, config);
   const ui = await createUiConfig(root);
   const openai = createOpenAiGateway(root);
+  const kimi = createKimiCliGateway(root);
+  const cloud = createCloudGateway({
+    primary: openai,
+    fallback: kimi,
+    preference: resolveGatewayPreference(process.env),
+  });
   const uiAssistant = createUiAssistant({
     list: (type) => store.list(type),
     registry,
-    openai,
+    openai: cloud,
   });
 
   // --- Public API ---
@@ -246,7 +262,7 @@ export async function createRing(repoRoot) {
       orchestrator,
       sessionRunner,
       taskExecution,
-      openai,
+      openai: cloud,
     },
   );
   orchestrator.registerTickHook(() => sessionRunner.tick());
@@ -267,6 +283,8 @@ export async function createRing(repoRoot) {
     registry,
     ui,
     openai,
+    kimi,
+    cloud,
 
     // Evaluation helpers
     evaluate: { computeComposite, buildEvaluation, computeEfficiency },
@@ -326,6 +344,14 @@ export async function createRing(repoRoot) {
       attachEvidence,
       requestReplay,
       completeReplay,
+    },
+    publicationRoot: {
+      createPublicationMemberDescriptor,
+      createPublicationRoot,
+    },
+    validationArtifacts: {
+      createValidationReportArtifact,
+      createValidationResultArtifact,
     },
 
     // Config

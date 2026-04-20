@@ -28,6 +28,45 @@ function createBaseCheckpoint(overrides = {}) {
   });
 }
 
+function createBaseBranchEvent(overrides = {}) {
+  const { data: dataOverrides = {}, ...eventOverrides } = overrides;
+  return {
+    id: 'be-checkpoint-created',
+    type: 'branch-event',
+    version: 1,
+    created_at: '2026-04-17T00:00:00Z',
+    updated_at: '2026-04-17T00:00:00Z',
+    created_by: 'test-agent',
+    session_id: null,
+    status: 'recorded',
+    ...eventOverrides,
+    data: {
+      event_type: 'checkpoint_created',
+      message_class: 'commit',
+      branch_id: 'main',
+      checkpoint_id: 'cp-root',
+      actor: 'test-agent',
+      occurred_at: '2026-04-17T00:00:00Z',
+      statement: createBranchCommitStatement({
+        event_type: 'checkpoint_created',
+        branch_id: 'main',
+        checkpoint_id: 'cp-root',
+        actor: 'test-agent',
+        occurred_at: '2026-04-17T00:00:00Z',
+        parent_checkpoint_id: null,
+        synthesis_inputs: [],
+        reason: null,
+      }),
+      details: {
+        parent_checkpoint_id: null,
+        synthesis_inputs: [],
+        reason: null,
+      },
+      ...dataOverrides,
+    },
+  };
+}
+
 describe('checkpoint tree groundwork', async () => {
   const validator = await createValidator(ringDir);
 
@@ -38,40 +77,119 @@ describe('checkpoint tree groundwork', async () => {
   });
 
   it('accepts a valid branch-event document', () => {
-    const event = {
-      id: 'be-checkpoint-created',
-      type: 'branch-event',
-      version: 1,
-      created_at: '2026-04-17T00:00:00Z',
-      updated_at: '2026-04-17T00:00:00Z',
-      created_by: 'test-agent',
-      session_id: null,
-      status: 'recorded',
-      data: {
-        event_type: 'checkpoint_created',
-        message_class: 'commit',
-        branch_id: 'main',
-        checkpoint_id: 'cp-root',
-        actor: 'test-agent',
-        occurred_at: '2026-04-17T00:00:00Z',
-        statement: createBranchCommitStatement({
-          event_type: 'checkpoint_created',
-          branch_id: 'main',
-          checkpoint_id: 'cp-root',
-          actor: 'test-agent',
-          occurred_at: '2026-04-17T00:00:00Z',
-          parent_checkpoint_id: null,
-          synthesis_inputs: [],
-          reason: null,
-        }),
-        details: {
-          parent_checkpoint_id: null,
-          synthesis_inputs: [],
-          reason: null,
-        },
-      },
-    };
+    const event = createBaseBranchEvent();
     const result = validator.validate('branch-event', event);
+    assert.equal(result.valid, true, JSON.stringify(result.errors));
+  });
+
+  it('accepts optional governance linkage fields on checkpoint and branch-event documents', () => {
+    const checkpoint = createBaseCheckpoint();
+    Object.assign(checkpoint.data, {
+      publication_root_id: 'pr-checkpoint-cp-root',
+      validation_report_id: 'vrpt-checkpoint-cp-root',
+      trace_id: 'trace-checkpoint-cp-root',
+      span_id: 'span-checkpoint-cp-root',
+      parent_span_id: 'span-checkpoint-parent',
+    });
+
+    const event = createBaseBranchEvent({
+      data: {
+        publication_root_id: 'pr-branch-decision-main',
+        validation_report_id: 'vrpt-branch-decision-main',
+        trace_id: 'trace-branch-decision-main',
+        span_id: 'span-branch-decision-main',
+        parent_span_id: 'span-branch-parent',
+      },
+    });
+
+    const checkpointResult = validator.validate('checkpoint', checkpoint);
+    const eventResult = validator.validate('branch-event', event);
+
+    assert.equal(checkpointResult.valid, true, JSON.stringify(checkpointResult.errors));
+    assert.equal(eventResult.valid, true, JSON.stringify(eventResult.errors));
+  });
+
+  it('rejects invalid publication and validation linkage identifiers', () => {
+    const checkpoint = createBaseCheckpoint();
+    Object.assign(checkpoint.data, {
+      publication_root_id: 'checkpoint-root',
+      validation_report_id: 'report-root',
+    });
+
+    const event = createBaseBranchEvent({
+      data: {
+        publication_root_id: 'branch-root',
+        validation_report_id: 'branch-report',
+      },
+    });
+
+    const checkpointResult = validator.validate('checkpoint', checkpoint);
+    const eventResult = validator.validate('branch-event', event);
+
+    assert.equal(checkpointResult.valid, false);
+    assert.match(JSON.stringify(checkpointResult.errors), /publication_root_id/);
+    assert.match(JSON.stringify(checkpointResult.errors), /validation_report_id/);
+    assert.equal(eventResult.valid, false);
+    assert.match(JSON.stringify(eventResult.errors), /publication_root_id/);
+    assert.match(JSON.stringify(eventResult.errors), /validation_report_id/);
+  });
+
+  it('threads governance linkage fields through helper-created checkpoints', () => {
+    const root = createBaseCheckpoint({
+      publication_root_id: 'pr-root-checkpoint',
+      validation_report_id: 'vrpt-root-checkpoint',
+      trace_id: 'trace-root-checkpoint',
+      span_id: 'span-root-checkpoint',
+      parent_span_id: 'span-root-parent',
+    });
+    const continued = continueFromCheckpoint(root, {
+      id: 'cp-main-linked',
+      created_by: 'test-agent',
+      execution_cursor: { phase: 'execute', step_id: 'work-linked', ordinal: 1 },
+    });
+    const forked = forkCheckpoint(root, {
+      id: 'cp-branch-linked',
+      created_by: 'test-agent',
+      branch_id: 'branch-linked',
+      execution_cursor: { phase: 'explore', step_id: 'work-branch-linked', ordinal: 1 },
+      span_id: 'span-branch-linked',
+      parent_span_id: root.data.span_id,
+    });
+    const synthesized = synthesizeCheckpoint([continued, forked], {
+      id: 'cp-synth-linked',
+      created_by: 'test-agent',
+      branch_id: 'main.synth-linked',
+      execution_cursor: { phase: 'synthesize', step_id: 'merge-linked', ordinal: 2 },
+      validation_report_id: 'vrpt-synth-linked',
+      span_id: 'span-synth-linked',
+      parent_span_id: forked.data.span_id,
+    });
+
+    assert.equal(root.data.publication_root_id, 'pr-root-checkpoint');
+    assert.equal(root.data.validation_report_id, 'vrpt-root-checkpoint');
+    assert.equal(root.data.trace_id, 'trace-root-checkpoint');
+    assert.equal(root.data.span_id, 'span-root-checkpoint');
+    assert.equal(root.data.parent_span_id, 'span-root-parent');
+
+    assert.equal(continued.data.publication_root_id, root.data.publication_root_id);
+    assert.equal(continued.data.validation_report_id, root.data.validation_report_id);
+    assert.equal(continued.data.trace_id, root.data.trace_id);
+    assert.equal(continued.data.span_id, root.data.span_id);
+    assert.equal(continued.data.parent_span_id, root.data.parent_span_id);
+
+    assert.equal(forked.data.publication_root_id, root.data.publication_root_id);
+    assert.equal(forked.data.validation_report_id, root.data.validation_report_id);
+    assert.equal(forked.data.trace_id, root.data.trace_id);
+    assert.equal(forked.data.span_id, 'span-branch-linked');
+    assert.equal(forked.data.parent_span_id, root.data.span_id);
+
+    assert.equal(synthesized.data.publication_root_id, root.data.publication_root_id);
+    assert.equal(synthesized.data.validation_report_id, 'vrpt-synth-linked');
+    assert.equal(synthesized.data.trace_id, root.data.trace_id);
+    assert.equal(synthesized.data.span_id, 'span-synth-linked');
+    assert.equal(synthesized.data.parent_span_id, forked.data.span_id);
+
+    const result = validator.validate('checkpoint', synthesized);
     assert.equal(result.valid, true, JSON.stringify(result.errors));
   });
 

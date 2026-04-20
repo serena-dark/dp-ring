@@ -1,26 +1,15 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { resolve } from "node:path";
+import { defineConfig, mergeConfig } from "vite";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import operatorWebConfig from "./apps/operator-web/vite.config";
 
-const apiProxy = {
-  "/api": {
-    target: "http://localhost:3100",
-    changeOrigin: true,
-  },
-};
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const operatorWebRoot = resolve(repoRoot, "apps/operator-web");
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      "@ring-gui": resolve(__dirname, "ring-gui"),
-    },
-  },
-  server: {
-    // Proxy API calls to the ring backend during development
-    proxy: apiProxy,
-  },
-  preview: {
-    proxy: apiProxy,
-  },
-});
+export default mergeConfig(
+  operatorWebConfig,
+  defineConfig({
+    root: resolve(repoRoot, "apps/operator-web"),
+    envDir: operatorWebRoot,
+  }),
+);

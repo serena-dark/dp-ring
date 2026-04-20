@@ -27,6 +27,11 @@ import {
   createBranchCommitStatement,
   createCheckpointPublicationStatement,
 } from './governance-statement.mjs';
+import {
+  createValidationReportArtifact,
+  createValidationResultArtifact,
+  summarizeValidationResults,
+} from './validation-artifacts.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -36,6 +41,9 @@ const DEFAULT_RUNNER_CONFIG = {
 };
 const RING_REPORT_PROTOCOL = 'ring.workflow-run-report.v1';
 const A2A_REPORT_PROTOCOL = 'a2a.task-status.v1';
+const VALIDATION_ARTIFACT_ID_BYTES = 8;
+const WORKFLOW_RUN_VALIDATION_PROFILE_ID = 'workflow-run-callback-profile-v1';
+const WORKFLOW_RUN_VALIDATION_RULE_ID = 'workflow-run-callback-status';
 const CALLBACK_TOKEN_BYTES = 16;
 const CALLBACK_SECRET_BYTES = 32;
 
@@ -70,6 +78,62 @@ function trimString(value) {
   }
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function governanceLinkageFields(source = {}) {
+  return {
+    publication_root_id: trimString(source?.publication_root_id),
+    validation_report_id: trimString(source?.validation_report_id),
+    trace_id: trimString(source?.trace_id),
+    span_id: trimString(source?.span_id),
+    parent_span_id: trimString(source?.parent_span_id),
+  };
+}
+
+function bundleGovernanceLinkage(bundle = null) {
+  const payloadContext = bundle?.envelope?.payload?.context ?? {};
+  const canonicalContext = bundle?.canonical?.context ?? {};
+  const payloadTrace = bundle?.envelope?.payload?.trace ?? {};
+  const canonicalTrace = bundle?.canonical?.trace ?? {};
+  return {
+    ...governanceLinkageFields({
+      publication_root_id: payloadContext.publication_root_id ?? canonicalContext.publication_root_id,
+      validation_report_id: payloadContext.validation_report_id ?? canonicalContext.validation_report_id,
+      trace_id: payloadTrace.trace_id ?? canonicalTrace.trace_id,
+      span_id: payloadTrace.span_id ?? canonicalTrace.span_id,
+      parent_span_id: payloadTrace.parent_span_id ?? canonicalTrace.parent_span_id,
+    }),
+  };
+}
+
+function checkpointGovernanceLinkage(checkpoint = null) {
+  return governanceLinkageFields(checkpoint?.data ?? {});
+}
+
+function mergeGovernanceLinkage(...sources) {
+  const merged = governanceLinkageFields();
+  for (const source of sources) {
+    const fields = governanceLinkageFields(source);
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== null) {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
+
+function executionPacketGovernanceLinkage(bundle = null, checkpoint = null) {
+  return mergeGovernanceLinkage(
+    bundleGovernanceLinkage(bundle),
+    checkpointGovernanceLinkage(checkpoint),
+  );
+}
+
+function normalizeGovernanceLinkageForEvent(fields = {}) {
+  return {
+    ...governanceLinkageFields(fields),
+  };
 }
 
 function normalizeRunnerConfig(config = {}) {
@@ -790,6 +854,7 @@ async function appendBranchEvent(ring, fields) {
   const id = await ring.newId('branch-event', { name: fields.event_type.replace(/_/g, ' ') });
   const createdAt = fields.occurred_at ?? nowIso();
   const messageClass = fields.message_class ?? 'commit';
+  const linkage = normalizeGovernanceLinkageForEvent(fields);
   const statement = messageClass === 'commit'
     ? fields.statement ?? createBranchCommitStatement({
       event_type: fields.event_type,
@@ -812,6 +877,7 @@ async function appendBranchEvent(ring, fields) {
       message_class: messageClass,
       branch_id: fields.branch_id,
       checkpoint_id: fields.checkpoint_id,
+      ...linkage,
       actor: fields.actor ?? 'session-runner',
       occurred_at: createdAt,
       statement,
@@ -831,6 +897,104 @@ async function appendBranchEvent(ring, fields) {
 function publishCheckpointStatements(checkpoint) {
   checkpoint.data.publication_statements = [createCheckpointPublicationStatement(checkpoint)];
   return checkpoint;
+}
+
+function validationArtifactId(prefix) {
+  return `${prefix}-${randomBytes(VALIDATION_ARTIFACT_ID_BYTES).toString('hex')}`;
+}
+
+function validationDisposition(summary = {}) {
+  const warningCount = Number(summary.warning ?? 0);
+  const violationCount = Number(summary.violation ?? 0);
+
+  if (violationCount > 0) {
+    return {
+      conforms: false,
+      outcome: 'blocking',
+    };
+  }
+
+  if (warningCount > 0) {
+    return {
+      conforms: false,
+      outcome: 'advisory',
+    };
+  }
+
+  return {
+    conforms: true,
+    outcome: 'conformant',
+  };
+}
+
+function createWorkflowRunValidationArtifacts(run, session, checkpoint, normalizedReport, actor, createdAt) {
+  const reportId = validationArtifactId('vrpt');
+  const failureMessage =
+    trimString(normalizedReport?.report?.note)
+    ?? `Workflow run ${run.id} reported ${normalizedReport?.report?.status ?? 'unknown'} status.`;
+  const results = normalizedReport.report.status === 'failed'
+    ? [
+        createValidationResultArtifact({
+          id: validationArtifactId('vres'),
+          created_at: createdAt,
+          updated_at: createdAt,
+          created_by: actor,
+          session_id: session.id,
+          data: {
+            report_id: reportId,
+            subject_ref: {
+              type: 'checkpoint',
+              id: checkpoint.id,
+            },
+            subject_location: '/data/execution_cursor',
+            rule_id: WORKFLOW_RUN_VALIDATION_RULE_ID,
+            rule_location: '#/status',
+            severity: 'violation',
+            message: failureMessage,
+            detail_result_ids: [],
+          },
+        }),
+      ]
+    : [];
+  const summary = summarizeValidationResults(results);
+  const disposition = validationDisposition(summary);
+
+  return {
+    report: createValidationReportArtifact({
+      id: reportId,
+      created_at: createdAt,
+      updated_at: createdAt,
+      created_by: actor,
+      session_id: session.id,
+      data: {
+        subject_ref: {
+          type: 'checkpoint',
+          id: checkpoint.id,
+        },
+        profile_id: WORKFLOW_RUN_VALIDATION_PROFILE_ID,
+        report_level: 'basic',
+        conforms: disposition.conforms,
+        outcome: disposition.outcome,
+        result_ids: results.map((result) => result.id),
+        summary,
+      },
+    }),
+    results,
+  };
+}
+
+async function persistValidationArtifacts(ring, artifacts) {
+  for (const result of artifacts.results) {
+    const validationResult = await ring.store.write('validation-result', result);
+    if (!validationResult.ok) {
+      throw new Error(`Validation result write failed: ${JSON.stringify(validationResult.errors)}`);
+    }
+  }
+
+  const validationReport = await ring.store.write('validation-report', artifacts.report);
+  if (!validationReport.ok) {
+    throw new Error(`Validation report write failed: ${JSON.stringify(validationReport.errors)}`);
+  }
 }
 
 export function createSessionRunner(
@@ -923,7 +1087,7 @@ export function createSessionRunner(
     };
   }
 
-  async function bindWorkflowRunNodeExecution(session, workflowRun, task, workflow, preparedAt, governance = null) {
+  async function bindWorkflowRunNodeExecution(session, workflowRun, task, workflow, preparedAt, governance = null, bundle = null) {
     const existing = workflowRun.data.node_execution ?? workflowRunNodeExecution();
     if (existing.node_id && existing.active_checkpoint_id) {
       return {
@@ -933,6 +1097,7 @@ export function createSessionRunner(
       };
     }
 
+    const bundleLinkage = bundleGovernanceLinkage(bundle);
     const nodeId = await ring.newId('node', {
       name: `${task.id} ${workflowRun.id} executor`,
     });
@@ -944,6 +1109,7 @@ export function createSessionRunner(
       created_by: 'session-runner',
       session_id: session.id,
       status: 'mainline',
+      ...bundleLinkage,
       branch_id: existing.branch_id ?? 'main',
       node_id: nodeId,
       scope_ref: { kind: 'workflow-run', id: workflowRun.id, path: null },
@@ -1001,6 +1167,7 @@ export function createSessionRunner(
       event_type: 'checkpoint_created',
       branch_id: rootCheckpoint.data.branch_id,
       checkpoint_id: rootCheckpoint.id,
+      ...checkpointGovernanceLinkage(rootCheckpoint),
       actor: 'session-runner',
       occurred_at: preparedAt,
       session_id: session.id,
@@ -1174,6 +1341,11 @@ export function createSessionRunner(
     const requirement = await ring.read('requirement', task.data.requirement_id);
     const milestone = await ring.read('milestone', task.data.milestone_id);
     const callback = clone(workflowRun.data.callback ?? emptyCallbackState());
+    const activeCheckpointId = workflowRun.data.node_execution?.active_checkpoint_id ?? null;
+    const activeCheckpoint = activeCheckpointId
+      ? await ring.read('checkpoint', activeCheckpointId)
+      : null;
+    const linkage = executionPacketGovernanceLinkage(bundle, activeCheckpoint);
     const packet = {
       schema_version: 'ring.session-runner.v1',
       created_at: nowIso(),
@@ -1203,6 +1375,7 @@ export function createSessionRunner(
         prompts: clone(bundle?.canonical?.context?.prompts ?? []),
         brief_ref: bundle?.canonical?.context?.brief_ref ?? null,
         bundle_id: bundle?.id ?? null,
+        ...linkage,
       },
       node: {
         node_id: workflowRun.data.node_execution?.node_id ?? null,
@@ -1264,6 +1437,20 @@ export function createSessionRunner(
     const workflow = await ring.read('workflow', workflowRun.data.workflow_template_id);
     const bundle = bundlesByTaskId.get(task.id) ?? null;
     return buildExecutionPacket(session, workflowRun, task, workflow, bundle);
+  }
+
+  async function refreshWorkflowRunExecutionPacket(session, workflowRun, bundleIndex = null) {
+    const refreshedPacket = await rewriteExecutionPacket(session, workflowRun, bundleIndex);
+    return {
+      ...workflowRun,
+      data: {
+        ...workflowRun.data,
+        callback: {
+          ...(workflowRun.data.callback ?? {}),
+          packet_path: refreshedPacket.packet_path,
+        },
+      },
+    };
   }
 
   async function prepareSession(session, bundleIndex = null) {
@@ -1344,6 +1531,7 @@ export function createSessionRunner(
         workflow,
         preparedAt,
         governance,
+        bundle,
       );
       nextRun = nodeBinding.workflowRun;
       executionPacket = await buildExecutionPacket(
@@ -1602,6 +1790,15 @@ export function createSessionRunner(
           replay_state: capsuleState.replay,
           synthesis_inputs: [],
         });
+    const validationArtifacts = createWorkflowRunValidationArtifacts(
+      run,
+      session,
+      nextCheckpoint,
+      normalizedReport,
+      worker?.id ?? 'session-runner',
+      reportedAt,
+    );
+    nextCheckpoint.data.validation_report_id = validationArtifacts.report.id;
 
     let recoveryEvent = null;
     if (normalizedReport.report.status === 'failed') {
@@ -1631,6 +1828,7 @@ export function createSessionRunner(
         event_type: 'recovery_completed',
         branch_id: nodeExecution.branch_id,
         checkpoint_id: nextCheckpoint.id,
+        ...checkpointGovernanceLinkage(nextCheckpoint),
         actor: worker?.id ?? 'session-runner',
         occurred_at: reportedAt,
         session_id: session.id,
@@ -1650,11 +1848,13 @@ export function createSessionRunner(
     if (!checkpointResult.ok) {
       throw new Error(`Checkpoint continuation failed for workflow run ${run.id}: ${JSON.stringify(checkpointResult.errors)}`);
     }
+    await persistValidationArtifacts(ring, validationArtifacts);
 
     const continuedEvent = await appendBranchEvent(ring, {
       event_type: 'checkpoint_continued',
       branch_id: nodeExecution.branch_id,
       checkpoint_id: nextCheckpoint.id,
+      ...checkpointGovernanceLinkage(nextCheckpoint),
       actor: worker?.id ?? 'session-runner',
       occurred_at: reportedAt,
       session_id: session.id,
@@ -1667,6 +1867,7 @@ export function createSessionRunner(
         event_type: 'recovery_triggered',
         branch_id: nodeExecution.branch_id,
         checkpoint_id: nextCheckpoint.id,
+        ...checkpointGovernanceLinkage(nextCheckpoint),
         actor: 'session-runner',
         occurred_at: reportedAt,
         session_id: session.id,
@@ -2112,6 +2313,7 @@ export function createSessionRunner(
           steps,
         },
       }, reportRecord);
+      nextRun = await refreshWorkflowRunExecutionPacket(session, nextRun);
       nextRun = await writeWorkflowRun(nextRun, 'running');
       nextSession = appendLog(nextSession, {
         timestamp: reportedAt,
@@ -2157,6 +2359,7 @@ export function createSessionRunner(
           replanning_status: failedTask.data.replanning?.status ?? null,
         },
       });
+      nextRun = await refreshWorkflowRunExecutionPacket(session, nextRun);
       nextRun = await writeWorkflowRun(nextRun, 'failed');
       nextSession = appendLog(nextSession, {
         timestamp: reportedAt,
@@ -2221,6 +2424,7 @@ export function createSessionRunner(
           review_status: finalizedTask.data.execution?.review_status ?? null,
         },
       });
+      nextRun = await refreshWorkflowRunExecutionPacket(session, nextRun);
       nextRun = await writeWorkflowRun(nextRun, finalizedTask.status === 'failed' ? 'failed' : 'completed');
       nextSession = appendLog(nextSession, {
         timestamp: reportedAt,
@@ -2257,6 +2461,7 @@ export function createSessionRunner(
         steps,
       };
       nextRun = appendRunReport(nextRun, reportRecord);
+      nextRun = await refreshWorkflowRunExecutionPacket(session, nextRun);
       nextRun = await writeWorkflowRun(nextRun, 'running');
     } else {
       nextRun.data = {
@@ -2266,6 +2471,7 @@ export function createSessionRunner(
         steps,
       };
       nextRun = appendRunReport(nextRun, reportRecord);
+      nextRun = await refreshWorkflowRunExecutionPacket(session, nextRun);
       nextRun = await writeWorkflowRun(nextRun, 'completed');
     }
 

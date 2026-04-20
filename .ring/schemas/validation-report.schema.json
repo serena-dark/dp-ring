@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "validation-report.schema.json",
+  "title": "Validation Report",
+  "description": "A governed validation report root that summarizes conformance and links individual validation results.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^vrpt-" },
+    "type": { "const": "validation-report" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": { "type": "string", "enum": ["recorded"] },
+    "data": {
+      "type": "object",
+      "required": ["subject_ref", "profile_id", "report_level", "conforms", "outcome", "result_ids"],
+      "additionalProperties": false,
+      "properties": {
+        "subject_ref": {
+          "type": "object",
+          "required": ["type", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "minLength": 1 },
+            "id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "profile_id": { "type": "string", "minLength": 1 },
+        "report_level": {
+          "type": "string",
+          "enum": ["flag", "basic", "detailed", "verbose"]
+        },
+        "conforms": { "type": "boolean" },
+        "outcome": {
+          "type": "string",
+          "enum": ["conformant", "advisory", "blocking"]
+        },
+        "result_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^vres-" },
+          "uniqueItems": true
+        },
+        "summary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["info", "warning", "violation"],
+          "properties": {
+            "info": { "type": "integer", "minimum": 0 },
+            "warning": { "type": "integer", "minimum": 0 },
+            "violation": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["conforms"],
+            "properties": {
+              "conforms": { "const": true }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "outcome": { "const": "conformant" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["conforms"],
+            "properties": {
+              "conforms": { "const": false }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "enum": ["advisory", "blocking"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

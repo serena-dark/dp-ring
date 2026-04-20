@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "publication-root.schema.json",
+  "title": "Publication Root",
+  "description": "Minimal publication-root shell for one governed publication cycle with explicit about semantics and a descriptor-indexed member catalog whose members can declare a semantic profile distinct from representation mediaType.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_type", "id", "conforms_to", "status", "about", "member_descriptors", "membership_digest"],
+  "properties": {
+    "_type": { "const": "https://dp-ring.dev/schemas/publication-root/v1" },
+    "id": { "type": "string", "pattern": "^pr-" },
+    "conforms_to": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "published", "withheld", "superseded"]
+    },
+    "about": { "$ref": "#/definitions/descriptor" },
+    "member_descriptors": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/member_descriptor" }
+    },
+    "membership_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  },
+  "definitions": {
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "mediaType", "digest", "size", "locator"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 0 },
+        "locator": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        }
+      }
+    },
+    "member_descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "mediaType", "digest", "size", "locator", "artifact_type"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "profile": { "type": "string", "minLength": 1 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "size": { "type": "integer", "minimum": 0 },
+        "locator": {
+          "type": ["object", "null"],
+          "additionalProperties": true
+        },
+        "artifact_type": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+  "x-state-machine": {
+    "field": "status",
+    "transitions": {
+      "draft": ["published", "withheld", "superseded"],
+      "published": ["superseded"],
+      "withheld": ["published", "superseded"],
+      "superseded": []
+    }
+  }
+}
