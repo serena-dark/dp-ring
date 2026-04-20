@@ -12,9 +12,13 @@ import {
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
+  describeWorkflowReuseGovernanceBlock,
+  describeWorkflowReuseGovernanceReenableGuidance,
+  describeWorkflowReuseGovernanceReenableGuidanceList,
   normalizeWorkflowReuseGovernanceBlock,
   sessionGovernanceSelectionContexts,
   warmSemanticLineageState,
+  workflowReuseGovernanceBlock,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
 import {
@@ -295,6 +299,112 @@ describe('governance policy', () => {
       branch_budget: null,
       workflow_tightness: 'balanced',
       oversight_strength: 'normal',
+    });
+  });
+
+  it('describes workflow reuse governance blocks and re-enable guidance with stable text', () => {
+    const warmBlocked = normalizeWorkflowReuseGovernanceBlock({
+      id: ' wf-warm-template ',
+      name: ' Warm Template ',
+      reason: ' warm_semantic_lineage ',
+      checkpoint_id: ' cp-warm ',
+      adoption_status: ' mainline ',
+    });
+    const budgetBlocked = normalizeWorkflowReuseGovernanceBlock({
+      id: ' wf-governed-template ',
+      name: ' Governed Template ',
+      reason: ' checkpoint_branch_budget_exhausted ',
+      checkpoint_id: ' cp-governed ',
+      adoption_status: ' mainline ',
+      branch_budget: 0,
+      workflow_tightness: ' tight ',
+      oversight_strength: ' strong ',
+    });
+    const synthesizedBlocked = normalizeWorkflowReuseGovernanceBlock({
+      workflow_template_id: ' wf-synth-template ',
+      workflow_name: ' Synth Template ',
+      reason: ' checkpoint_synthesized ',
+      checkpoint_id: ' cp-synth ',
+      adoption_status: ' synthesized ',
+    });
+
+    assert.equal(
+      describeWorkflowReuseGovernanceBlock(warmBlocked),
+      'wf-warm-template (Warm Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
+    );
+    assert.equal(
+      describeWorkflowReuseGovernanceBlock(budgetBlocked),
+      'wf-governed-template (Governed Template) last exhausted branch_budget=0 at active checkpoint cp-governed under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+    );
+    assert.equal(
+      describeWorkflowReuseGovernanceReenableGuidance(synthesizedBlocked),
+      'wf-synth-template (Synth Template) should stay off automatic reuse until active checkpoint cp-synth is explicitly adopted into mainline.',
+    );
+    assert.equal(
+      describeWorkflowReuseGovernanceReenableGuidanceList([warmBlocked, budgetBlocked]),
+      'wf-warm-template (Warm Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.; wf-governed-template (Governed Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-governed.',
+    );
+    assert.equal(describeWorkflowReuseGovernanceBlock(null), 'automatic reuse is governance-blocked');
+    assert.equal(describeWorkflowReuseGovernanceReenableGuidanceList([]), 'none');
+  });
+
+  it('derives workflow reuse governance blocks from warm lineage, exhausted branch budget, and non-mainline checkpoints', () => {
+    const warmRun = buildWorkflowRun();
+    warmRun.data.node_execution.active_checkpoint_id = ' cp-timeout ';
+    const warmCheckpoint = buildCheckpoint();
+    warmCheckpoint.id = ' cp-timeout ';
+    warmCheckpoint.data.adoption_status = ' mainline ';
+    warmCheckpoint.data.policy_snapshot.branch_budget = 0;
+
+    assert.deepEqual(workflowReuseGovernanceBlock(warmRun, warmCheckpoint), {
+      reason: 'warm_semantic_lineage',
+      checkpoint_id: 'cp-timeout',
+      adoption_status: 'mainline',
+    });
+
+    const budgetRun = {
+      status: 'completed',
+      data: {
+        node_execution: {
+          active_checkpoint_id: ' cp-budget ',
+        },
+      },
+    };
+    const budgetCheckpoint = buildCheckpoint();
+    budgetCheckpoint.id = ' cp-budget ';
+    budgetCheckpoint.data.adoption_status = ' mainline ';
+    budgetCheckpoint.data.policy_snapshot.branch_budget = 0;
+    budgetCheckpoint.data.policy_snapshot.workflow_tightness = ' tight ';
+    budgetCheckpoint.data.policy_snapshot.oversight_strength = ' strong ';
+
+    assert.deepEqual(workflowReuseGovernanceBlock(budgetRun, budgetCheckpoint), {
+      reason: 'checkpoint_branch_budget_exhausted',
+      checkpoint_id: 'cp-budget',
+      adoption_status: 'mainline',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+    });
+
+    const synthesizedRun = {
+      status: 'completed',
+      data: {
+        node_execution: {
+          active_checkpoint_id: ' cp-synth ',
+        },
+      },
+    };
+    const synthesizedCheckpoint = buildCheckpoint();
+    synthesizedCheckpoint.id = ' cp-synth ';
+    synthesizedCheckpoint.data.adoption_status = ' synthesized ';
+    synthesizedCheckpoint.data.policy_snapshot.branch_budget = null;
+    synthesizedCheckpoint.data.policy_snapshot.workflow_tightness = ' balanced ';
+    synthesizedCheckpoint.data.policy_snapshot.oversight_strength = ' normal ';
+
+    assert.deepEqual(workflowReuseGovernanceBlock(synthesizedRun, synthesizedCheckpoint), {
+      reason: 'checkpoint_synthesized',
+      checkpoint_id: 'cp-synth',
+      adoption_status: 'synthesized',
     });
   });
 
