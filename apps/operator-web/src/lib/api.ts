@@ -1,4 +1,4 @@
-import { demoSnapshot } from "./demo-data";
+import { demoSnapshot } from "./demo-data.ts";
 import type {
   ActivityEvent,
   Blueprint,
@@ -8,15 +8,18 @@ import type {
   Insight,
   Objective,
   Organization,
+  PublicationRoot,
   Repository,
   ResourceKind,
   Review,
+  ValidationReport,
+  ValidationResult,
   Worker,
   Workspace,
   WorkItem,
-} from "./types";
+} from "./types.ts";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const API_BASE = import.meta.env?.VITE_API_BASE_URL ?? "";
 
 async function request<T>(path: string, fallback: () => T): Promise<T> {
   try {
@@ -39,22 +42,28 @@ export function listActivity() {
 }
 
 export function streamActivity(onEvent: (event: ActivityEvent) => void) {
-  if (typeof window === "undefined" || !("EventSource" in window)) {
+  const EventSourceCtor = typeof window === "undefined" ? null : window.EventSource;
+
+  if (EventSourceCtor == null) {
     return () => {};
   }
 
-  const source = new EventSource(`${API_BASE}/api/activity/stream`);
-  source.onmessage = (message) => {
-    try {
-      onEvent(JSON.parse(message.data) as ActivityEvent);
-    } catch {
-      // ignore malformed frames
-    }
-  };
-  source.onerror = () => {
-    source.close();
-  };
-  return () => source.close();
+  try {
+    const source = new EventSourceCtor(`${API_BASE}/api/activity/stream`);
+    source.onmessage = (message) => {
+      try {
+        onEvent(JSON.parse(message.data) as ActivityEvent);
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    source.onerror = () => {
+      source.close();
+    };
+    return () => source.close();
+  } catch {
+    return () => {};
+  }
 }
 
 export const resourceMap = {
@@ -72,6 +81,12 @@ export const resourceMap = {
   executions: () =>
     request<Execution[]>("/api/executions", () => demoSnapshot.executions),
   reviews: () => request<Review[]>("/api/reviews", () => demoSnapshot.reviews),
+  "publication-roots": () =>
+    request<PublicationRoot[]>("/api/publication-roots", () => demoSnapshot.publication_roots),
+  "validation-reports": () =>
+    request<ValidationReport[]>("/api/validation-reports", () => demoSnapshot.validation_reports),
+  "validation-results": () =>
+    request<ValidationResult[]>("/api/validation-results", () => demoSnapshot.validation_results),
   findings: () => request<Finding[]>("/api/findings", () => demoSnapshot.findings),
   insights: () => request<Insight[]>("/api/insights", () => demoSnapshot.insights),
   workers: () => request<Worker[]>("/api/workers", () => demoSnapshot.workers),

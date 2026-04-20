@@ -10,11 +10,15 @@ import type {
   Blueprint,
   Execution,
   Finding,
+  GovernanceSubjectRef,
   Insight,
   Objective,
+  PublicationRoot,
   Repository,
   ResourceKind,
   Review,
+  ValidationReport,
+  ValidationResult,
   Worker,
   WorkItem,
 } from "../lib/types";
@@ -56,6 +60,23 @@ function BoardSummary({ boardKey }: { boardKey: keyof Awaited<ReturnType<typeof 
       ))}
     </section>
   );
+}
+
+const governanceResourceMap: Partial<Record<string, ResourceKind>> = {
+  "publication-root": "publication-roots",
+  "validation-report": "validation-reports",
+  "validation-result": "validation-results",
+};
+
+function renderGovernanceSubjectRef(subjectRef: GovernanceSubjectRef) {
+  const kind = governanceResourceMap[subjectRef.type];
+  const label = `${subjectRef.type}:${subjectRef.id}`;
+  return kind ? resourceLink(kind, subjectRef.id, label) : label;
+}
+
+function renderPublicationArtifactKinds(root: PublicationRoot) {
+  const artifactKinds = [...new Set(root.member_descriptors.map((member) => member.artifact_type))];
+  return artifactKinds.length > 0 ? renderList(artifactKinds) : "—";
 }
 
 export function InboxPage() {
@@ -295,6 +316,107 @@ export function ReviewsPage() {
             { key: "verdict", header: "Verdict", render: (item) => item.verdict },
             { key: "execution", header: "Execution", render: (item) => resourceLink("executions", item.execution_id) },
             { key: "reviewer", header: "Reviewer", render: (item) => item.reviewer },
+          ]}
+        />
+      </section>
+    </SurfaceFrame>
+  );
+}
+
+export function GovernancePage() {
+  const publicationRootsQuery = useQuery({
+    queryKey: ["publication-roots"],
+    queryFn: () => listResource<PublicationRoot>("publication-roots"),
+  });
+  const validationReportsQuery = useQuery({
+    queryKey: ["validation-reports"],
+    queryFn: () => listResource<ValidationReport>("validation-reports"),
+  });
+  const validationResultsQuery = useQuery({
+    queryKey: ["validation-results"],
+    queryFn: () => listResource<ValidationResult>("validation-results"),
+  });
+
+  const publicationRoots = publicationRootsQuery.data ?? [];
+  const validationReports = validationReportsQuery.data ?? [];
+  const validationResults = validationResultsQuery.data ?? [];
+  const publishedRoots = publicationRoots.filter((root) => root.status === "published").length;
+  const blockingReports = validationReports.filter((report) => report.data.outcome === "blocking").length;
+  const violationResults = validationResults.filter((result) => result.data.severity === "violation").length;
+
+  return (
+    <SurfaceFrame
+      eyebrow="Governance evidence"
+      title="Governance"
+      description="Inspect publication roots alongside linked validation reports and results before promotion."
+    >
+      <section className="metric-grid">
+        <MetricCard label="Roots" value={publicationRoots.length} />
+        <MetricCard label="Published" value={publishedRoots} />
+        <MetricCard label="Blocking Reports" value={blockingReports} />
+        <MetricCard label="Violations" value={violationResults} />
+      </section>
+      <div className="split-grid">
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Publication index</p>
+              <h2>Publication roots</h2>
+            </div>
+          </div>
+          <DataTable
+            rows={publicationRoots}
+            emptyLabel="No publication roots"
+            columns={[
+              { key: "id", header: "Root", render: (item) => resourceLink("publication-roots", item.id, item.id) },
+              { key: "status", header: "Status", render: (item) => renderStatus(item.status) },
+              { key: "about", header: "About", render: (item) => item.about.name },
+              { key: "members", header: "Members", render: (item) => item.member_descriptors.length },
+              { key: "artifacts", header: "Artifacts", render: (item) => renderPublicationArtifactKinds(item) },
+            ]}
+          />
+        </section>
+        <section className="panel">
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">Validation rollups</p>
+              <h2>Validation reports</h2>
+            </div>
+          </div>
+          <DataTable
+            rows={validationReports}
+            emptyLabel="No validation reports"
+            columns={[
+              { key: "id", header: "Report", render: (item) => resourceLink("validation-reports", item.id, item.id) },
+              { key: "subject", header: "Subject", render: (item) => renderGovernanceSubjectRef(item.data.subject_ref) },
+              { key: "outcome", header: "Outcome", render: (item) => renderStatus(item.data.outcome) },
+              { key: "profile", header: "Profile", render: (item) => item.data.profile_id },
+              { key: "results", header: "Results", render: (item) => item.data.result_ids.length },
+            ]}
+          />
+        </section>
+      </div>
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <p className="eyebrow">Result-level evidence</p>
+            <h2>Validation results</h2>
+          </div>
+        </div>
+        <DataTable
+          rows={validationResults}
+          emptyLabel="No validation results"
+          columns={[
+            { key: "id", header: "Result", render: (item) => resourceLink("validation-results", item.id, item.id) },
+            { key: "severity", header: "Severity", render: (item) => renderStatus(item.data.severity) },
+            { key: "rule", header: "Rule", render: (item) => item.data.rule_id },
+            { key: "subject", header: "Subject", render: (item) => renderGovernanceSubjectRef(item.data.subject_ref) },
+            { key: "location", header: "Location", render: (item) => item.data.subject_location },
+            {
+              key: "report",
+              header: "Report",
+              render: (item) => resourceLink("validation-reports", item.data.report_id),
+            },
           ]}
         />
       </section>

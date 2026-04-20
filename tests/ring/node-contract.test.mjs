@@ -12,13 +12,14 @@ import {
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
 
-function contractSchema(schema, description) {
-  return {
+function contractSchema(schema, description, options = {}) {
+  const descriptor = {
     kind: 'json_schema',
-    schema,
     description,
-    notes: null,
+    notes: options.notes ?? null,
   };
+
+  return options.inline ? { ...schema, ...descriptor } : { ...descriptor, schema };
 }
 
 function createValidNodeContract() {
@@ -141,6 +142,93 @@ describe('node contract groundwork', async () => {
     );
   });
 
+  it('reports unexpected property names in assertion failures', () => {
+    const doc = createValidNodeContract();
+    doc.data.runtime.extra_debug = true;
+
+    const helperResult = validateNodeContract(doc, { normalize: false });
+    assert.equal(helperResult.valid, false);
+    assert.ok(
+      helperResult.errors.some(
+        (error) =>
+          error.keyword === 'additionalProperties' &&
+          error.instancePath === '/data/runtime' &&
+          error.params?.additionalProperty === 'extra_debug',
+      ),
+      JSON.stringify(helperResult.errors),
+    );
+
+    assert.throws(
+      () => assertNodeContract(doc, { normalize: false }),
+      /\/data\/runtime unexpected property extra_debug/,
+    );
+  });
+
+  it('returns projection-friendly validation issues alongside raw Ajv errors', () => {
+    const doc = createValidNodeContract();
+    delete doc.data.node_type;
+
+    const helperResult = validateNodeContract(doc, { normalize: false });
+    assert.equal(helperResult.valid, false);
+    assert.equal(Array.isArray(helperResult.issues), true);
+
+    const issue = helperResult.issues.find((candidate) => candidate.keyword === 'required');
+    assert.deepEqual(issue, {
+      keyword: 'required',
+      instancePath: '/data',
+      schemaPath: '#/properties/data/required',
+      instanceLocation: '/data',
+      keywordLocation: '#/properties/data/required',
+      params: { missingProperty: 'node_type' },
+      propertyName: null,
+      propertyFocus: 'node_type',
+      message: "must have required property 'node_type'",
+    });
+  });
+
+  it('attaches normalized validation context to assertion failures', () => {
+    const doc = createValidNodeContract();
+    delete doc.type;
+    delete doc.version;
+    delete doc.status;
+    delete doc.session_id;
+    delete doc.data.interface_version;
+    doc.data.runtime = { extra_debug: true };
+
+    assert.throws(
+      () => assertNodeContract(doc),
+      (error) => {
+        assert.match(error.message, /\/data\/runtime unexpected property extra_debug/);
+        assert.equal(error.validation?.valid, false);
+        assert.equal(error.validation?.contract.type, 'node');
+        assert.equal(error.validation?.contract.version, 1);
+        assert.equal(error.validation?.contract.status, 'draft');
+        assert.equal(error.validation?.contract.session_id, null);
+        assert.equal(error.validation?.contract.data.interface_version, NODE_INTERFACE_VERSION);
+        assert.equal(error.validation?.contract.data.runtime.boundary_mode, NODE_BOUNDARY_MODE);
+        assert.equal(error.validation?.contract.data.runtime.tree_projection, 'external_contract_only');
+        assert.equal(error.validation?.contract.data.runtime.internals.visibility, 'hidden');
+        assert.equal(error.validation?.contract.data.runtime.internals.heterogeneous, true);
+        assert.equal(error.validation?.contract.data.runtime.extra_debug, true);
+
+        assert.deepEqual(error.validation?.issues, [
+          {
+            keyword: 'additionalProperties',
+            instancePath: '/data/runtime',
+            schemaPath: '#/properties/data/properties/runtime/additionalProperties',
+            instanceLocation: '/data/runtime',
+            keywordLocation: '#/properties/data/properties/runtime/additionalProperties',
+            params: { additionalProperty: 'extra_debug' },
+            propertyName: null,
+            propertyFocus: 'extra_debug',
+            message: 'must NOT have additional properties',
+          },
+        ]);
+        return true;
+      },
+    );
+  });
+
   it('normalizes compact input and applies runtime defaults', () => {
     const doc = createValidNodeContract();
     delete doc.type;
@@ -172,6 +260,32 @@ describe('node contract groundwork', async () => {
 
     const schemaResult = validator.validate('node', normalized);
     assert.equal(schemaResult.valid, true, JSON.stringify(schemaResult.errors));
+  });
+
+  it('canonicalizes legacy inline schema descriptors during normalization', () => {
+    const doc = createValidNodeContract();
+    const inputSchema = doc.data.input_schema.schema;
+    const outputSchema = doc.data.output_schema.schema;
+    doc.data.input_schema = contractSchema(inputSchema, 'Tree-facing request payload.', { inline: true });
+    doc.data.output_schema = {
+      ...contractSchema(outputSchema, 'Stable response envelope returned to the tree.'),
+      legacy_descriptor_version: 'v1-inline',
+    };
+
+    const normalized = normalizeNodeContract(doc);
+    assert.deepEqual(normalized.data.input_schema, contractSchema(inputSchema, 'Tree-facing request payload.'));
+    assert.deepEqual(
+      normalized.data.output_schema,
+      contractSchema(outputSchema, 'Stable response envelope returned to the tree.'),
+    );
+
+    const helperResult = validateNodeContract(doc);
+    assert.equal(helperResult.valid, true, JSON.stringify(helperResult.errors));
+    assert.deepEqual(helperResult.contract.data.input_schema, contractSchema(inputSchema, 'Tree-facing request payload.'));
+    assert.deepEqual(
+      helperResult.contract.data.output_schema,
+      contractSchema(outputSchema, 'Stable response envelope returned to the tree.'),
+    );
   });
 
   it('accepts RAG boundary metadata without adding retrieval behavior', () => {

@@ -2727,6 +2727,29 @@ export async function createOrchestrator(repoRoot, ring) {
     };
   }
 
+  function normalizeDispatchBundleTrace(
+    source,
+    {
+      fallbackTraceId,
+      fallbackJobId = null,
+      fallbackSourceKind,
+    } = {},
+  ) {
+    const trace = source && typeof source === 'object' ? source : {};
+    const normalized = {
+      trace_id: String(trace.trace_id ?? fallbackTraceId),
+      job_id: trace.job_id ?? fallbackJobId,
+      source_kind: String(trace.source_kind ?? fallbackSourceKind),
+    };
+    if (Object.prototype.hasOwnProperty.call(trace, 'span_id')) {
+      normalized.span_id = trimString(trace.span_id) || null;
+    }
+    if (Object.prototype.hasOwnProperty.call(trace, 'parent_span_id')) {
+      normalized.parent_span_id = trimString(trace.parent_span_id) || null;
+    }
+    return normalized;
+  }
+
   function adaptRingGoalBundle(envelope, bundleId) {
     const payload = envelope.payload ?? {};
     const goal = payload.goal ?? {};
@@ -2748,11 +2771,10 @@ export async function createOrchestrator(repoRoot, ring) {
     return {
       schema_version: 'execution.goal.v1',
       goal_bundle_id: bundleId,
-      trace: {
-        trace_id: String(payload.trace?.trace_id ?? `trace-${bundleId}`),
-        job_id: payload.trace?.job_id ?? null,
-        source_kind: String(payload.trace?.source_kind ?? 'external_bundle'),
-      },
+      trace: normalizeDispatchBundleTrace(payload.trace, {
+        fallbackTraceId: `trace-${bundleId}`,
+        fallbackSourceKind: 'external_bundle',
+      }),
       producer: {
         producer_id: String(
           payload.producer?.producer_id ??
@@ -2845,11 +2867,10 @@ export async function createOrchestrator(repoRoot, ring) {
     return {
       schema_version: 'execution.goal.v1',
       goal_bundle_id: bundleId,
-      trace: {
-        trace_id: String(payload.trace_id ?? `trace-${bundleId}`),
-        job_id: payload.job_id ?? null,
-        source_kind: 'a2a',
-      },
+      trace: normalizeDispatchBundleTrace(payload, {
+        fallbackTraceId: `trace-${bundleId}`,
+        fallbackSourceKind: 'a2a',
+      }),
       producer: {
         producer_id: String(
           payload.agent_card?.id ?? envelope.submitted_by ?? 'a2a-producer',
@@ -2946,11 +2967,10 @@ export async function createOrchestrator(repoRoot, ring) {
     return {
       schema_version: 'execution.goal.v1',
       goal_bundle_id: bundleId,
-      trace: {
-        trace_id: String(payload.trace_id ?? `trace-${bundleId}`),
-        job_id: payload.job_id ?? null,
-        source_kind: 'mcp',
-      },
+      trace: normalizeDispatchBundleTrace(payload, {
+        fallbackTraceId: `trace-${bundleId}`,
+        fallbackSourceKind: 'mcp',
+      }),
       producer: {
         producer_id: String(envelope.submitted_by ?? 'mcp-client'),
         producer_type: 'adapter',

@@ -29,23 +29,33 @@ function normalizeChoice(value, fallback) {
   return normalized === '' ? fallback : normalized;
 }
 
-function normalizeSchemaDescriptor(value) {
-  if (!isObject(value)) return value;
-  if ('kind' in value || 'schema' in value) {
-    return {
-      ...value,
-      kind: 'json_schema',
-      description: value.description ?? null,
-      notes: value.notes ?? null,
-    };
-  }
+const SCHEMA_DESCRIPTOR_FIELDS = new Set(['kind', 'schema', 'description', 'notes']);
 
+function buildSchemaDescriptor(schema, metadata = {}) {
   return {
     kind: 'json_schema',
-    schema: value,
-    description: null,
-    notes: null,
+    schema,
+    description: metadata.description ?? null,
+    notes: metadata.notes ?? null,
   };
+}
+
+function stripSchemaDescriptorFields(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !SCHEMA_DESCRIPTOR_FIELDS.has(key)),
+  );
+}
+
+function normalizeSchemaDescriptor(value) {
+  if (!isObject(value)) return value;
+  if ('schema' in value) {
+    return buildSchemaDescriptor(value.schema, value);
+  }
+  if ('kind' in value) {
+    return buildSchemaDescriptor(stripSchemaDescriptorFields(value), value);
+  }
+
+  return buildSchemaDescriptor(value);
 }
 
 function normalizeRagProfile(value) {
@@ -105,26 +115,57 @@ export function normalizeNodeContract(value = {}) {
 export function validateNodeContract(value, options = {}) {
   const candidate = options.normalize === false ? value : normalizeNodeContract(value);
   const valid = validateSchema(candidate);
+  const errors = valid ? null : (validateSchema.errors ?? []).map((error) => cloneValidationError(error));
   return {
     valid,
-    errors: valid ? null : [...(validateSchema.errors ?? [])],
+    errors,
+    issues: errors?.map((error) => createValidationIssue(error)) ?? [],
     contract: candidate,
   };
+}
+
+function cloneValidationError(error) {
+  return {
+    ...error,
+    params: isObject(error.params) ? { ...error.params } : error.params,
+  };
+}
+
+function propertyFocusForValidationError(error) {
+  return error.propertyName ?? error.params?.missingProperty ?? error.params?.additionalProperty ?? null;
+}
+
+function createValidationIssue(error) {
+  return {
+    keyword: error.keyword,
+    instancePath: error.instancePath ?? '',
+    schemaPath: error.schemaPath ?? null,
+    instanceLocation: error.instancePath || '/',
+    keywordLocation: error.schemaPath ?? '#',
+    params: isObject(error.params) ? { ...error.params } : {},
+    propertyName: error.propertyName ?? null,
+    propertyFocus: propertyFocusForValidationError(error),
+    message: error.message ?? null,
+  };
+}
+
+function formatValidationError(error) {
+  const path = error.instancePath || '/';
+  if (error.keyword === 'required' && error.params?.missingProperty) {
+    return `${path} missing ${error.params.missingProperty}`;
+  }
+  if (error.keyword === 'additionalProperties' && error.params?.additionalProperty) {
+    return `${path} unexpected property ${error.params.additionalProperty}`;
+  }
+  return `${path} ${error.message}`;
 }
 
 export function assertNodeContract(value, options = {}) {
   const result = validateNodeContract(value, options);
   if (result.valid) return result.contract;
 
-  const detail = result.errors
-    .map((error) => {
-      const path = error.instancePath || '/';
-      if (error.keyword === 'required' && error.params?.missingProperty) {
-        return `${path} missing ${error.params.missingProperty}`;
-      }
-      return `${path} ${error.message}`;
-    })
-    .join('; ');
-
-  throw new Error(`Node contract validation failed: ${detail}`);
+  const detail = result.errors.map((error) => formatValidationError(error)).join('; ');
+  const failure = new Error(`Node contract validation failed: ${detail}`);
+  failure.validation = result;
+  throw failure;
 }

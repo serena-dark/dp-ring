@@ -11,8 +11,8 @@ use axum::{
 use futures_util::StreamExt;
 use platform_types::{
     demo_snapshot, ActivityEvent, Blueprint, BootstrapPayload, Execution, Finding, Insight,
-    Objective, Organization, PlatformSnapshot, Repository, Review, Role, Viewer, Worker,
-    Workspace, WorkItem,
+    Objective, Organization, PlatformSnapshot, PublicationRoot, Repository, Review, Role,
+    ValidationReport, ValidationResult, Viewer, Worker, Workspace, WorkItem,
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio_stream::wrappers::IntervalStream;
@@ -55,6 +55,12 @@ async fn main() {
         .route("/api/executions/{id}", get(read_execution))
         .route("/api/reviews", get(list_reviews))
         .route("/api/reviews/{id}", get(read_review))
+        .route("/api/publication-roots", get(list_publication_roots))
+        .route("/api/publication-roots/{id}", get(read_publication_root))
+        .route("/api/validation-reports", get(list_validation_reports))
+        .route("/api/validation-reports/{id}", get(read_validation_report))
+        .route("/api/validation-results", get(list_validation_results))
+        .route("/api/validation-results/{id}", get(read_validation_result))
         .route("/api/findings", get(list_findings))
         .route("/api/findings/{id}", get(read_finding))
         .route("/api/insights", get(list_insights))
@@ -168,6 +174,39 @@ async fn read_review(Path(id): Path<String>, State(state): State<AppState>) -> R
     read_one(&state.snapshot.reviews, &id)
 }
 
+async fn list_publication_roots(State(state): State<AppState>) -> Json<Vec<PublicationRoot>> {
+    Json(state.snapshot.publication_roots.clone())
+}
+
+async fn read_publication_root(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> ResponseResult<PublicationRoot> {
+    read_one(&state.snapshot.publication_roots, &id)
+}
+
+async fn list_validation_reports(State(state): State<AppState>) -> Json<Vec<ValidationReport>> {
+    Json(state.snapshot.validation_reports.clone())
+}
+
+async fn read_validation_report(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> ResponseResult<ValidationReport> {
+    read_one(&state.snapshot.validation_reports, &id)
+}
+
+async fn list_validation_results(State(state): State<AppState>) -> Json<Vec<ValidationResult>> {
+    Json(state.snapshot.validation_results.clone())
+}
+
+async fn read_validation_result(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> ResponseResult<ValidationResult> {
+    read_one(&state.snapshot.validation_results, &id)
+}
+
 async fn list_findings(State(state): State<AppState>) -> Json<Vec<Finding>> {
     Json(state.snapshot.findings.clone())
 }
@@ -257,6 +296,9 @@ impl_has_id!(Blueprint);
 impl_has_id!(WorkItem);
 impl_has_id!(Execution);
 impl_has_id!(Review);
+impl_has_id!(PublicationRoot);
+impl_has_id!(ValidationReport);
+impl_has_id!(ValidationResult);
 impl_has_id!(Finding);
 impl_has_id!(Insight);
 impl_has_id!(Worker);

@@ -106,7 +106,9 @@ async function processCommand(pid) {
 export function parsePidList(output) {
   return output
     .split('\n')
-    .map((value) => Number(value.trim()))
+    .map((value) => value.trim())
+    .filter((value) => /^\d+$/.test(value))
+    .map((value) => Number(value))
     .filter((value) => Number.isInteger(value) && value > 0);
 }
 

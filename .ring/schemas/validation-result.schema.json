@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "validation-result.schema.json",
+  "title": "Validation Result",
+  "description": "A single governed validation finding with singular subject and rule locations.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^vres-" },
+    "type": { "const": "validation-result" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "type": "string", "minLength": 1 },
+    "session_id": { "type": ["string", "null"] },
+    "status": { "type": "string", "enum": ["recorded"] },
+    "data": {
+      "type": "object",
+      "required": ["report_id", "subject_ref", "subject_location", "rule_id", "rule_location", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "report_id": { "type": "string", "pattern": "^vrpt-" },
+        "subject_ref": {
+          "type": "object",
+          "required": ["type", "id"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "minLength": 1 },
+            "id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "subject_location": {
+          "type": "string",
+          "pattern": "^(?:/(?:[^~/]|~0|~1)*)*$",
+          "description": "Singular JSON Pointer location within the governed subject. Query selectors are intentionally out of scope."
+        },
+        "rule_id": { "type": "string", "minLength": 1 },
+        "rule_location": {
+          "type": "string",
+          "pattern": "^(?:#)?(?:/(?:[^~/]|~0|~1)*)*$",
+          "description": "Singular JSON Pointer or fragment-pointer location for the source rule."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "violation"]
+        },
+        "message": { "type": ["string", "null"] },
+        "detail_result_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^vres-" },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

@@ -44,6 +44,28 @@ function signedHeaders(
   };
 }
 
+async function readValidationArtifactsForCheckpoint(ring, checkpointId) {
+  const checkpoint = await ring.read('checkpoint', checkpointId);
+  const reportId = checkpoint.data.validation_report_id;
+  let report = null;
+  if (reportId) {
+    try {
+      report = await ring.read('validation-report', reportId);
+    } catch {
+      report = null;
+    }
+  }
+  const results = report
+    ? await Promise.all(report.data.result_ids.map((id) => ring.read('validation-result', id)))
+    : [];
+
+  return {
+    checkpoint,
+    report,
+    results,
+  };
+}
+
 async function createRedispatchSession(ring, task, workflow) {
   const sessionId = await ring.newId('session', {
     name: `${task.data.name} governed redispatch`,
@@ -295,12 +317,25 @@ describe('session runner', async () => {
   });
 
   it('prepares launched sessions with execution packets and staged materials', async () => {
+    const linkage = {
+      publication_root_id: 'pr-session-runner-prepared',
+      validation_report_id: 'vrpt-session-runner-prepared',
+      trace_id: 'trace-session-runner-prepared',
+      span_id: 'span-session-runner-prepared',
+      parent_span_id: 'span-session-runner-parent',
+    };
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
       bundle_version: '1',
       artifact_transport: 'inline',
       submitted_by: 'session-runner-test',
       payload: {
+        trace: {
+          trace_id: linkage.trace_id,
+          span_id: linkage.span_id,
+          parent_span_id: linkage.parent_span_id,
+          source_kind: 'session-runner-test',
+        },
         goal: {
           title: 'Session Runner Preparation',
           description: 'The runner should inject staged materials into the workflow execution packet.',
@@ -330,6 +365,10 @@ describe('session runner', async () => {
             inline_data: '{"stage":"runner"}',
           },
         ],
+        context: {
+          publication_root_id: linkage.publication_root_id,
+          validation_report_id: linkage.validation_report_id,
+        },
       },
     });
 
@@ -365,17 +404,32 @@ describe('session runner', async () => {
     assert.equal(checkpoint.data.scope_ref.kind, 'workflow-run');
     assert.equal(checkpoint.data.publication_statements.length, 1);
     assert.equal(checkpoint.data.publication_statements[0].predicateType, 'https://dp-ring.dev/predicate/checkpoint-publication/v1');
+    assert.equal(checkpoint.data.publication_root_id, linkage.publication_root_id);
+    assert.equal(checkpoint.data.validation_report_id, linkage.validation_report_id);
+    assert.equal(checkpoint.data.trace_id, linkage.trace_id);
+    assert.equal(checkpoint.data.span_id, linkage.span_id);
+    assert.equal(checkpoint.data.parent_span_id, linkage.parent_span_id);
 
     const branchEvent = await ring.read('branch-event', workflowRun.data.node_execution.branch_event_ids[0]);
     assert.equal(branchEvent.data.event_type, 'checkpoint_created');
     assert.equal(branchEvent.data.message_class, 'commit');
     assert.equal(branchEvent.data.statement.predicateType, 'https://dp-ring.dev/predicate/branch-event-commit/v1');
     assert.equal(branchEvent.data.statement.predicate.context.checkpoint_id, workflowRun.data.node_execution.active_checkpoint_id);
+    assert.equal(branchEvent.data.publication_root_id, linkage.publication_root_id);
+    assert.equal(branchEvent.data.validation_report_id, linkage.validation_report_id);
+    assert.equal(branchEvent.data.trace_id, linkage.trace_id);
+    assert.equal(branchEvent.data.span_id, linkage.span_id);
+    assert.equal(branchEvent.data.parent_span_id, linkage.parent_span_id);
 
     const packetPath = join(tempDir, workflowRun.data.steps[0].outputs.execution_packet_path);
     const packet = JSON.parse(await readFile(packetPath, 'utf-8'));
     assert.equal(packet.session_id, session.id);
     assert.equal(packet.workflow_run_id, workflowRun.id);
+    assert.equal(packet.context.publication_root_id, linkage.publication_root_id);
+    assert.equal(packet.context.validation_report_id, linkage.validation_report_id);
+    assert.equal(packet.context.trace_id, linkage.trace_id);
+    assert.equal(packet.context.span_id, linkage.span_id);
+    assert.equal(packet.context.parent_span_id, linkage.parent_span_id);
     assert.equal(packet.materials.length, 1);
     assert.ok(packet.materials[0].resolved_path);
     assert.equal(packet.node.node_id, workflowRun.data.node_execution.node_id);
@@ -1086,12 +1140,25 @@ describe('session runner', async () => {
   });
 
   it('accepts workflow-run completion reports, finalizes tasks, and closes the session after judgement', async () => {
+    const linkage = {
+      publication_root_id: 'pr-session-runner-complete',
+      validation_report_id: 'vrpt-session-runner-complete',
+      trace_id: 'trace-session-runner-complete',
+      span_id: 'span-session-runner-complete',
+      parent_span_id: 'span-session-runner-complete-parent',
+    };
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
       bundle_version: '1',
       artifact_transport: 'inline',
       submitted_by: 'session-runner-report',
       payload: {
+        trace: {
+          trace_id: linkage.trace_id,
+          span_id: linkage.span_id,
+          parent_span_id: linkage.parent_span_id,
+          source_kind: 'session-runner-report',
+        },
         goal: {
           title: 'Workflow Run Completion',
           description: 'A completed workflow run should finalize the task and move the session to closure.',
@@ -1121,6 +1188,10 @@ describe('session runner', async () => {
             inline_data: '{"stage":"complete"}',
           },
         ],
+        context: {
+          publication_root_id: linkage.publication_root_id,
+          validation_report_id: linkage.validation_report_id,
+        },
       },
     });
 
@@ -1136,6 +1207,10 @@ describe('session runner', async () => {
     await run('git', ['commit', '-m', 'runner update'], tempDir);
     const commitSha = (await run('git', ['rev-parse', 'HEAD'], tempDir)).stdout.trim();
     const workflowRun = await ring.read('workflow-run', runId);
+    const preparedValidation = await readValidationArtifactsForCheckpoint(
+      ring,
+      workflowRun.data.node_execution.active_checkpoint_id,
+    );
     const payload = {
       status: 'completed',
       commit_sha: commitSha,
@@ -1181,6 +1256,148 @@ describe('session runner', async () => {
     assert.equal(recovered.active_checkpoint.id, recovered.workflow_run.data.node_execution.active_checkpoint_id);
     assert.ok(recovered.lineage.length >= 2);
     assert.equal(recovered.capsule_state.current_checkpoint_id, recovered.active_checkpoint.id);
+    assert.equal(recovered.active_checkpoint.data.publication_root_id, linkage.publication_root_id);
+    assert.notEqual(recovered.active_checkpoint.data.validation_report_id, linkage.validation_report_id);
+    assert.notEqual(
+      recovered.active_checkpoint.data.validation_report_id,
+      preparedValidation.checkpoint.data.validation_report_id,
+    );
+    assert.equal(recovered.active_checkpoint.data.trace_id, linkage.trace_id);
+    assert.equal(recovered.active_checkpoint.data.span_id, linkage.span_id);
+    assert.equal(recovered.active_checkpoint.data.parent_span_id, linkage.parent_span_id);
+
+    const completionValidation = await readValidationArtifactsForCheckpoint(ring, recovered.active_checkpoint.id);
+    assert.equal(completionValidation.report.id, recovered.active_checkpoint.data.validation_report_id);
+    assert.deepEqual(completionValidation.report.data.subject_ref, {
+      type: 'checkpoint',
+      id: recovered.active_checkpoint.id,
+    });
+    assert.equal(completionValidation.report.data.profile_id, 'workflow-run-callback-profile-v1');
+    assert.equal(completionValidation.report.data.conforms, true);
+    assert.equal(completionValidation.report.data.outcome, 'conformant');
+    assert.deepEqual(completionValidation.report.data.result_ids, []);
+    assert.deepEqual(completionValidation.report.data.summary, {
+      info: 0,
+      warning: 0,
+      violation: 0,
+    });
+    assert.deepEqual(completionValidation.results, []);
+
+    const continuedEvent = recovered.branch_events.find((item) => item.data.event_type === 'checkpoint_continued');
+    assert.ok(continuedEvent);
+    assert.equal(continuedEvent.data.publication_root_id, linkage.publication_root_id);
+    assert.equal(continuedEvent.data.validation_report_id, completionValidation.report.id);
+    assert.equal(continuedEvent.data.trace_id, linkage.trace_id);
+    assert.equal(continuedEvent.data.span_id, linkage.span_id);
+    assert.equal(continuedEvent.data.parent_span_id, linkage.parent_span_id);
+  });
+
+  it('emits blocking validation artifacts for failed workflow-run callback reports', async () => {
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-failure-report',
+      payload: {
+        goal: {
+          title: 'Workflow Run Failure Validation',
+          description: 'A failed workflow-run callback should emit a blocking validation report and durable results.',
+          acceptance_criteria: ['Failure callback creates validation artifacts'],
+        },
+        environment: {
+          project_id: 'runner-failure-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['README.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-failure-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-failure',
+            required: true,
+            inline_data: '{"stage":"failure"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const runId = session.data.workflow_run_ids[0];
+    const preparedRun = await ring.read('workflow-run', runId);
+    const rootCheckpointId = preparedRun.data.node_execution.active_checkpoint_id;
+    const failureNote = 'Validation shell should retain this workflow failure note.';
+    const payload = {
+      status: 'failed',
+      actor: 'worker-agent',
+      note: failureNote,
+    };
+
+    const reported = await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      payload,
+      signedHeaders(preparedRun, payload, {
+        workerId: 'worker-agent',
+        includeKeyVersion: true,
+      }),
+    );
+
+    assert.equal(reported.workflow_run.status, 'failed');
+    assert.equal(reported.task.status, 'failed');
+    assert.equal(reported.task.data.replanning.status, 'awaiting_replan');
+    assert.equal(reported.session.status, 'failed');
+
+    const failedRun = await ring.read('workflow-run', runId);
+    const failedValidation = await readValidationArtifactsForCheckpoint(
+      ring,
+      failedRun.data.node_execution.active_checkpoint_id,
+    );
+    assert.notEqual(failedValidation.checkpoint.id, rootCheckpointId);
+    assert.ok(failedValidation.report);
+    assert.equal(failedValidation.report.id, failedValidation.checkpoint.data.validation_report_id);
+    assert.deepEqual(failedValidation.report.data.subject_ref, {
+      type: 'checkpoint',
+      id: failedValidation.checkpoint.id,
+    });
+    assert.equal(failedValidation.report.data.profile_id, 'workflow-run-callback-profile-v1');
+    assert.equal(failedValidation.report.data.conforms, false);
+    assert.equal(failedValidation.report.data.outcome, 'blocking');
+    assert.ok(failedValidation.report.data.result_ids.length >= 1);
+    assert.equal(failedValidation.report.data.summary.info, 0);
+    assert.equal(failedValidation.report.data.summary.warning, 0);
+    assert.ok(failedValidation.report.data.summary.violation >= 1);
+    assert.ok(failedValidation.results.length >= 1);
+
+    const primaryResult = failedValidation.results[0];
+    assert.equal(primaryResult.data.report_id, failedValidation.report.id);
+    assert.deepEqual(primaryResult.data.subject_ref, {
+      type: 'checkpoint',
+      id: failedValidation.checkpoint.id,
+    });
+    assert.equal(primaryResult.data.rule_id, 'workflow-run-callback-status');
+    assert.equal(primaryResult.data.severity, 'violation');
+    assert.equal(primaryResult.data.message, failureNote);
+
+    const recovered = await ring.sessionRunner.recoverWorkflowRunNodeState(runId);
+    assert.equal(recovered.active_checkpoint.data.validation_report_id, failedValidation.report.id);
+    const continuedEvent = recovered.branch_events.find((item) => item.data.event_type === 'checkpoint_continued');
+    const recoveryEvent = recovered.branch_events.find((item) => item.data.event_type === 'recovery_triggered');
+    assert.ok(continuedEvent);
+    assert.ok(recoveryEvent);
+    assert.equal(continuedEvent.data.validation_report_id, failedValidation.report.id);
+    assert.equal(recoveryEvent.data.validation_report_id, failedValidation.report.id);
   });
 
   it('requests semantic replay from node capsule lineage when a workflow run times out', async () => {
@@ -1264,12 +1481,25 @@ describe('session runner', async () => {
       },
     });
 
+    const linkage = {
+      publication_root_id: 'pr-session-runner-lineage-timeout',
+      validation_report_id: 'vrpt-session-runner-lineage-timeout',
+      trace_id: 'trace-session-runner-lineage-timeout',
+      span_id: 'span-session-runner-lineage-timeout',
+      parent_span_id: 'span-session-runner-lineage-timeout-parent',
+    };
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
       bundle_version: '1',
       artifact_transport: 'inline',
       submitted_by: 'session-runner-lineage-timeout',
       payload: {
+        trace: {
+          trace_id: linkage.trace_id,
+          span_id: linkage.span_id,
+          parent_span_id: linkage.parent_span_id,
+          source_kind: 'session-runner-lineage-timeout',
+        },
         goal: {
           title: 'Workflow Run Timeout With Lineage',
           description: 'Once a workflow-run has semantic checkpoint lineage, timeout handling should stop doing blind callback retries.',
@@ -1299,6 +1529,10 @@ describe('session runner', async () => {
             inline_data: '{"stage":"lineage-timeout"}',
           },
         ],
+        context: {
+          publication_root_id: linkage.publication_root_id,
+          validation_report_id: linkage.validation_report_id,
+        },
       },
     });
 
@@ -1309,6 +1543,7 @@ describe('session runner', async () => {
     const taskId = session.data.task_ids[0];
     const runId = session.data.workflow_run_ids[0];
     const preparedRun = await ring.read('workflow-run', runId);
+    const preparedCheckpoint = await ring.read('checkpoint', preparedRun.data.node_execution.active_checkpoint_id);
     const progressPayload = {
       status: 'progress',
       actor: 'worker-agent',
@@ -1326,8 +1561,22 @@ describe('session runner', async () => {
     assert.equal(progressReport.workflow_run.status, 'running');
 
     const progressedRun = await ring.read('workflow-run', runId);
+    const progressedCheckpoint = await ring.read('checkpoint', progressedRun.data.node_execution.active_checkpoint_id);
+    const refreshedPacket = JSON.parse(
+      await readFile(join(tempDir, progressedRun.data.callback.packet_path), 'utf-8'),
+    );
     assert.ok(progressedRun.data.node_execution.checkpoint_ids.length >= 2);
     assert.equal(progressedRun.data.callback.retry_count, 0);
+    assert.equal(refreshedPacket.node.active_checkpoint_id, progressedRun.data.node_execution.active_checkpoint_id);
+    assert.equal(refreshedPacket.context.publication_root_id, linkage.publication_root_id);
+    assert.equal(refreshedPacket.context.validation_report_id, progressedCheckpoint.data.validation_report_id);
+    assert.notEqual(
+      refreshedPacket.context.validation_report_id,
+      preparedCheckpoint.data.validation_report_id,
+    );
+    assert.equal(refreshedPacket.context.trace_id, linkage.trace_id);
+    assert.equal(refreshedPacket.context.span_id, linkage.span_id);
+    assert.equal(refreshedPacket.context.parent_span_id, linkage.parent_span_id);
 
     const expired = await ring.update('workflow-run', runId, {
       data: {

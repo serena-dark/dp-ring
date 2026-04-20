@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter } from "@tanstack/react-rout
 import { AppShell } from "../layouts/AppShell";
 import {
   FindingsPage,
+  GovernancePage,
   InboxPage,
   InsightsPage,
   ObjectivesPage,
@@ -52,6 +53,12 @@ const reviewsRoute = createRoute({
   component: ReviewsPage,
 });
 
+const governanceRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "governance",
+  component: GovernancePage,
+});
+
 const findingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "findings",
@@ -83,6 +90,7 @@ const routeTree = rootRoute.addChildren([
   queueRoute,
   runsRoute,
   reviewsRoute,
+  governanceRoute,
   findingsRoute,
   insightsRoute,
   workersRoute,

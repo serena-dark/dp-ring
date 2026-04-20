@@ -233,6 +233,84 @@ paths:
                 $ref: "#/components/schemas/Review"
         "404":
           $ref: "#/components/responses/ResourceNotFound"
+  /api/publication-roots:
+    get:
+      operationId: listPublicationRoots
+      responses:
+        "200":
+          description: Publication roots and their published members.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PublicationRoot"
+  /api/publication-roots/{id}:
+    get:
+      operationId: readPublicationRoot
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual publication root identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicationRoot"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /api/validation-reports:
+    get:
+      operationId: listValidationReports
+      responses:
+        "200":
+          description: Validation reports generated for governance artifacts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ValidationReport"
+  /api/validation-reports/{id}:
+    get:
+      operationId: readValidationReport
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual validation report identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationReport"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
+  /api/validation-results:
+    get:
+      operationId: listValidationResults
+      responses:
+        "200":
+          description: Individual validation results emitted by a report run.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ValidationResult"
+  /api/validation-results/{id}:
+    get:
+      operationId: readValidationResult
+      parameters:
+        - $ref: "#/components/parameters/ResourceIdPath"
+      responses:
+        "200":
+          description: Individual validation result identified by id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationResult"
+        "404":
+          $ref: "#/components/responses/ResourceNotFound"
   /api/findings:
     get:
       operationId: listFindings
@@ -564,6 +642,122 @@ components:
         verdict: { type: string }
         reviewer: { type: string }
         notes: { type: string }
+    GovernanceLocator:
+      type: object
+      properties:
+        path: { type: string }
+        kind: { type: string }
+        id: { type: string }
+        branch_id: { type: string }
+        checkpoint_id: { type: string }
+    GovernanceDescriptor:
+      type: object
+      required: [name, mediaType, digest, size, locator]
+      properties:
+        name: { type: string }
+        mediaType: { type: string }
+        digest: { type: string }
+        size: { type: integer }
+        locator:
+          $ref: "#/components/schemas/GovernanceLocator"
+    PublicationMemberDescriptor:
+      allOf:
+        - $ref: "#/components/schemas/GovernanceDescriptor"
+        - type: object
+          required: [artifact_type]
+          properties:
+            profile:
+              type: [string, "null"]
+            artifact_type: { type: string }
+    PublicationRoot:
+      type: object
+      required: [_type, id, conforms_to, status, about, member_descriptors, membership_digest]
+      properties:
+        _type: { type: string }
+        id: { type: string }
+        conforms_to: { type: string }
+        status: { type: string }
+        about:
+          $ref: "#/components/schemas/GovernanceDescriptor"
+        member_descriptors:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicationMemberDescriptor"
+        membership_digest: { type: string }
+    GovernanceSubjectRef:
+      type: object
+      required: [type, id]
+      properties:
+        type: { type: string }
+        id: { type: string }
+    ValidationReportSummary:
+      type: object
+      required: [info, warning, violation]
+      properties:
+        info: { type: integer }
+        warning: { type: integer }
+        violation: { type: integer }
+    ValidationReportData:
+      type: object
+      required: [subject_ref, profile_id, report_level, conforms, outcome, result_ids, summary]
+      properties:
+        subject_ref:
+          $ref: "#/components/schemas/GovernanceSubjectRef"
+        profile_id: { type: string }
+        report_level: { type: string }
+        conforms: { type: boolean }
+        outcome: { type: string }
+        result_ids:
+          type: array
+          items: { type: string }
+        summary:
+          $ref: "#/components/schemas/ValidationReportSummary"
+    ValidationReport:
+      type: object
+      required: [id, type, version, created_at, updated_at, created_by, status, data]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [validation-report] }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string }
+        session_id:
+          type: [string, "null"]
+        status: { type: string }
+        data:
+          $ref: "#/components/schemas/ValidationReportData"
+    ValidationResultData:
+      type: object
+      required: [report_id, subject_ref, subject_location, rule_id, rule_location, severity, detail_result_ids]
+      properties:
+        report_id: { type: string }
+        subject_ref:
+          $ref: "#/components/schemas/GovernanceSubjectRef"
+        subject_location: { type: string }
+        rule_id: { type: string }
+        rule_location: { type: string }
+        severity: { type: string }
+        message:
+          type: [string, "null"]
+        detail_result_ids:
+          type: array
+          items: { type: string }
+    ValidationResult:
+      type: object
+      required: [id, type, version, created_at, updated_at, created_by, status, data]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [validation-result] }
+        version: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string }
+        session_id:
+          type: [string, "null"]
+        status: { type: string }
+        data:
+          $ref: "#/components/schemas/ValidationResultData"
     Finding:
       type: object
       required: [id, workspace_id, title, status, severity, source_execution_id]

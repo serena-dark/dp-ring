@@ -14,6 +14,27 @@ export function filterByField(artifacts, field, value) {
 }
 
 /**
+ * Filter artifacts by multiple field/value pairs.
+ * Criteria with undefined, null, or empty-string values are ignored.
+ *
+ * @param {object[]} artifacts
+ * @param {Record<string, *>} criteria
+ * @returns {object[]}
+ */
+export function filterByFields(artifacts, criteria = {}) {
+  const entries = Object.entries(criteria)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '');
+
+  if (entries.length === 0) {
+    return [...artifacts];
+  }
+
+  return artifacts.filter((artifact) =>
+    entries.every(([field, value]) => getNestedValue(artifact, field) === value),
+  );
+}
+
+/**
  * Filter artifacts where a field is one of the given values.
  * @param {object[]} artifacts
  * @param {string} field
@@ -91,12 +112,15 @@ export function blockingFeedback(feedbackItems, requirementId) {
   );
 
   const filtered = requirementId
-    ? open.filter(f => f.data.target.id === requirementId)
+    ? open.filter(f =>
+        getNestedValue(f, 'data.target.type') === 'requirement'
+        && getNestedValue(f, 'data.target.id') === requirementId
+      )
     : open;
 
   return {
-    critical: filtered.filter(f => f.data.severity === 'critical'),
-    major:    filtered.filter(f => f.data.severity === 'major'),
+    critical: filtered.filter(f => getNestedValue(f, 'data.severity') === 'critical'),
+    major:    filtered.filter(f => getNestedValue(f, 'data.severity') === 'major'),
   };
 }
 

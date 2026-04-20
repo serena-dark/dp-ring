@@ -52,6 +52,36 @@ const pages = [
       { id: 'records', label: 'Records' },
     ],
   },
+  {
+    route_key: 'publication-roots',
+    path: '/publication-roots',
+    title: 'Publication Roots',
+    default_section_id: 'summary',
+    sections: [
+      { id: 'summary', label: 'Summary' },
+      { id: 'records', label: 'Records' },
+    ],
+  },
+  {
+    route_key: 'validation-reports',
+    path: '/validation-reports',
+    title: 'Validation Reports',
+    default_section_id: 'summary',
+    sections: [
+      { id: 'summary', label: 'Summary' },
+      { id: 'records', label: 'Records' },
+    ],
+  },
+  {
+    route_key: 'validation-results',
+    path: '/validation-results',
+    title: 'Validation Results',
+    default_section_id: 'summary',
+    sections: [
+      { id: 'summary', label: 'Summary' },
+      { id: 'records', label: 'Records' },
+    ],
+  },
 ];
 
 function createAssistant(openai = null) {
@@ -64,6 +94,22 @@ function createAssistant(openai = null) {
     feedback: [
       { id: 'fb-1', status: 'open', data: { severity: 'critical' } },
       { id: 'fb-2', status: 'resolved', data: { severity: 'major' } },
+      { id: 'fb-3', status: 'open', data: { severity: 'major' } },
+    ],
+    'publication-root': [
+      { id: 'pr-1', status: 'published', data: {} },
+      { id: 'pr-2', status: 'draft', data: {} },
+      { id: 'pr-3', status: 'published', data: {} },
+    ],
+    'validation-report': [
+      { id: 'vrpt-1', status: 'recorded', data: { outcome: 'blocking', conforms: false } },
+      { id: 'vrpt-2', status: 'recorded', data: { outcome: 'advisory', conforms: false } },
+      { id: 'vrpt-3', status: 'recorded', data: { outcome: 'conformant', conforms: true } },
+    ],
+    'validation-result': [
+      { id: 'vres-1', status: 'recorded', data: { severity: 'warning' } },
+      { id: 'vres-2', status: 'recorded', data: { severity: 'violation' } },
+      { id: 'vres-3', status: 'recorded', data: { severity: 'info' } },
     ],
   };
 
@@ -118,6 +164,75 @@ describe('ui assistant planner', () => {
     ]);
   });
 
+  it('counts feedback with combined status and severity filters', async () => {
+    const assistant = createAssistant();
+    const plan = await assistant.plan({
+      prompt: 'how many open critical feedback items are there?',
+      current_route: { path: '/', title: 'Dashboard', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'read');
+    assert.equal(plan.navigation.path, '/feedback');
+    assert.equal(plan.navigation.section_id, 'records');
+    assert.match(plan.answer, /1/);
+    assert.match(plan.answer, /critical/i);
+    assert.deepEqual(plan.page_adjustments, [
+      { key: 'status', value: 'open', scope: 'query' },
+      { key: 'severity', value: 'critical', scope: 'query' },
+    ]);
+  });
+
+  it('counts published publication roots and routes to the publication root records view', async () => {
+    const assistant = createAssistant();
+    const plan = await assistant.plan({
+      prompt: 'how many published publication roots are there?',
+      current_route: { path: '/', title: 'Dashboard', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'read');
+    assert.equal(plan.navigation.path, '/publication-roots');
+    assert.equal(plan.navigation.section_id, 'records');
+    assert.match(plan.answer, /2/);
+    assert.deepEqual(plan.page_adjustments, [
+      { key: 'status', value: 'published', scope: 'query' },
+    ]);
+  });
+
+  it('opens blocking validation reports with an outcome filter', async () => {
+    const assistant = createAssistant();
+    const plan = await assistant.plan({
+      prompt: 'show blocking validation reports',
+      current_route: { path: '/', title: 'Dashboard', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'read');
+    assert.equal(plan.navigation.path, '/validation-reports');
+    assert.equal(plan.navigation.section_id, 'records');
+    assert.deepEqual(plan.page_adjustments, [
+      { key: 'outcome', value: 'blocking', scope: 'query' },
+    ]);
+  });
+
+  it('counts warning validation results using validation severity filters', async () => {
+    const assistant = createAssistant();
+    const plan = await assistant.plan({
+      prompt: 'how many warning validation results are there?',
+      current_route: { path: '/', title: 'Dashboard', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'read');
+    assert.equal(plan.navigation.path, '/validation-results');
+    assert.equal(plan.navigation.section_id, 'records');
+    assert.match(plan.answer, /1/);
+    assert.deepEqual(plan.page_adjustments, [
+      { key: 'severity', value: 'warning', scope: 'query' },
+    ]);
+  });
+
   it('drafts a requirement mutation with confirmation', async () => {
     const assistant = createAssistant();
     const plan = await assistant.plan({
@@ -146,6 +261,23 @@ describe('ui assistant planner', () => {
     assert.equal(plan.proposed_action.ready, true);
     assert.equal(plan.proposed_action.payload.artifact_id, 'wf-old');
     assert.equal(plan.proposed_action.payload.next_status, 'archived');
+  });
+
+  it('falls back to the current page when a migrated-out target route is unavailable locally', async () => {
+    const assistant = createAssistant();
+    const plan = await assistant.plan({
+      prompt: 'create session "Kickoff" requirement req-1 milestone ms-1 tasks task-1',
+      current_route: { path: '/', title: 'Dashboard', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'mutate');
+    assert.equal(plan.navigation.path, '/');
+    assert.equal(plan.navigation.section_id, 'summary');
+    assert.deepEqual(plan.navigation.query, {});
+    assert.deepEqual(plan.page_adjustments, []);
+    assert.equal(plan.proposed_action.kind, 'create-session');
+    assert.equal(plan.proposed_action.ready, true);
   });
 
   it('uses the cloud planner when OpenAI is available', async () => {
@@ -192,5 +324,52 @@ describe('ui assistant planner', () => {
       status: 'open',
     });
     assert.equal(plan.answer, 'Opened the feedback queue.');
+  });
+
+  it('falls back to the current page when the cloud planner returns a removed route', async () => {
+    const assistant = createAssistant({
+      completeJson: async () => ({
+        parsed: {
+          mode: 'read',
+          answer: 'I could not find the old session page, so I stayed here.',
+          confidence: 0.77,
+          navigation: {
+            should_navigate: true,
+            path: '/sessions',
+            section_id: 'create',
+            query_items: [
+              { key: 'compose', value: '1' },
+            ],
+          },
+          page_adjustments: [
+            { key: 'compose', value: '1', scope: 'query' },
+          ],
+          action: {
+            kind: 'none',
+            title: '',
+            description: '',
+            ready: false,
+            confirmation_required: true,
+            missing_inputs: [],
+            target_artifact_type: '',
+            target_artifact_id: '',
+            payload_json: '{}',
+          },
+        },
+      }),
+    });
+
+    const plan = await assistant.plan({
+      prompt: 'open the session composer',
+      current_route: { path: '/feedback', title: 'Feedback', search: '', hash: null },
+      pages,
+    });
+
+    assert.equal(plan.mode, 'read');
+    assert.equal(plan.navigation.path, '/feedback');
+    assert.equal(plan.navigation.section_id, 'summary');
+    assert.deepEqual(plan.navigation.query, {});
+    assert.deepEqual(plan.page_adjustments, []);
+    assert.equal(plan.answer, 'I could not find the old session page, so I stayed here.');
   });
 });

@@ -103,6 +103,115 @@ pub struct ArtifactManifest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceLocator {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub checkpoint_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceDescriptor {
+    pub name: String,
+    #[serde(rename = "mediaType")]
+    pub media_type: String,
+    pub digest: String,
+    pub size: u64,
+    pub locator: GovernanceLocator,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicationMemberDescriptor {
+    #[serde(flatten)]
+    pub descriptor: GovernanceDescriptor,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    pub artifact_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicationRoot {
+    #[serde(rename = "_type")]
+    pub schema_uri: String,
+    pub id: String,
+    pub conforms_to: String,
+    pub status: String,
+    pub about: GovernanceDescriptor,
+    pub member_descriptors: Vec<PublicationMemberDescriptor>,
+    pub membership_digest: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GovernanceSubjectRef {
+    pub r#type: String,
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResultData {
+    pub report_id: String,
+    pub subject_ref: GovernanceSubjectRef,
+    pub subject_location: String,
+    pub rule_id: String,
+    pub rule_location: String,
+    pub severity: String,
+    pub message: Option<String>,
+    pub detail_result_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationResult {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub version: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub created_by: String,
+    pub session_id: Option<String>,
+    pub status: String,
+    pub data: ValidationResultData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReportSummary {
+    pub info: u32,
+    pub warning: u32,
+    pub violation: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReportData {
+    pub subject_ref: GovernanceSubjectRef,
+    pub profile_id: String,
+    pub report_level: String,
+    pub conforms: bool,
+    pub outcome: String,
+    pub result_ids: Vec<String>,
+    pub summary: ValidationReportSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReport {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub version: u32,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub created_by: String,
+    pub session_id: Option<String>,
+    pub status: String,
+    pub data: ValidationReportData,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Execution {
     pub id: String,
     pub work_item_id: String,
@@ -248,6 +357,9 @@ pub struct PlatformSnapshot {
     pub work_items: Vec<WorkItem>,
     pub executions: Vec<Execution>,
     pub reviews: Vec<Review>,
+    pub publication_roots: Vec<PublicationRoot>,
+    pub validation_reports: Vec<ValidationReport>,
+    pub validation_results: Vec<ValidationResult>,
     pub findings: Vec<Finding>,
     pub insights: Vec<Insight>,
     pub workers: Vec<Worker>,
@@ -492,6 +604,279 @@ pub fn demo_snapshot() -> PlatformSnapshot {
                 verdict: "split".into(),
                 reviewer: "ops-review".into(),
                 notes: "Separate discovery, verification, and policy mapping concerns.".into(),
+            },
+        ],
+        publication_roots: vec![
+            PublicationRoot {
+                schema_uri: "https://dp-ring.dev/schemas/publication-root/v1".into(),
+                id: "pr-checkpoint-cp-root".into(),
+                conforms_to: "https://dp-ring.dev/publication-root/v1".into(),
+                status: "published".into(),
+                about: GovernanceDescriptor {
+                    name: "checkpoint-publication/cp-root".into(),
+                    media_type: "application/vnd.dp-ring.governance-statement+json".into(),
+                    digest: "sha256:1111111111111111111111111111111111111111111111111111111111111111".into(),
+                    size: 1432,
+                    locator: GovernanceLocator {
+                        path: None,
+                        kind: Some("checkpoint".into()),
+                        id: Some("cp-root".into()),
+                        branch_id: None,
+                        checkpoint_id: None,
+                    },
+                },
+                member_descriptors: vec![
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/branch-event-commit".into(),
+                            media_type: "application/vnd.dp-ring.governance-statement+json".into(),
+                            digest: "sha256:2222222222222222222222222222222222222222222222222222222222222222".into(),
+                            size: 812,
+                            locator: GovernanceLocator {
+                                path: Some("branch-events/be-checkpoint-created.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: None,
+                        artifact_type: "governance-statement".into(),
+                    },
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/validation-report".into(),
+                            media_type: "application/json".into(),
+                            digest: "sha256:3333333333333333333333333333333333333333333333333333333333333333".into(),
+                            size: 734,
+                            locator: GovernanceLocator {
+                                path: Some("validation-reports/vrpt-cp-root.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: Some("https://dp-ring.dev/publication-profile/validation-report/v1".into()),
+                        artifact_type: "validation-report".into(),
+                    },
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/validation-result-blocking".into(),
+                            media_type: "application/json".into(),
+                            digest: "sha256:4444444444444444444444444444444444444444444444444444444444444444".into(),
+                            size: 623,
+                            locator: GovernanceLocator {
+                                path: Some("validation-results/vres-cp-root-membership.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: None,
+                        artifact_type: "validation-result".into(),
+                    },
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/validation-result-warning".into(),
+                            media_type: "application/json".into(),
+                            digest: "sha256:5555555555555555555555555555555555555555555555555555555555555555".into(),
+                            size: 587,
+                            locator: GovernanceLocator {
+                                path: Some("validation-results/vres-cp-root-locator.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: None,
+                        artifact_type: "validation-result".into(),
+                    },
+                ],
+                membership_digest: "sha256:6666666666666666666666666666666666666666666666666666666666666666".into(),
+            },
+            PublicationRoot {
+                schema_uri: "https://dp-ring.dev/schemas/publication-root/v1".into(),
+                id: "pr-release-candidate-2026-04-21".into(),
+                conforms_to: "https://dp-ring.dev/publication-root/v1".into(),
+                status: "draft".into(),
+                about: GovernanceDescriptor {
+                    name: "release-candidate/main/2026-04-21".into(),
+                    media_type: "application/vnd.dp-ring.governance-statement+json".into(),
+                    digest: "sha256:7777777777777777777777777777777777777777777777777777777777777777".into(),
+                    size: 1104,
+                    locator: GovernanceLocator {
+                        path: None,
+                        kind: None,
+                        id: None,
+                        branch_id: Some("main".into()),
+                        checkpoint_id: Some("cp-release-2026-04-21".into()),
+                    },
+                },
+                member_descriptors: vec![
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/validation-report".into(),
+                            media_type: "application/json".into(),
+                            digest: "sha256:8888888888888888888888888888888888888888888888888888888888888888".into(),
+                            size: 689,
+                            locator: GovernanceLocator {
+                                path: Some("validation-reports/vrpt-release-candidate-2026-04-21.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: Some("https://dp-ring.dev/publication-profile/validation-report/v1".into()),
+                        artifact_type: "validation-report".into(),
+                    },
+                    PublicationMemberDescriptor {
+                        descriptor: GovernanceDescriptor {
+                            name: "member/validation-result-warning".into(),
+                            media_type: "application/json".into(),
+                            digest: "sha256:9999999999999999999999999999999999999999999999999999999999999999".into(),
+                            size: 552,
+                            locator: GovernanceLocator {
+                                path: Some("validation-results/vres-release-candidate-2026-04-21-warning.json".into()),
+                                kind: None,
+                                id: None,
+                                branch_id: None,
+                                checkpoint_id: None,
+                            },
+                        },
+                        profile: None,
+                        artifact_type: "validation-result".into(),
+                    },
+                ],
+                membership_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            },
+        ],
+        validation_reports: vec![
+            ValidationReport {
+                id: "vrpt-cp-root".into(),
+                kind: "validation-report".into(),
+                version: 1,
+                created_at: now,
+                updated_at: now,
+                created_by: "ring-validator".into(),
+                session_id: Some("s-governance-001".into()),
+                status: "recorded".into(),
+                data: ValidationReportData {
+                    subject_ref: GovernanceSubjectRef {
+                        r#type: "publication-root".into(),
+                        id: "pr-checkpoint-cp-root".into(),
+                    },
+                    profile_id: "publication-root-profile-v1".into(),
+                    report_level: "basic".into(),
+                    conforms: false,
+                    outcome: "blocking".into(),
+                    result_ids: vec!["vres-cp-root-membership".into(), "vres-cp-root-locator".into()],
+                    summary: ValidationReportSummary {
+                        info: 0,
+                        warning: 1,
+                        violation: 1,
+                    },
+                },
+            },
+            ValidationReport {
+                id: "vrpt-release-candidate-2026-04-21".into(),
+                kind: "validation-report".into(),
+                version: 1,
+                created_at: now,
+                updated_at: now,
+                created_by: "ring-validator".into(),
+                session_id: Some("s-governance-002".into()),
+                status: "recorded".into(),
+                data: ValidationReportData {
+                    subject_ref: GovernanceSubjectRef {
+                        r#type: "publication-root".into(),
+                        id: "pr-release-candidate-2026-04-21".into(),
+                    },
+                    profile_id: "release-candidate-profile-v1".into(),
+                    report_level: "detailed".into(),
+                    conforms: false,
+                    outcome: "advisory".into(),
+                    result_ids: vec!["vres-release-candidate-2026-04-21-warning".into()],
+                    summary: ValidationReportSummary {
+                        info: 0,
+                        warning: 1,
+                        violation: 0,
+                    },
+                },
+            },
+        ],
+        validation_results: vec![
+            ValidationResult {
+                id: "vres-cp-root-membership".into(),
+                kind: "validation-result".into(),
+                version: 1,
+                created_at: now,
+                updated_at: now,
+                created_by: "ring-validator".into(),
+                session_id: Some("s-governance-001".into()),
+                status: "recorded".into(),
+                data: ValidationResultData {
+                    report_id: "vrpt-cp-root".into(),
+                    subject_ref: GovernanceSubjectRef {
+                        r#type: "publication-root".into(),
+                        id: "pr-checkpoint-cp-root".into(),
+                    },
+                    subject_location: "/member_descriptors/2".into(),
+                    rule_id: "publication-member-integrity".into(),
+                    rule_location: "#/properties/member_descriptors/items/required/5".into(),
+                    severity: "violation".into(),
+                    message: Some("Validation result member is missing a canonical locator digest pair.".into()),
+                    detail_result_ids: vec![],
+                },
+            },
+            ValidationResult {
+                id: "vres-cp-root-locator".into(),
+                kind: "validation-result".into(),
+                version: 1,
+                created_at: now,
+                updated_at: now,
+                created_by: "ring-validator".into(),
+                session_id: Some("s-governance-001".into()),
+                status: "recorded".into(),
+                data: ValidationResultData {
+                    report_id: "vrpt-cp-root".into(),
+                    subject_ref: GovernanceSubjectRef {
+                        r#type: "publication-root".into(),
+                        id: "pr-checkpoint-cp-root".into(),
+                    },
+                    subject_location: "/about/locator".into(),
+                    rule_id: "about-locator-completeness".into(),
+                    rule_location: "#/properties/about/properties/locator".into(),
+                    severity: "warning".into(),
+                    message: Some("About locator omits branch lineage needed for replay audits.".into()),
+                    detail_result_ids: vec![],
+                },
+            },
+            ValidationResult {
+                id: "vres-release-candidate-2026-04-21-warning".into(),
+                kind: "validation-result".into(),
+                version: 1,
+                created_at: now,
+                updated_at: now,
+                created_by: "ring-validator".into(),
+                session_id: Some("s-governance-002".into()),
+                status: "recorded".into(),
+                data: ValidationResultData {
+                    report_id: "vrpt-release-candidate-2026-04-21".into(),
+                    subject_ref: GovernanceSubjectRef {
+                        r#type: "publication-root".into(),
+                        id: "pr-release-candidate-2026-04-21".into(),
+                    },
+                    subject_location: "/member_descriptors/0/profile".into(),
+                    rule_id: "validation-report-profile".into(),
+                    rule_location: "#/properties/member_descriptors/items/properties/profile".into(),
+                    severity: "warning".into(),
+                    message: Some("Validation report profile is still pinned to a release-candidate draft.".into()),
+                    detail_result_ids: vec![],
+                },
             },
         ],
         findings: vec![Finding {
