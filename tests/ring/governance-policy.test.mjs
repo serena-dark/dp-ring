@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionGovernanceContext,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -12,11 +13,13 @@ import {
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
+  describeWaitingTaskGovernance,
   describeWorkflowReuseGovernanceBlock,
   describeWorkflowReuseGovernanceReenableGuidance,
   describeWorkflowReuseGovernanceReenableGuidanceList,
   normalizeWorkflowReuseGovernanceBlock,
   sessionGovernanceSelectionContexts,
+  waitingTaskGovernanceBlockedReuse,
   warmSemanticLineageState,
   workflowReuseGovernanceBlock,
   workflowRunRequiresExplicitWorkflowReuse,
@@ -655,6 +658,101 @@ describe('governance policy', () => {
       registry_rank_at_selection: null,
       governance_selection_contexts: expectedSelectionContexts,
     });
+  });
+
+  it('normalizes waiting-task governance blocked reuse and builds session governance context', () => {
+    const blockedReuse = waitingTaskGovernanceBlockedReuse({
+      recommended: null,
+      governance_blocked_candidates: [
+        {
+          workflow_template_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template ',
+          reason: ' warm_semantic_lineage ',
+          checkpoint_id: ' cp-roomier ',
+          adoption_status: ' synthesized ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+        {
+          workflow_template_id: 'wf-invalid-candidate',
+          workflow_name: 'Invalid Candidate',
+          reason: ' ',
+        },
+      ],
+    }, 'custom_generated');
+
+    assert.deepEqual(blockedReuse, [{
+      id: 'wf-roomier-template',
+      name: 'Roomier Template',
+      reason: 'warm_semantic_lineage',
+      checkpoint_id: 'cp-roomier',
+      adoption_status: 'synthesized',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+    }]);
+    assert.equal(describeWaitingTaskGovernance({ governance_blocked_reuse: blockedReuse }), 'wf-roomier-template (Roomier Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse');
+
+    const governanceContext = buildSessionGovernanceContext([
+      {
+        task_id: ' task-docs ',
+        task_name: ' Documentation ',
+        governance_blocked_reuse: blockedReuse,
+      },
+    ]);
+
+    assert.equal(governanceContext?.source, 'governance_blocked_reuse');
+    assert.equal(governanceContext?.isolated_batch, true);
+    assert.match(governanceContext?.batch_signature ?? '', /^warm_semantic_lineage:[a-f0-9]{12}$/);
+    assert.deepEqual(governanceContext?.reasons, ['warm_semantic_lineage']);
+    assert.deepEqual(governanceContext?.blocked_reuse, [{
+      task_id: 'task-docs',
+      task_name: 'Documentation',
+      workflow_template_id: 'wf-roomier-template',
+      workflow_name: 'Roomier Template',
+      reason: 'warm_semantic_lineage',
+      checkpoint_id: 'cp-roomier',
+      adoption_status: 'synthesized',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      detail: 'wf-roomier-template (Roomier Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
+    }]);
+    assert.equal(buildSessionGovernanceContext([{ task_id: 'task-clean', governance_blocked_reuse: [] }]), null);
+  });
+
+  it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
+    const warmLineageA = buildSessionGovernanceContext([
+      {
+        task_id: 'task-a',
+        task_name: 'Task A',
+        governance_blocked_reuse: [{
+          id: 'wf-alpha',
+          name: 'Alpha Workflow',
+          reason: 'warm_semantic_lineage',
+          checkpoint_id: 'cp-alpha',
+          adoption_status: 'synthesized',
+        }],
+      },
+    ]);
+    const warmLineageB = buildSessionGovernanceContext([
+      {
+        task_id: 'task-b',
+        task_name: 'Task B',
+        governance_blocked_reuse: [{
+          id: 'wf-beta',
+          name: 'Beta Workflow',
+          reason: 'warm_semantic_lineage',
+          checkpoint_id: 'cp-beta',
+          adoption_status: 'synthesized',
+        }],
+      },
+    ]);
+
+    assert.match(warmLineageA?.batch_signature ?? '', /^warm_semantic_lineage:[a-f0-9]{12}$/);
+    assert.match(warmLineageB?.batch_signature ?? '', /^warm_semantic_lineage:[a-f0-9]{12}$/);
+    assert.notEqual(warmLineageA?.batch_signature, warmLineageB?.batch_signature);
   });
 
   it('describes governance selection context with stable governed comparison text', () => {
