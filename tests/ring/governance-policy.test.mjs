@@ -5,6 +5,7 @@ import {
   checkpointBranchMetricsState,
   checkpointEffectiveForceState,
   checkpointGovernancePressureState,
+  normalizeWorkflowReuseGovernanceBlock,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
@@ -242,6 +243,50 @@ describe('governance policy', () => {
       branchBudget: null,
       notes: null,
       constrained: false,
+    });
+  });
+
+  it('normalizes workflow reuse governance blocks from recommendation candidates', () => {
+    assert.deepEqual(normalizeWorkflowReuseGovernanceBlock({
+      id: ' wf-governed-template ',
+      name: ' Governed Template ',
+      reason: ' checkpoint_branch_budget_exhausted ',
+      checkpoint_id: ' cp-governed ',
+      adoption_status: ' mainline ',
+      branch_budget: 0,
+      workflow_tightness: ' tight ',
+      oversight_strength: ' strong ',
+    }), {
+      id: 'wf-governed-template',
+      name: 'Governed Template',
+      reason: 'checkpoint_branch_budget_exhausted',
+      checkpoint_id: 'cp-governed',
+      adoption_status: 'mainline',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+    });
+  });
+
+  it('normalizes workflow reuse governance blocks from persisted waiting-task/session shapes', () => {
+    assert.deepEqual(normalizeWorkflowReuseGovernanceBlock({
+      workflow_template_id: ' wf-synth-template ',
+      workflow_name: ' Synth Template ',
+      reason: ' checkpoint_synthesized ',
+      checkpoint_id: ' cp-synth ',
+      adoption_status: ' synthesized ',
+      branch_budget: 1.5,
+      workflow_tightness: ' balanced ',
+      oversight_strength: ' normal ',
+    }), {
+      id: 'wf-synth-template',
+      name: 'Synth Template',
+      reason: 'checkpoint_synthesized',
+      checkpoint_id: 'cp-synth',
+      adoption_status: 'synthesized',
+      branch_budget: null,
+      workflow_tightness: 'balanced',
+      oversight_strength: 'normal',
     });
   });
 

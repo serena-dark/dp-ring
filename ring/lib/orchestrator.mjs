@@ -7,6 +7,7 @@ import {
   checkpointAutomaticReusePolicyState,
   checkpointEffectiveForceState,
   checkpointGovernancePressureState,
+  normalizeWorkflowReuseGovernanceBlock,
   workflowRunRequiresExplicitWorkflowReuse as runRequiresExplicitWorkflowReuse,
 } from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
@@ -608,16 +609,9 @@ function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
   }
 
   return Array.isArray(recommendation?.governance_blocked_candidates)
-    ? recommendation.governance_blocked_candidates.map((item) => ({
-        id: item.id,
-        name: item.name,
-        reason: item.reason,
-        checkpoint_id: item.checkpoint_id ?? null,
-        adoption_status: item.adoption_status ?? null,
-        branch_budget: item.branch_budget ?? null,
-        workflow_tightness: item.workflow_tightness ?? null,
-        oversight_strength: item.oversight_strength ?? null,
-      }))
+    ? recommendation.governance_blocked_candidates
+        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
+        .filter((item) => item.id && item.name && item.reason)
     : [];
 }
 
@@ -635,29 +629,17 @@ function governanceBatchIdentityEntries(waitingTasks = []) {
   return waitingTasks.flatMap((item) =>
     Array.isArray(item?.governance_blocked_reuse)
       ? item.governance_blocked_reuse
-          .map((candidate) => {
-            const reason = trimString(candidate?.reason);
-            if (!reason) {
-              return null;
-            }
-            return {
-              reason,
-              workflow_template_id:
-                trimString(candidate?.id)
-                || trimString(candidate?.workflow_template_id)
-                || trimString(candidate?.name)
-                || null,
-              checkpoint_id: trimString(candidate?.checkpoint_id) || null,
-              adoption_status: trimString(candidate?.adoption_status) || null,
-              branch_budget:
-                Number.isInteger(candidate?.branch_budget) && candidate.branch_budget >= 0
-                  ? candidate.branch_budget
-                  : null,
-              workflow_tightness: trimString(candidate?.workflow_tightness) || null,
-              oversight_strength: trimString(candidate?.oversight_strength) || null,
-            };
-          })
-          .filter(Boolean)
+          .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
+          .filter((candidate) => candidate.reason)
+          .map((candidate) => ({
+            reason: candidate.reason,
+            workflow_template_id: candidate.id,
+            checkpoint_id: candidate.checkpoint_id,
+            adoption_status: candidate.adoption_status,
+            branch_budget: candidate.branch_budget,
+            workflow_tightness: candidate.workflow_tightness,
+            oversight_strength: candidate.oversight_strength,
+          }))
       : [],
   );
 }
@@ -687,31 +669,21 @@ function buildSessionGovernanceContext(waitingTasks = []) {
       return [];
     }
     return item.governance_blocked_reuse
-      .map((candidate) => {
-        const workflowTemplateId = trimString(candidate?.id);
-        const workflowName = trimString(candidate?.name);
-        const reason = trimString(candidate?.reason);
-        if (!workflowTemplateId || !workflowName || !reason) {
-          return null;
-        }
-        return {
-          task_id: taskId,
-          task_name: taskName,
-          workflow_template_id: workflowTemplateId,
-          workflow_name: workflowName,
-          reason,
-          checkpoint_id: trimString(candidate?.checkpoint_id) || null,
-          adoption_status: trimString(candidate?.adoption_status) || null,
-          branch_budget:
-            Number.isInteger(candidate?.branch_budget) && candidate.branch_budget >= 0
-              ? candidate.branch_budget
-              : null,
-          workflow_tightness: trimString(candidate?.workflow_tightness) || null,
-          oversight_strength: trimString(candidate?.oversight_strength) || null,
-          detail: describeWorkflowGovernanceBlock(candidate),
-        };
-      })
-      .filter(Boolean);
+      .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
+      .filter((candidate) => candidate.id && candidate.name && candidate.reason)
+      .map((candidate) => ({
+        task_id: taskId,
+        task_name: taskName,
+        workflow_template_id: candidate.id,
+        workflow_name: candidate.name,
+        reason: candidate.reason,
+        checkpoint_id: candidate.checkpoint_id,
+        adoption_status: candidate.adoption_status,
+        branch_budget: candidate.branch_budget,
+        workflow_tightness: candidate.workflow_tightness,
+        oversight_strength: candidate.oversight_strength,
+        detail: describeWorkflowGovernanceBlock(candidate),
+      }));
   });
 
   if (blockedReuse.length === 0) {
