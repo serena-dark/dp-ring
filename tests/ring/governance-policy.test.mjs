@@ -1,10 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  automaticReusePolicyGovernancePressureScore,
+  checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
   checkpointEffectiveForceState,
   checkpointGovernancePressureState,
+  compareAutomaticReusePolicies,
+  describeAutomaticReusePolicy,
   normalizeWorkflowReuseGovernanceBlock,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
@@ -334,6 +338,78 @@ describe('governance policy', () => {
       branchBudgetPressure: 0,
       governancePressureScore: 0,
     });
+  });
+
+  it('derives automatic reuse selection policy metadata from checkpoint governance pressure state', () => {
+    const checkpoint = buildCheckpoint();
+    checkpoint.id = ' cp-selection-policy ';
+    checkpoint.data.adoption_status = ' mainline ';
+    checkpoint.data.policy_snapshot.workflow_tightness = ' tight ';
+    checkpoint.data.policy_snapshot.oversight_strength = ' strong ';
+    checkpoint.data.policy_snapshot.branch_budget = 1;
+
+    assert.deepEqual(checkpointAutomaticReuseSelectionPolicy(checkpoint), {
+      constrained: true,
+      adoption_status: 'mainline',
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 1,
+      governance_pressure_score: 1228,
+    });
+  });
+
+  it('compares automatic reuse policies by unconstrained status, governance pressure, and remaining branch budget', () => {
+    const unconstrained = {
+      constrained: false,
+      adoption_status: 'mainline',
+      workflow_tightness: null,
+      oversight_strength: null,
+      branch_budget: null,
+      governance_pressure_score: 0,
+    };
+    const constrained = {
+      constrained: true,
+      adoption_status: 'mainline',
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 1,
+      governance_pressure_score: 1228,
+    };
+    const roomierConstraint = {
+      constrained: true,
+      adoption_status: 'mainline',
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 3,
+      governance_pressure_score: 1200,
+    };
+    const tighterConstraint = {
+      constrained: true,
+      adoption_status: 'mainline',
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 0,
+      governance_pressure_score: 1200,
+    };
+
+    assert.equal(compareAutomaticReusePolicies(unconstrained, constrained) < 0, true);
+    assert.equal(compareAutomaticReusePolicies(constrained, unconstrained) > 0, true);
+    assert.equal(compareAutomaticReusePolicies(roomierConstraint, tighterConstraint) < 0, true);
+    assert.equal(compareAutomaticReusePolicies(tighterConstraint, roomierConstraint) > 0, true);
+  });
+
+  it('describes automatic reuse policies with stable governed carryover labels', () => {
+    assert.equal(describeAutomaticReusePolicy({ constrained: false }), 'no active inherited checkpoint policy');
+    assert.equal(describeAutomaticReusePolicy({
+      constrained: true,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+      branch_budget: 0,
+    }), 'tight workflow_tightness, strong oversight, branch_budget=0');
+    assert.equal(
+      automaticReusePolicyGovernancePressureScore({ constrained: true, governance_pressure_score: 1228 }),
+      1228,
+    );
   });
 
   it('assigns lower governance pressure when more branch budget remains under the same policy envelope', () => {
