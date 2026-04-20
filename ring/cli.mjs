@@ -8,6 +8,7 @@
  *
  * Commands:
  *   create <type> --name <name> [--status <status>] [--created-by <actor>] [--data <json>]
+ *   submit-requirement --name <name> --description <text> [--priority <priority>] [--created-by <actor>] [--criterion <text> ...] [--acceptance-criteria <json>]
  *   read <type> <id>
  *   list <type> [--status <status>]
  *   update <type> <id> --status <new-status>
@@ -32,6 +33,16 @@ function flag(name) {
   return args[idx + 1];
 }
 
+function flags(name) {
+  const values = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === name && args[i + 1] !== undefined) {
+      values.push(args[i + 1]);
+    }
+  }
+  return values;
+}
+
 function positional(n) {
   // Skip flags and their values; collect positional args
   const positionals = [];
@@ -47,6 +58,58 @@ function die(msg) {
   process.exit(1);
 }
 
+function normalizeAcceptanceCriterion(item, index) {
+  if (typeof item === 'string') {
+    const description = item.trim();
+    if (!description) die('Acceptance criteria strings must be non-empty.');
+    return {
+      id: `ac${index + 1}`,
+      description,
+      satisfied: false,
+    };
+  }
+
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    die('Acceptance criteria must be provided as strings or JSON objects.');
+  }
+
+  const description = typeof item.description === 'string' ? item.description.trim() : '';
+  if (!description) {
+    die('Acceptance criteria objects must include a non-empty description field.');
+  }
+
+  const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `ac${index + 1}`;
+  return {
+    id,
+    description,
+    satisfied: typeof item.satisfied === 'boolean' ? item.satisfied : false,
+  };
+}
+
+function parseAcceptanceCriteria() {
+  const criterionFlags = flags('--criterion');
+  const rawCriteria = flag('--acceptance-criteria');
+
+  if (rawCriteria && criterionFlags.length > 0) {
+    die('Use either --acceptance-criteria or one or more --criterion flags, not both.');
+  }
+
+  if (rawCriteria) {
+    let parsed;
+    try {
+      parsed = JSON.parse(rawCriteria);
+    } catch {
+      die('--acceptance-criteria must be valid JSON.');
+    }
+    if (!Array.isArray(parsed)) {
+      die('--acceptance-criteria must decode to a JSON array.');
+    }
+    return parsed.map((item, index) => normalizeAcceptanceCriterion(item, index));
+  }
+
+  return criterionFlags.map((item, index) => normalizeAcceptanceCriterion(item, index));
+}
+
 async function main() {
   if (!command || command === '--help') {
     console.log(`
@@ -54,6 +117,7 @@ ring-cli — dp-ring protocol command-line interface
 
 Commands:
   create <type>          Create a new artifact (--name, --status, --created-by, --data)
+  submit-requirement     Submit a requirement into the orchestrator (--name, --description, --priority, --created-by, --criterion, --acceptance-criteria)
   read <type> <id>       Read an artifact by type and id
   list <type>            List all artifacts of a type (--status to filter)
   update <type> <id>     Update an artifact (--status, --data)
@@ -102,6 +166,33 @@ Commands:
       const result = await ring.create(type, { id, status, data, created_by: createdBy });
       if (!result.ok) die(`Validation failed:\n${JSON.stringify(result.errors, null, 2)}`);
       console.log(JSON.stringify(result.artifact, null, 2));
+      break;
+    }
+
+    case 'submit-requirement': {
+      const name = flag('--name')?.trim();
+      if (!name) {
+        die('Usage: submit-requirement --name <name> --description <text> [--priority <priority>] [--created-by <actor>] [--criterion <text> ...] [--acceptance-criteria <json>]');
+      }
+
+      const description = flag('--description')?.trim();
+      if (!description) {
+        die('--description is required for submit-requirement');
+      }
+
+      const priority = flag('--priority') ?? 'high';
+      if (!['critical', 'high', 'medium', 'low'].includes(priority)) {
+        die('--priority must be one of critical, high, medium, or low');
+      }
+
+      const result = await ring.orchestrator.createRequirementDispatch({
+        name,
+        description,
+        priority,
+        created_by: flag('--created-by') ?? 'cli',
+        acceptance_criteria: parseAcceptanceCriteria(),
+      });
+      console.log(JSON.stringify(result, null, 2));
       break;
     }
 
