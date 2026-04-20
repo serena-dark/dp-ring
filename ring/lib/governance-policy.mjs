@@ -205,6 +205,30 @@ export function checkpointAutomaticReusePolicyState(checkpoint) {
   };
 }
 
+export function normalizeWorkflowReuseGovernanceBlock(block) {
+  const id = trimString(block?.id)
+    ?? trimString(block?.workflow_template_id)
+    ?? trimString(block?.workflow_name)
+    ?? trimString(block?.name)
+    ?? null;
+  const name = trimString(block?.name)
+    ?? trimString(block?.workflow_name)
+    ?? trimString(block?.id)
+    ?? trimString(block?.workflow_template_id)
+    ?? null;
+
+  return {
+    id,
+    name,
+    reason: trimString(block?.reason),
+    checkpoint_id: trimString(block?.checkpoint_id),
+    adoption_status: trimString(block?.adoption_status),
+    branch_budget: nonNegativeInteger(block?.branch_budget),
+    workflow_tightness: trimString(block?.workflow_tightness),
+    oversight_strength: trimString(block?.oversight_strength),
+  };
+}
+
 export function checkpointGovernancePressureState(checkpoint) {
   const policy = checkpointAutomaticReusePolicyState(checkpoint);
   const workflowTightnessLevel = orderedLevelIndex(
