@@ -13,7 +13,7 @@ import {
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
   describeWaitingTaskGovernance,
-  describeWorkflowReuseGovernanceBlock as describeWorkflowGovernanceBlock,
+  describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
   waitingTaskGovernanceBlockedReuse,
@@ -1491,9 +1491,11 @@ ${milestoneSections}`;
 
 function summarizeWorkflowRecommendation(recommendation) {
   if (!recommendation?.recommended) {
-    const blocked = recommendation?.governance_blocked_candidates ?? [];
-    if (blocked.length > 0) {
-      return `Automatic reuse is withheld because ${blocked.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}.`;
+    const blockedSummary = describeWorkflowReuseGovernanceBlockList(
+      recommendation?.governance_blocked_candidates ?? [],
+    );
+    if (blockedSummary !== 'none') {
+      return `Automatic reuse is withheld because ${blockedSummary}.`;
     }
     return 'No ranked workflow recommendation yet.';
   }
@@ -1526,11 +1528,9 @@ function buildWorkflowPreparationPacket(
                 .map((item) => `${item.id} (${item.name})`)
                 .join(', ')
             : 'none';
-          const blockedCandidates = blockedCandidateItems.length
-            ? blockedCandidateItems
-                .map((item) => describeWorkflowGovernanceBlock(item))
-                .join('; ')
-            : 'none';
+          const blockedCandidates = describeWorkflowReuseGovernanceBlockList(
+            blockedCandidateItems,
+          );
           const governanceReenableGuidance =
             describeWorkflowGovernanceReenableGuidanceList(blockedCandidateItems);
           const governanceSelectionContext =
@@ -1604,6 +1604,7 @@ function buildWorkflowPreparationScaffold(
         const recommendation = recommendationsByTaskId.get(task.id);
         const preferred = recommendation?.recommended?.workflow ?? null;
         const blockedCandidates = recommendation?.governance_blocked_candidates ?? [];
+        const blockedCandidateSummary = describeWorkflowReuseGovernanceBlockList(blockedCandidates);
         const governanceReenableGuidance =
           describeWorkflowGovernanceReenableGuidanceList(blockedCandidates);
         const governanceSelectionContext =
@@ -1628,9 +1629,7 @@ function buildWorkflowPreparationScaffold(
               : 'Other candidates: none',
           );
           headerLines.push(
-            blockedCandidates.length
-              ? `Governance-blocked reuse: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}`
-              : 'Governance-blocked reuse: none',
+            `Governance-blocked reuse: ${blockedCandidateSummary}`,
           );
           headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
           return headerLines.join('\n');
@@ -1638,9 +1637,9 @@ function buildWorkflowPreparationScaffold(
 
         headerLines.push(`Workflow Name: ${task.data.name} Delivery Flow`);
         headerLines.push('');
-        if (blockedCandidates.length > 0) {
+        if (blockedCandidateSummary !== 'none') {
           headerLines.push(
-            `Governance note: ${blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ')}.`,
+            `Governance note: ${blockedCandidateSummary}.`,
           );
           headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
           headerLines.push('');

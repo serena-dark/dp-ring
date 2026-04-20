@@ -15,6 +15,7 @@ import {
   describeGovernanceSelectionContext,
   describeWaitingTaskGovernance,
   describeWorkflowReuseGovernanceBlock,
+  describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidance,
   describeWorkflowReuseGovernanceReenableGuidanceList,
   normalizeWorkflowReuseGovernanceBlock,
@@ -338,6 +339,10 @@ describe('governance policy', () => {
     assert.equal(
       describeWorkflowReuseGovernanceBlock(budgetBlocked),
       'wf-governed-template (Governed Template) last exhausted branch_budget=0 at active checkpoint cp-governed under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+    );
+    assert.equal(
+      describeWorkflowReuseGovernanceBlockList([warmBlocked, budgetBlocked]),
+      'wf-warm-template (Warm Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse; wf-governed-template (Governed Template) last exhausted branch_budget=0 at active checkpoint cp-governed under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
     );
     assert.equal(
       describeWorkflowReuseGovernanceReenableGuidance(synthesizedBlocked),
