@@ -6,14 +6,17 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionGovernanceContext,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
+  describeWaitingTaskGovernance,
   describeWorkflowReuseGovernanceBlock as describeWorkflowGovernanceBlock,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
-  normalizeWorkflowReuseGovernanceBlock,
+  governanceBatchSignature,
+  waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
 import { createEmptyCapsuleState } from './node-capsule.mjs';
@@ -305,102 +308,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
-  if (workflowSource !== 'custom_generated' || recommendation?.recommended) {
-    return [];
-  }
-
-  return Array.isArray(recommendation?.governance_blocked_candidates)
-    ? recommendation.governance_blocked_candidates
-        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
-        .filter((item) => item.id && item.name && item.reason)
-    : [];
-}
-
-function describeWaitingTaskGovernance(waitingTask) {
-  const blockedCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
-    ? waitingTask.governance_blocked_reuse
-    : [];
-  if (blockedCandidates.length === 0) {
-    return 'none';
-  }
-  return blockedCandidates.map((item) => describeWorkflowGovernanceBlock(item)).join('; ');
-}
-
-function governanceBatchIdentityEntries(waitingTasks = []) {
-  return waitingTasks.flatMap((item) =>
-    Array.isArray(item?.governance_blocked_reuse)
-      ? item.governance_blocked_reuse
-          .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
-          .filter((candidate) => candidate.reason)
-          .map((candidate) => ({
-            reason: candidate.reason,
-            workflow_template_id: candidate.id,
-            checkpoint_id: candidate.checkpoint_id,
-            adoption_status: candidate.adoption_status,
-            branch_budget: candidate.branch_budget,
-            workflow_tightness: candidate.workflow_tightness,
-            oversight_strength: candidate.oversight_strength,
-          }))
-      : [],
-  );
-}
-
-function governanceBatchSignature(waitingTasks = []) {
-  const identities = governanceBatchIdentityEntries(waitingTasks);
-  if (identities.length === 0) {
-    return null;
-  }
-
-  const reasonSignature = [...new Set(identities.map((item) => item.reason))].sort().join('+');
-  const identityFingerprint = createHash('sha256')
-    .update(
-      [...new Set(identities.map((item) => JSON.stringify(item)))].sort().join('|'),
-      'utf-8',
-    )
-    .digest('hex')
-    .slice(0, 12);
-  return `${reasonSignature}:${identityFingerprint}`;
-}
-
-function buildSessionGovernanceContext(waitingTasks = []) {
-  const blockedReuse = waitingTasks.flatMap((item) => {
-    const taskId = trimString(item?.task_id);
-    const taskName = trimString(item?.task_name) || null;
-    if (!taskId || !Array.isArray(item?.governance_blocked_reuse)) {
-      return [];
-    }
-    return item.governance_blocked_reuse
-      .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
-      .filter((candidate) => candidate.id && candidate.name && candidate.reason)
-      .map((candidate) => ({
-        task_id: taskId,
-        task_name: taskName,
-        workflow_template_id: candidate.id,
-        workflow_name: candidate.name,
-        reason: candidate.reason,
-        checkpoint_id: candidate.checkpoint_id,
-        adoption_status: candidate.adoption_status,
-        branch_budget: candidate.branch_budget,
-        workflow_tightness: candidate.workflow_tightness,
-        oversight_strength: candidate.oversight_strength,
-        detail: describeWorkflowGovernanceBlock(candidate),
-      }));
-  });
-
-  if (blockedReuse.length === 0) {
-    return null;
-  }
-
-  return {
-    source: 'governance_blocked_reuse',
-    isolated_batch: true,
-    batch_signature: governanceBatchSignature(waitingTasks),
-    reasons: [...new Set(blockedReuse.map((item) => item.reason))].sort(),
-    blocked_reuse: blockedReuse,
-  };
 }
 
 function normalizeAcceptanceCriteria(value) {
