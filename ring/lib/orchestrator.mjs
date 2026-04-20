@@ -5102,42 +5102,57 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           }
         } else if (recommendedPolicy.constrained && constrainedReusableCandidates.length > 0) {
           const preferredWorkflow = constrainedReusableCandidates[0];
-          if (preferredWorkflow.id !== defaultWorkflow.id) {
-            const preferredPolicy = automaticReusePolicyByTemplate.get(preferredWorkflow.id) ?? {
+          const preferredPolicy = automaticReusePolicyByTemplate.get(preferredWorkflow.id) ?? {
+            constrained: false,
+          };
+          const preferredEffectiveForce = effectiveForceByTemplate.get(preferredWorkflow.id) ?? 0;
+          const comparedWorkflow = preferredWorkflow.id === defaultWorkflow.id
+            ? constrainedReusableCandidates.find((workflow) => workflow.id !== preferredWorkflow.id) ?? null
+            : defaultWorkflow;
+
+          if (comparedWorkflow) {
+            const comparedPolicy = automaticReusePolicyByTemplate.get(comparedWorkflow.id) ?? {
               constrained: false,
             };
-            const preferredEffectiveForce = effectiveForceByTemplate.get(preferredWorkflow.id) ?? 0;
-            const recommendedEffectiveForce = effectiveForceByTemplate.get(defaultWorkflow.id) ?? 0;
-            recommendedWorkflow = preferredWorkflow;
-            recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
-            if (compareAutomaticReusePolicies(preferredPolicy, recommendedPolicy) < 0) {
+            const comparedEffectiveForce = effectiveForceByTemplate.get(comparedWorkflow.id) ?? 0;
+            const policyComparison = compareAutomaticReusePolicies(preferredPolicy, comparedPolicy);
+            const prefersLowerGovernanceCost = policyComparison < 0;
+            const prefersEffectiveForce = policyComparison === 0
+              && preferredEffectiveForce > comparedEffectiveForce;
+
+            if (preferredWorkflow.id !== defaultWorkflow.id) {
+              recommendedWorkflow = preferredWorkflow;
+              recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
+            }
+
+            if (prefersLowerGovernanceCost) {
               recommendedMode = 'governance_minimize_policy_carryover';
               recommendedSelectionContext = buildGovernanceSelectionContext(
                 recommendedMode,
                 preferredWorkflow,
                 preferredPolicy,
                 preferredEffectiveForce,
-                defaultWorkflow,
-                recommendedPolicy,
-                recommendedEffectiveForce,
+                comparedWorkflow,
+                comparedPolicy,
+                comparedEffectiveForce,
               );
               recommendedNote =
-                `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
-                + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${defaultWorkflow.id} (${describeAutomaticReusePolicy(recommendedPolicy)}).`;
-            } else {
+                `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
+                + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${comparedWorkflow.id} (${describeAutomaticReusePolicy(comparedPolicy)}).`;
+            } else if (prefersEffectiveForce) {
               recommendedMode = 'governance_prefer_effective_force';
               recommendedSelectionContext = buildGovernanceSelectionContext(
                 recommendedMode,
                 preferredWorkflow,
                 preferredPolicy,
                 preferredEffectiveForce,
-                defaultWorkflow,
-                recommendedPolicy,
-                recommendedEffectiveForce,
+                comparedWorkflow,
+                comparedPolicy,
+                comparedEffectiveForce,
               );
               recommendedNote =
-                `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
-                + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${defaultWorkflow.id} (${recommendedEffectiveForce}).`;
+                `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
+                + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${comparedWorkflow.id} (${comparedEffectiveForce}).`;
             }
           }
         }

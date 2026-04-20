@@ -2258,6 +2258,383 @@ ${workflowPlan}
     }
   });
 
+  it('preserves multiple governed selection contexts when a requirement-dispatch batch session launches', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+
+      async function seedReusePolicyWorkflow({
+        taskType,
+        workflowId,
+        workflowName,
+        registryScore,
+        runId,
+        checkpointId,
+        nodeId,
+        branchBudget,
+        workflowTightness = 'balanced',
+        oversightStrength = 'normal',
+        policyNotes,
+      }) {
+        const workflowResult = await isolatedRing.create('workflow', {
+          id: workflowId,
+          status: 'active',
+          created_by: 'test',
+          data: {
+            name: workflowName,
+            description: `${workflowName} should stay visible in governed requirement-dispatch launch context.`,
+            applicable_to: [taskType],
+            steps: [
+              { id: 'inspect', name: 'Inspect', description: `Inspect the ${taskType} task.` },
+              { id: 'verify', name: 'Verify', description: `Run the governed ${taskType} path.` },
+              { id: 'report', name: 'Report', description: 'Summarize the result.' },
+            ],
+          },
+        });
+        assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+        await isolatedRing.registry.recordScore(taskType, workflowId, registryScore);
+
+        const checkpoint = createWorkflowRunCheckpoint({
+          id: checkpointId,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: nodeId,
+          scope_ref: { kind: 'workflow-run', id: runId, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: {
+            workflow_tightness: workflowTightness,
+            oversight_strength: oversightStrength,
+            branch_budget: branchBudget,
+            notes: policyNotes,
+          },
+        });
+        const checkpointResult = await isolatedRing.create('checkpoint', {
+          id: checkpoint.id,
+          status: checkpoint.status,
+          created_by: checkpoint.created_by,
+          session_id: checkpoint.session_id,
+          data: checkpoint.data,
+        });
+        assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-20T00:10:00Z',
+              prepared_at: '2026-04-20T00:10:05Z',
+              last_report_at: '2026-04-20T00:10:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-20T00:15:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: ['worker-governed-testing'],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: 'worker-governed-testing',
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-20T00:10:40Z',
+                status: 'completed',
+                actor: 'worker-governed-testing',
+                step_id: 'report',
+                note: `${workflowName} completed under inherited checkpoint policy.`,
+                commit_sha: null,
+                worker_id: 'worker-governed-testing',
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: checkpoint.data.branch_id,
+              active_checkpoint_id: checkpoint.id,
+              checkpoint_ids: [checkpoint.id],
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: checkpoint.id,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-20T00:10:10Z',
+                ended_at: '2026-04-20T00:10:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-20T00:10:21Z',
+                ended_at: '2026-04-20T00:10:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'report',
+                status: 'completed',
+                started_at: '2026-04-20T00:10:31Z',
+                ended_at: '2026-04-20T00:10:40Z',
+                outputs: {},
+                notes: null,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      await seedReusePolicyWorkflow({
+        taskType: 'testing',
+        workflowId: 'wf-testing-tight-policy-carryover-launch',
+        workflowName: 'Testing Tight Policy Carryover Launch',
+        registryScore: 0.97,
+        runId: 'run-testing-tight-policy-carryover-launch',
+        checkpointId: 'cp-testing-tight-policy-carryover-launch',
+        nodeId: 'n-testing-tight-policy-carryover-launch',
+        branchBudget: 1,
+        workflowTightness: 'tight',
+        oversightStrength: 'strong',
+        policyNotes: 'Tighter inherited checkpoint policy should lose when a lower-cost governed reusable workflow exists.',
+      });
+      await seedReusePolicyWorkflow({
+        taskType: 'testing',
+        workflowId: 'wf-testing-budget-policy-carryover-launch',
+        workflowName: 'Testing Budget Policy Carryover Launch',
+        registryScore: 0.92,
+        runId: 'run-testing-budget-policy-carryover-launch',
+        checkpointId: 'cp-testing-budget-policy-carryover-launch',
+        nodeId: 'n-testing-budget-policy-carryover-launch',
+        branchBudget: 3,
+        policyNotes: 'Lower-cost inherited checkpoint policy should survive through requirement-dispatch launch.',
+      });
+      await seedReusePolicyWorkflow({
+        taskType: 'bug-fix',
+        workflowId: 'wf-bug-fix-tight-policy-carryover-launch',
+        workflowName: 'Bug Fix Tight Policy Carryover Launch',
+        registryScore: 0.96,
+        runId: 'run-bug-fix-tight-policy-carryover-launch',
+        checkpointId: 'cp-bug-fix-tight-policy-carryover-launch',
+        nodeId: 'n-bug-fix-tight-policy-carryover-launch',
+        branchBudget: 1,
+        workflowTightness: 'tight',
+        oversightStrength: 'strong',
+        policyNotes: 'Tighter bug-fix inherited checkpoint policy should lose when a lower-cost governed reusable workflow exists.',
+      });
+      await seedReusePolicyWorkflow({
+        taskType: 'bug-fix',
+        workflowId: 'wf-bug-fix-budget-policy-carryover-launch',
+        workflowName: 'Bug Fix Budget Policy Carryover Launch',
+        registryScore: 0.91,
+        runId: 'run-bug-fix-budget-policy-carryover-launch',
+        checkpointId: 'cp-bug-fix-budget-policy-carryover-launch',
+        nodeId: 'n-bug-fix-budget-policy-carryover-launch',
+        branchBudget: 3,
+        policyNotes: 'Lower-cost bug-fix inherited checkpoint policy should survive through requirement-dispatch launch.',
+      });
+
+      const result = await isolatedRing.orchestrator.createRequirementDispatch({
+        name: 'Governed Launch Selection Contexts',
+        description:
+          'Requirement-dispatch launch should preserve multiple governed automatic-reuse selection contexts on the live session record.',
+        priority: 'high',
+        acceptance_criteria: [
+          { id: 'ac1', description: 'Governed launch context survives onto the session record', satisfied: false },
+        ],
+        created_by: 'test',
+      });
+
+      await writeFile(
+        join(repoRoot, result.job.requirement_document.document.path),
+        `# Governed Launch Selection Contexts
+
+## Goal
+
+This requirement document is complete and ready for milestone planning. It is
+explicit enough that prerequisites and early tasks can be split once the
+milestones are generated.
+
+## Acceptance Criteria
+
+- Requirement is stable
+- Governed reusable workflows stay inspectable after launch
+- Selection context survives onto the live session
+`,
+        'utf-8',
+      );
+
+      const milestonePlanning = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'writer-agent',
+        status: 'completed',
+        note: 'Requirement doc complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, milestonePlanning.milestone_plan.document.path),
+        `# Governed Launch Selection Contexts Milestone Plan
+
+## Planning Context
+
+Split the work into a foundation phase and an execution phase.
+
+## Milestone 1: Foundation
+
+Verify the governed launch path remains inspectable.
+
+### Acceptance Checks
+
+- Foundation launch context is captured
+
+### Prerequisites
+
+- [automated] Baseline governance fixture is green
+
+## Milestone 2: Execution
+
+Run the governed verification path once the baseline is ready.
+
+### Acceptance Checks
+
+- Execution launch context is captured
+
+### Prerequisites
+
+- [automated] Regression harness is green
+`,
+        'utf-8',
+      );
+
+      const postMilestone = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'milestone-planner',
+        status: 'completed',
+        note: 'Milestones complete.',
+      });
+
+      await writeFile(
+        join(repoRoot, postMilestone.post_milestone.prerequisite_analysis.document.path),
+        `# Governed Launch Selection Contexts Prerequisite Analysis
+
+## Goal
+
+Split milestone prerequisites into ready and blocked sets.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [automated] Baseline governance fixture is green
+
+### Blocked / Missing
+
+- [human] Stakeholder review is scheduled | reason: launch report can be drafted after verification
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
+
+### Ready Now
+
+- [automated] Regression harness is green
+
+### Blocked / Missing
+
+- [reference] Release checklist is attached | reason: execution can start before packaging notes are finalized
+`,
+        'utf-8',
+      );
+
+      const prerequisiteCompleted = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'prerequisite-preparer',
+        status: 'completed',
+        note: 'Prerequisite split complete.',
+      });
+
+      assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
+      assert.equal(prerequisiteCompleted.workflow_preparation.waiting_tasks.length, 2);
+      const governedWaitingTasks = prerequisiteCompleted.workflow_preparation.waiting_tasks.filter(
+        (task) => task.governance_selection_context?.basis === 'governance_minimize_policy_carryover',
+      );
+      assert.equal(governedWaitingTasks.length, 2);
+      const expectedByTaskType = new Map([
+        [
+          'testing',
+          {
+            preferred: 'wf-testing-budget-policy-carryover-launch',
+            compared: 'wf-testing-tight-policy-carryover-launch',
+          },
+        ],
+        [
+          'bug-fix',
+          {
+            preferred: 'wf-bug-fix-budget-policy-carryover-launch',
+            compared: 'wf-bug-fix-tight-policy-carryover-launch',
+          },
+        ],
+      ]);
+      for (const task of governedWaitingTasks) {
+        const expected = expectedByTaskType.get(task.task_type);
+        assert.ok(expected, `expected governed launch context for task type ${task.task_type}`);
+        assert.equal(task.workflow_source, 'registry_reuse');
+        assert.equal(task.registry_mode, 'governance_minimize_policy_carryover');
+        assert.equal(task.governance_selection_context?.preferred?.workflow_id, expected.preferred);
+        assert.equal(task.governance_selection_context?.compared?.workflow_id, expected.compared);
+      }
+
+      await isolatedRing.orchestrator.tick();
+      const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
+      assert.equal(launchedJob.status, 'session_dispatched');
+      assert.ok(launchedJob.session_dispatch.session_id);
+
+      const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      assert.equal(launchedSession.data.context_injected.workflow_template, null);
+      assert.equal(launchedSession.data.context_injected.governance_selection_contexts.length, 2);
+
+      const launchedSelectionContexts = new Map(
+        launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
+      );
+      for (const waitingTask of governedWaitingTasks) {
+        assert.deepEqual(launchedSelectionContexts.get(waitingTask.task_id), {
+          task_id: waitingTask.task_id,
+          task_name: waitingTask.task_name,
+          workflow_template_id: waitingTask.workflow_template_id,
+          workflow_name: waitingTask.workflow_name,
+          selection_context: waitingTask.governance_selection_context,
+        });
+      }
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
   it('ingests a ring.goal bundle and launches it through the adaptive dispatcher', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
