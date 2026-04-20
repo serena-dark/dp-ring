@@ -324,6 +324,73 @@ function selectionContextEntry(workflow, policy, effectiveForceScore) {
   };
 }
 
+function normalizeGovernanceSelectionContextEntry(entry) {
+  const workflowId = trimString(entry?.workflow_id);
+  const policy = trimString(entry?.policy);
+  if (!workflowId || !policy) {
+    return null;
+  }
+
+  return {
+    workflow_id: workflowId,
+    workflow_name: trimString(entry?.workflow_name) ?? workflowId,
+    policy,
+    governance_pressure_score: Number.isFinite(entry?.governance_pressure_score)
+      ? entry.governance_pressure_score
+      : null,
+    effective_force_score: normalizeEffectiveForceScore(entry?.effective_force_score),
+  };
+}
+
+function normalizeGovernanceSelectionContext(selectionContext) {
+  const basis = trimString(selectionContext?.basis);
+  const preferred = normalizeGovernanceSelectionContextEntry(selectionContext?.preferred);
+  const compared = normalizeGovernanceSelectionContextEntry(selectionContext?.compared);
+  if (!basis || !preferred || !compared) {
+    return null;
+  }
+
+  return {
+    basis,
+    preferred,
+    compared,
+  };
+}
+
+export function sessionGovernanceSelectionContexts(readyTasks = []) {
+  return readyTasks.flatMap((item) => {
+    const selectionContext = normalizeGovernanceSelectionContext(item?.governance_selection_context ?? null);
+    const taskId = trimString(item?.task_id);
+    const workflowTemplateId = trimString(item?.workflow_template_id);
+    if (!selectionContext || !taskId || !workflowTemplateId) {
+      return [];
+    }
+
+    return [{
+      task_id: taskId,
+      task_name: trimString(item?.task_name) ?? null,
+      workflow_template_id: workflowTemplateId,
+      workflow_name: trimString(item?.workflow_name) ?? workflowTemplateId,
+      selection_context: structuredClone(selectionContext),
+    }];
+  });
+}
+
+export function buildSessionContextInjected(readyTasks = []) {
+  const workflowTemplateIds = [...new Set(
+    readyTasks
+      .map((item) => trimString(item?.workflow_template_id))
+      .filter(Boolean),
+  )];
+
+  return {
+    workflow_template: workflowTemplateIds.length === 1 ? workflowTemplateIds[0] : null,
+    distillations_applied: [],
+    registry_rank_at_selection: null,
+    governance_selection_contexts: sessionGovernanceSelectionContexts(readyTasks),
+  };
+}
+
 export function buildGovernanceSelectionContext(
   basis,
   preferredWorkflow,

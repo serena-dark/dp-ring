@@ -5,6 +5,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path
 import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
+  buildSessionContextInjected,
   checkpointAutomaticReusePolicyState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
@@ -303,40 +304,6 @@ function latestWorkflowRunsByTemplate(workflowRuns) {
     }
   }
   return latestByTemplate;
-}
-
-function sessionGovernanceSelectionContexts(readyTasks = []) {
-  return readyTasks.flatMap((item) => {
-    const selectionContext = item?.governance_selection_context ?? null;
-    const taskId = trimString(item?.task_id);
-    const workflowTemplateId = trimString(item?.workflow_template_id);
-    if (!selectionContext || !taskId || !workflowTemplateId) {
-      return [];
-    }
-
-    return [{
-      task_id: taskId,
-      task_name: trimString(item?.task_name) || null,
-      workflow_template_id: workflowTemplateId,
-      workflow_name: trimString(item?.workflow_name) || workflowTemplateId,
-      selection_context: clone(selectionContext),
-    }];
-  });
-}
-
-function buildSessionContextInjected(readyTasks = []) {
-  const singleWorkflowTemplate =
-    [...new Set(readyTasks.map((item) => trimString(item?.workflow_template_id) || null).filter(Boolean))]
-      .length === 1
-      ? trimString(readyTasks[0]?.workflow_template_id) || null
-      : null;
-
-  return {
-    workflow_template: singleWorkflowTemplate,
-    distillations_applied: [],
-    registry_rank_at_selection: null,
-    governance_selection_contexts: sessionGovernanceSelectionContexts(readyTasks),
-  };
 }
 
 function workflowReuseGovernanceBlock(run, checkpoint = null) {

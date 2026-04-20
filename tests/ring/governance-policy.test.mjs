@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
+  buildSessionContextInjected,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -12,6 +13,7 @@ import {
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
   normalizeWorkflowReuseGovernanceBlock,
+  sessionGovernanceSelectionContexts,
   warmSemanticLineageState,
   workflowRunRequiresExplicitWorkflowReuse,
 } from '../../ring/lib/governance-policy.mjs';
@@ -455,6 +457,94 @@ describe('governance policy', () => {
         },
       },
     );
+  });
+
+  it('builds normalized session governance selection context injection from waiting-task state', () => {
+    const readyTasks = [
+      {
+        task_id: ' task-docs ',
+        task_name: ' Documentation ',
+        workflow_template_id: ' wf-roomier-template ',
+        workflow_name: ' Roomier Template ',
+        governance_selection_context: {
+          basis: ' governance_minimize_policy_carryover ',
+          preferred: {
+            workflow_id: ' wf-roomier-template ',
+            workflow_name: ' Roomier Template ',
+            policy: ' branch_budget=3 ',
+            governance_pressure_score: 1206,
+            effective_force_score: 14,
+          },
+          compared: {
+            workflow_id: ' wf-tight-template ',
+            workflow_name: ' Tight Template ',
+            policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+            governance_pressure_score: 1228,
+            effective_force_score: Number.NaN,
+          },
+        },
+      },
+      {
+        task_id: 'task-review',
+        task_name: 'Review docs',
+        workflow_template_id: 'wf-another-template',
+        workflow_name: 'Another Template',
+        governance_selection_context: null,
+      },
+      {
+        task_id: ' ',
+        workflow_template_id: 'wf-missing-task',
+        governance_selection_context: {
+          basis: 'governance_prefer_effective_force',
+          preferred: {
+            workflow_id: 'wf-missing-task',
+            workflow_name: 'Missing Task Template',
+            policy: 'branch_budget=0',
+            governance_pressure_score: 1300,
+            effective_force_score: 8,
+          },
+          compared: {
+            workflow_id: 'wf-other',
+            workflow_name: 'Other Template',
+            policy: 'branch_budget=1',
+            governance_pressure_score: 1200,
+            effective_force_score: 6,
+          },
+        },
+      },
+    ];
+
+    const expectedSelectionContexts = [{
+      task_id: 'task-docs',
+      task_name: 'Documentation',
+      workflow_template_id: 'wf-roomier-template',
+      workflow_name: 'Roomier Template',
+      selection_context: {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+    }];
+
+    assert.deepEqual(sessionGovernanceSelectionContexts(readyTasks), expectedSelectionContexts);
+    assert.deepEqual(buildSessionContextInjected(readyTasks), {
+      workflow_template: null,
+      distillations_applied: [],
+      registry_rank_at_selection: null,
+      governance_selection_contexts: expectedSelectionContexts,
+    });
   });
 
   it('describes governance selection context with stable governed comparison text', () => {
