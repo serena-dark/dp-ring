@@ -19,6 +19,7 @@ import {
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidance,
   describeWorkflowReuseGovernanceReenableGuidanceList,
+  hydrateWaitingTaskGovernanceLabels,
   normalizeWorkflowReuseGovernanceBlock,
   sessionGovernanceSelectionContexts,
   waitingTaskGovernanceBlockedReuse,
@@ -803,6 +804,88 @@ describe('governance policy', () => {
     ]);
   });
 
+  it('hydrates waiting-task governance labels from live task, selection, and blocked-reuse workflow names', async () => {
+    const readyTasks = [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Legacy) ',
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template (Legacy) ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template (Legacy) ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+      governance_blocked_reuse: [{
+        id: ' wf-lineage-hold ',
+        name: ' Warm Lineage Template (Legacy) ',
+        reason: ' warm_semantic_lineage ',
+        checkpoint_id: ' cp-lineage ',
+      }],
+    }];
+    const liveDocs = new Map([
+      ['task:task-docs', { id: 'task-docs', data: { name: 'Documentation Refresh' } }],
+      ['workflow:wf-roomier-template', { id: 'wf-roomier-template', data: { name: 'Roomier Template Renamed' } }],
+      ['workflow:wf-tight-template', { id: 'wf-tight-template', data: { name: 'Tight Template Renamed' } }],
+      ['workflow:wf-lineage-hold', { id: 'wf-lineage-hold', data: { name: 'Warm Lineage Template Renamed' } }],
+    ]);
+
+    const hydrated = await hydrateWaitingTaskGovernanceLabels(
+      readyTasks,
+      async (kind, id) => liveDocs.get(`${kind}:${id}`) ?? null,
+    );
+
+    assert.deepEqual(hydrated, [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Legacy) ',
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template (Legacy) ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template (Legacy) ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+      governance_blocked_reuse: [{
+        id: ' wf-lineage-hold ',
+        name: ' Warm Lineage Template (Legacy) ',
+        reason: ' warm_semantic_lineage ',
+        checkpoint_id: ' cp-lineage ',
+      }],
+      canonical_task_name: 'Documentation Refresh',
+      canonical_workflow_name: 'Roomier Template Renamed',
+      canonical_selection_context_workflow_names: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+      },
+      canonical_governance_blocked_reuse_workflow_names: {
+        'wf-lineage-hold': 'Warm Lineage Template Renamed',
+      },
+    }]);
+  });
+
   it('deduplicates normalized session governance selection context injection entries', () => {
     const readyTasks = [
       {
@@ -1068,6 +1151,35 @@ describe('governance policy', () => {
       }],
     });
     assert.match(governanceContext?.batch_signature ?? '', /^warm_semantic_lineage:[a-f0-9]{12}$/);
+  });
+
+  it('prefers hydrated task and blocked-reuse workflow labels when persisting session governance context', () => {
+    const governanceContext = buildSessionGovernanceContext([
+      {
+        task_id: ' task-docs ',
+        task_name: ' Docs ',
+        canonical_task_name: ' Documentation Refresh ',
+        workflow_template_id: ' wf-roomier-template ',
+        workflow_name: ' Roomier Template (Legacy) ',
+        canonical_workflow_name: ' Roomier Template Renamed ',
+        canonical_governance_blocked_reuse_workflow_names: {
+          'wf-lineage-hold': ' Warm Lineage Template Renamed ',
+        },
+        governance_blocked_reuse: [{
+          id: ' wf-lineage-hold ',
+          name: ' Warm Lineage Template (Legacy) ',
+          reason: ' warm_semantic_lineage ',
+          checkpoint_id: ' cp-lineage ',
+        }],
+      },
+    ]);
+
+    assert.equal(governanceContext?.blocked_reuse[0]?.task_name, 'Documentation Refresh');
+    assert.equal(governanceContext?.blocked_reuse[0]?.workflow_name, 'Warm Lineage Template Renamed');
+    assert.equal(
+      governanceContext?.blocked_reuse[0]?.detail,
+      'wf-lineage-hold (Warm Lineage Template Renamed) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
+    );
   });
 
   it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
