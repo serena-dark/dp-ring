@@ -755,12 +755,12 @@ describe('governance policy', () => {
       canonical_task_name: ' Documentation Refresh ',
       workflow_template_id: ' wf-roomier-template ',
       workflow_name: ' Roomier Template (legacy) ',
-      canonical_workflow_name: ' Roomier Template ',
+      canonical_workflow_name: ' Roomier Template Renamed ',
       governance_selection_context: {
         basis: ' governance_minimize_policy_carryover ',
         preferred: {
           workflow_id: ' wf-roomier-template ',
-          workflow_name: ' Roomier Template ',
+          workflow_name: ' Roomier Template (legacy) ',
           policy: ' branch_budget=3 ',
           governance_pressure_score: 1206,
           effective_force_score: 14,
@@ -779,8 +779,8 @@ describe('governance policy', () => {
       task_name: 'Documentation Refresh',
       canonical_task_name: 'Documentation Refresh',
       workflow_template_id: 'wf-roomier-template',
-      workflow_name: 'Roomier Template',
-      canonical_workflow_name: 'Roomier Template',
+      workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name: 'Roomier Template Renamed',
       governance_selection_context: structuredClone(staleEntry.governance_selection_context),
     };
 
@@ -788,12 +788,12 @@ describe('governance policy', () => {
       task_id: 'task-docs',
       task_name: 'Documentation Refresh',
       workflow_template_id: 'wf-roomier-template',
-      workflow_name: 'Roomier Template',
+      workflow_name: 'Roomier Template Renamed',
       selection_context: {
         basis: 'governance_minimize_policy_carryover',
         preferred: {
           workflow_id: 'wf-roomier-template',
-          workflow_name: 'Roomier Template',
+          workflow_name: 'Roomier Template Renamed',
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
