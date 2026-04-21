@@ -724,6 +724,30 @@ export function sessionGovernanceSelectionContexts(readyTasks = []) {
   return selectionContexts;
 }
 
+export function canonicalizeWaitingTaskGovernanceLabels(readyTasks = []) {
+  const selectionContextByTaskId = new Map(
+    sessionGovernanceSelectionContexts(readyTasks).map((entry) => [trimString(entry?.task_id), entry]),
+  );
+
+  return readyTasks.map((item) => {
+    const taskId = trimString(item?.task_id);
+    const selectionContextEntry = selectionContextByTaskId.get(taskId) ?? null;
+    return {
+      ...item,
+      task_name: selectionContextEntry?.task_name
+        || trimString(item?.canonical_task_name)
+        || trimString(item?.task_name)
+        || null,
+      workflow_name: selectionContextEntry?.workflow_name
+        || trimString(item?.canonical_workflow_name)
+        || trimString(item?.workflow_name)
+        || null,
+      governance_selection_context:
+        selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
+    };
+  });
+}
+
 export function buildSessionContextInjected(readyTasks = []) {
   const workflowTemplateIds = [...new Set(
     readyTasks
