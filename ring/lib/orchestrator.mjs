@@ -7,6 +7,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionGovernanceContext,
+  canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
@@ -16,7 +17,6 @@ import {
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
-  sessionGovernanceSelectionContexts,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -343,30 +343,6 @@ async function readyTasksWithCanonicalSessionLabels(ring, readyTasks = []) {
       canonical_task_name: taskNameById.get(taskId) || trimString(item?.task_name) || null,
       canonical_workflow_name: workflowNameById.get(workflowTemplateId) || trimString(item?.workflow_name) || null,
       canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
-    };
-  });
-}
-
-function readyTasksWithCanonicalDispatchLabels(readyTasks = []) {
-  const selectionContextByTaskId = new Map(
-    sessionGovernanceSelectionContexts(readyTasks).map((entry) => [trimString(entry?.task_id), entry]),
-  );
-
-  return readyTasks.map((item) => {
-    const taskId = trimString(item?.task_id);
-    const selectionContextEntry = selectionContextByTaskId.get(taskId) ?? null;
-    return {
-      ...item,
-      task_name: selectionContextEntry?.task_name
-        || trimString(item?.canonical_task_name)
-        || trimString(item?.task_name)
-        || null,
-      workflow_name: selectionContextEntry?.workflow_name
-        || trimString(item?.canonical_workflow_name)
-        || trimString(item?.workflow_name)
-        || null,
-      governance_selection_context:
-        selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
     };
   });
 }
