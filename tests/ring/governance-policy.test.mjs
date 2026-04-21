@@ -665,6 +665,61 @@ describe('governance policy', () => {
     });
   });
 
+  it('canonicalizes compared governance selection workflow labels when session enrichment provides live workflow names', () => {
+    const readyTasks = [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation ',
+      canonical_task_name: ' Documentation (Renamed) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template ',
+      canonical_workflow_name: ' Roomier Template Renamed ',
+      canonical_selection_context_workflow_names: {
+        'wf-tight-template': ' Tight Template Renamed ',
+      },
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+    }];
+
+    assert.deepEqual(sessionGovernanceSelectionContexts(readyTasks), [{
+      task_id: 'task-docs',
+      task_name: 'Documentation (Renamed)',
+      workflow_template_id: 'wf-roomier-template',
+      workflow_name: 'Roomier Template Renamed',
+      selection_context: {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template Renamed',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template Renamed',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+    }]);
+  });
+
   it('deduplicates normalized session governance selection context injection entries', () => {
     const readyTasks = [
       {

@@ -275,7 +275,11 @@ async function readyTasksWithCanonicalSessionLabels(ring, readyTasks = []) {
   )];
   const workflowTemplateIds = [...new Set(
     readyTasks
-      .map((item) => trimString(item?.workflow_template_id))
+      .flatMap((item) => [
+        trimString(item?.workflow_template_id),
+        trimString(item?.governance_selection_context?.preferred?.workflow_id),
+        trimString(item?.governance_selection_context?.compared?.workflow_id),
+      ])
       .filter(Boolean),
   )];
 
@@ -319,11 +323,25 @@ async function readyTasksWithCanonicalSessionLabels(ring, readyTasks = []) {
   return readyTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const workflowTemplateId = trimString(item?.workflow_template_id);
+    const canonicalSelectionContextWorkflowNames = Object.fromEntries(
+      [
+        workflowTemplateId,
+        trimString(item?.governance_selection_context?.preferred?.workflow_id),
+        trimString(item?.governance_selection_context?.compared?.workflow_id),
+      ]
+        .filter(Boolean)
+        .map((candidateWorkflowTemplateId) => [
+          candidateWorkflowTemplateId,
+          workflowNameById.get(candidateWorkflowTemplateId) || null,
+        ])
+        .filter(([, workflowName]) => Boolean(workflowName)),
+    );
     return {
       ...item,
       // Best-effort label enrichment: do not let missing metadata reads block session launch.
       canonical_task_name: taskNameById.get(taskId) || trimString(item?.task_name) || null,
       canonical_workflow_name: workflowNameById.get(workflowTemplateId) || trimString(item?.workflow_name) || null,
+      canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
     };
   });
 }

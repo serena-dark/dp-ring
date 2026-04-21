@@ -4711,6 +4711,7 @@ Split milestone prerequisites into ready and blocked sets.
       const testingWaitingTask = testingBundle.workflows.waiting_tasks[0];
       const renamedDocsTaskName = 'Update governed selection guide (renamed before launch)';
       const renamedDocsWorkflowName = 'Docs Budget Policy Carryover Batch Renamed';
+      const renamedDocsComparedWorkflowName = 'Docs Tight Policy Carryover Batch Renamed';
 
       const docsTaskRecord = await isolatedRing.read('task', docsWaitingTask.task_id);
       const docsTaskUpdate = await isolatedRing.update('task', docsWaitingTask.task_id, {
@@ -4729,6 +4730,22 @@ Split milestone prerequisites into ready and blocked sets.
         },
       });
       assert.equal(docsWorkflowUpdate.ok, true, JSON.stringify(docsWorkflowUpdate.errors));
+
+      const docsComparedWorkflowRecord = await isolatedRing.read(
+        'workflow',
+        docsWaitingTask.governance_selection_context.compared.workflow_id,
+      );
+      const docsComparedWorkflowUpdate = await isolatedRing.update(
+        'workflow',
+        docsWaitingTask.governance_selection_context.compared.workflow_id,
+        {
+          data: {
+            ...docsComparedWorkflowRecord.data,
+            name: renamedDocsComparedWorkflowName,
+          },
+        },
+      );
+      assert.equal(docsComparedWorkflowUpdate.ok, true, JSON.stringify(docsComparedWorkflowUpdate.errors));
 
       const originalStoreRead = isolatedRing.store.read.bind(isolatedRing.store);
       const injectedBestEffortFailures = new Set();
@@ -4778,6 +4795,7 @@ Split milestone prerequisites into ready and blocked sets.
       );
       const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
       expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
+      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
       assert.deepEqual(launchedSelectionContexts.get(docsWaitingTask.task_id), {
         task_id: docsWaitingTask.task_id,
         task_name: renamedDocsTaskName,

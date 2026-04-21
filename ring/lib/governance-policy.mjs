@@ -595,19 +595,37 @@ function normalizeGovernanceSelectionContext(selectionContext) {
   };
 }
 
-function canonicalizeSelectionContextWorkflowLabel(selectionContext, workflowTemplateId, canonicalWorkflowName) {
-  const normalizedWorkflowTemplateId = trimString(workflowTemplateId);
-  const normalizedCanonicalWorkflowName = trimString(canonicalWorkflowName);
-  if (!selectionContext || !normalizedWorkflowTemplateId || !normalizedCanonicalWorkflowName) {
+function normalizeSelectionContextWorkflowNameOverrides(overrides) {
+  const normalizedOverrides = new Map();
+  if (!overrides || typeof overrides !== 'object') {
+    return normalizedOverrides;
+  }
+
+  for (const [workflowTemplateId, workflowName] of Object.entries(overrides)) {
+    const normalizedWorkflowTemplateId = trimString(workflowTemplateId);
+    const normalizedWorkflowName = trimString(workflowName);
+    if (!normalizedWorkflowTemplateId || !normalizedWorkflowName) {
+      continue;
+    }
+    normalizedOverrides.set(normalizedWorkflowTemplateId, normalizedWorkflowName);
+  }
+
+  return normalizedOverrides;
+}
+
+function canonicalizeSelectionContextWorkflowLabels(selectionContext, workflowNameOverrides) {
+  const normalizedOverrides = normalizeSelectionContextWorkflowNameOverrides(workflowNameOverrides);
+  if (!selectionContext || normalizedOverrides.size === 0) {
     return selectionContext;
   }
 
   const nextSelectionContext = structuredClone(selectionContext);
-  if (trimString(nextSelectionContext?.preferred?.workflow_id) === normalizedWorkflowTemplateId) {
-    nextSelectionContext.preferred.workflow_name = normalizedCanonicalWorkflowName;
-  }
-  if (trimString(nextSelectionContext?.compared?.workflow_id) === normalizedWorkflowTemplateId) {
-    nextSelectionContext.compared.workflow_name = normalizedCanonicalWorkflowName;
+  for (const key of ['preferred', 'compared']) {
+    const workflowTemplateId = trimString(nextSelectionContext?.[key]?.workflow_id);
+    const canonicalWorkflowName = normalizedOverrides.get(workflowTemplateId);
+    if (workflowTemplateId && canonicalWorkflowName) {
+      nextSelectionContext[key].workflow_name = canonicalWorkflowName;
+    }
   }
   return nextSelectionContext;
 }
@@ -638,10 +656,16 @@ function selectionContextWorkflowDisplayName(entry) {
 function selectionContextSessionEntry(entry) {
   const taskId = trimString(entry?.task_id);
   const workflowTemplateId = trimString(entry?.workflow_template_id);
-  const selectionContext = canonicalizeSelectionContextWorkflowLabel(
+  const canonicalWorkflowName = trimString(entry?.canonical_workflow_name);
+  const selectionContextWorkflowNames = {
+    ...(entry?.canonical_selection_context_workflow_names ?? {}),
+    ...(workflowTemplateId && canonicalWorkflowName
+      ? { [workflowTemplateId]: canonicalWorkflowName }
+      : {}),
+  };
+  const selectionContext = canonicalizeSelectionContextWorkflowLabels(
     normalizeGovernanceSelectionContext(entry?.selection_context),
-    workflowTemplateId,
-    entry?.canonical_workflow_name,
+    selectionContextWorkflowNames,
   );
   if (!taskId || !workflowTemplateId || !selectionContext) {
     return null;
@@ -654,7 +678,7 @@ function selectionContextSessionEntry(entry) {
     workflow_name: selectionContextWorkflowDisplayName({
       workflow_template_id: workflowTemplateId,
       workflow_name: entry?.workflow_name,
-      canonical_workflow_name: entry?.canonical_workflow_name,
+      canonical_workflow_name: canonicalWorkflowName,
       selection_context: selectionContext,
     }),
     selection_context: structuredClone(selectionContext),
@@ -682,6 +706,7 @@ export function sessionGovernanceSelectionContexts(readyTasks = []) {
       workflow_template_id: item?.workflow_template_id,
       workflow_name: item?.workflow_name,
       canonical_workflow_name: item?.canonical_workflow_name,
+      canonical_selection_context_workflow_names: item?.canonical_selection_context_workflow_names,
       selection_context: item?.governance_selection_context,
     });
     if (!entry) {
