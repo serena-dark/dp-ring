@@ -4379,7 +4379,7 @@ Split milestone prerequisites into ready and blocked sets.
     }
   });
 
-  it('persists multiple governed automatic-reuse selection contexts when batched bundles launch into one session', async () => {
+  it('canonicalizes governed session labels from live task/workflow records and falls back cleanly when best-effort reads fail during batched launch', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -4707,7 +4707,46 @@ Split milestone prerequisites into ready and blocked sets.
       assert.equal(docsBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-budget-policy-carryover-batch');
       assert.equal(testingBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-testing-budget-policy-carryover-batch');
 
+      const docsWaitingTask = docsBundle.workflows.waiting_tasks[0];
+      const testingWaitingTask = testingBundle.workflows.waiting_tasks[0];
+      const renamedDocsTaskName = 'Update governed selection guide (renamed before launch)';
+      const renamedDocsWorkflowName = 'Docs Budget Policy Carryover Batch Renamed';
+
+      const docsTaskRecord = await isolatedRing.read('task', docsWaitingTask.task_id);
+      const docsTaskUpdate = await isolatedRing.update('task', docsWaitingTask.task_id, {
+        data: {
+          ...docsTaskRecord.data,
+          name: renamedDocsTaskName,
+        },
+      });
+      assert.equal(docsTaskUpdate.ok, true, JSON.stringify(docsTaskUpdate.errors));
+
+      const docsWorkflowRecord = await isolatedRing.read('workflow', docsWaitingTask.workflow_template_id);
+      const docsWorkflowUpdate = await isolatedRing.update('workflow', docsWaitingTask.workflow_template_id, {
+        data: {
+          ...docsWorkflowRecord.data,
+          name: renamedDocsWorkflowName,
+        },
+      });
+      assert.equal(docsWorkflowUpdate.ok, true, JSON.stringify(docsWorkflowUpdate.errors));
+
+      const originalStoreRead = isolatedRing.store.read.bind(isolatedRing.store);
+      const injectedBestEffortFailures = new Set();
+      isolatedRing.store.read = async (type, id, ...rest) => {
+        const key = `${type}:${id}`;
+        if (
+          (key === `task:${testingWaitingTask.task_id}`
+            || key === `workflow:${testingWaitingTask.workflow_template_id}`)
+          && !injectedBestEffortFailures.has(key)
+        ) {
+          injectedBestEffortFailures.add(key);
+          throw new Error(`Injected best-effort session-label read failure for ${key}`);
+        }
+        return originalStoreRead(type, id, ...rest);
+      };
+
       await isolatedRing.orchestrator.tick();
+      isolatedRing.store.read = originalStoreRead;
 
       const launchedDocsBundle = await isolatedRing.orchestrator.readDispatchBundle(docsBundle.id);
       const launchedTestingBundle = await isolatedRing.orchestrator.readDispatchBundle(testingBundle.id);
@@ -4715,6 +4754,13 @@ Split milestone prerequisites into ready and blocked sets.
       assert.equal(launchedTestingBundle.status, 'session_launched');
       assert.ok(launchedDocsBundle.batching.session_id);
       assert.equal(launchedDocsBundle.batching.session_id, launchedTestingBundle.batching.session_id);
+      assert.deepEqual(
+        new Set(injectedBestEffortFailures),
+        new Set([
+          `task:${testingWaitingTask.task_id}`,
+          `workflow:${testingWaitingTask.workflow_template_id}`,
+        ]),
+      );
 
       const launchedSession = await isolatedRing.read('session', launchedDocsBundle.batching.session_id);
       assert.deepEqual(
@@ -4730,18 +4776,22 @@ Split milestone prerequisites into ready and blocked sets.
       const launchedSelectionContexts = new Map(
         launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
       );
-      for (const waitingTask of [
-        launchedDocsBundle.workflows.waiting_tasks[0],
-        launchedTestingBundle.workflows.waiting_tasks[0],
-      ]) {
-        assert.deepEqual(launchedSelectionContexts.get(waitingTask.task_id), {
-          task_id: waitingTask.task_id,
-          task_name: waitingTask.task_name,
-          workflow_template_id: waitingTask.workflow_template_id,
-          workflow_name: waitingTask.workflow_name,
-          selection_context: waitingTask.governance_selection_context,
-        });
-      }
+      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
+      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
+      assert.deepEqual(launchedSelectionContexts.get(docsWaitingTask.task_id), {
+        task_id: docsWaitingTask.task_id,
+        task_name: renamedDocsTaskName,
+        workflow_template_id: docsWaitingTask.workflow_template_id,
+        workflow_name: renamedDocsWorkflowName,
+        selection_context: expectedDocsSelectionContext,
+      });
+      assert.deepEqual(launchedSelectionContexts.get(testingWaitingTask.task_id), {
+        task_id: testingWaitingTask.task_id,
+        task_name: testingWaitingTask.task_name,
+        workflow_template_id: testingWaitingTask.workflow_template_id,
+        workflow_name: testingWaitingTask.workflow_name,
+        selection_context: testingWaitingTask.governance_selection_context,
+      });
     } finally {
       await isolated.cleanup();
     }

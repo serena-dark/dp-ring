@@ -595,6 +595,23 @@ function normalizeGovernanceSelectionContext(selectionContext) {
   };
 }
 
+function canonicalizeSelectionContextWorkflowLabel(selectionContext, workflowTemplateId, canonicalWorkflowName) {
+  const normalizedWorkflowTemplateId = trimString(workflowTemplateId);
+  const normalizedCanonicalWorkflowName = trimString(canonicalWorkflowName);
+  if (!selectionContext || !normalizedWorkflowTemplateId || !normalizedCanonicalWorkflowName) {
+    return selectionContext;
+  }
+
+  const nextSelectionContext = structuredClone(selectionContext);
+  if (trimString(nextSelectionContext?.preferred?.workflow_id) === normalizedWorkflowTemplateId) {
+    nextSelectionContext.preferred.workflow_name = normalizedCanonicalWorkflowName;
+  }
+  if (trimString(nextSelectionContext?.compared?.workflow_id) === normalizedWorkflowTemplateId) {
+    nextSelectionContext.compared.workflow_name = normalizedCanonicalWorkflowName;
+  }
+  return nextSelectionContext;
+}
+
 function selectionContextWorkflowDisplayName(entry) {
   const workflowTemplateId = trimString(entry?.workflow_template_id);
   const canonicalWorkflowName = trimString(entry?.canonical_workflow_name);
@@ -621,7 +638,11 @@ function selectionContextWorkflowDisplayName(entry) {
 function selectionContextSessionEntry(entry) {
   const taskId = trimString(entry?.task_id);
   const workflowTemplateId = trimString(entry?.workflow_template_id);
-  const selectionContext = normalizeGovernanceSelectionContext(entry?.selection_context);
+  const selectionContext = canonicalizeSelectionContextWorkflowLabel(
+    normalizeGovernanceSelectionContext(entry?.selection_context),
+    workflowTemplateId,
+    entry?.canonical_workflow_name,
+  );
   if (!taskId || !workflowTemplateId || !selectionContext) {
     return null;
   }
