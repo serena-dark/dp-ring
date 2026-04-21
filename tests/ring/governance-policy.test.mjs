@@ -675,7 +675,8 @@ describe('governance policy', () => {
       workflow_template_id: ' wf-roomier-template ',
       workflow_name: ' Roomier Template ',
       canonical_workflow_name: ' Roomier Template Renamed ',
-      canonical_selection_context_workflow_names: {
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': ' Roomier Template Renamed ',
         'wf-tight-template': ' Tight Template Renamed ',
       },
       governance_selection_context: {
@@ -876,6 +877,11 @@ describe('governance policy', () => {
       }],
       canonical_task_name: 'Documentation Refresh',
       canonical_workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+        'wf-lineage-hold': 'Warm Lineage Template Renamed',
+      },
       canonical_selection_context_workflow_names: {
         'wf-roomier-template': 'Roomier Template Renamed',
         'wf-tight-template': 'Tight Template Renamed',
@@ -1162,7 +1168,8 @@ describe('governance policy', () => {
         workflow_template_id: ' wf-roomier-template ',
         workflow_name: ' Roomier Template (Legacy) ',
         canonical_workflow_name: ' Roomier Template Renamed ',
-        canonical_governance_blocked_reuse_workflow_names: {
+        canonical_workflow_name_overrides: {
+          'wf-roomier-template': ' Roomier Template Renamed ',
           'wf-lineage-hold': ' Warm Lineage Template Renamed ',
         },
         governance_blocked_reuse: [{

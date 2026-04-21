@@ -252,6 +252,7 @@ function canonicalWorkflowNameOverrides(entry) {
   return {
     ...normalizeCanonicalWorkflowNameMap(entry?.canonical_selection_context_workflow_names),
     ...normalizeCanonicalWorkflowNameMap(entry?.canonical_governance_blocked_reuse_workflow_names),
+    ...normalizeCanonicalWorkflowNameMap(entry?.canonical_workflow_name_overrides),
     ...(workflowTemplateId && canonicalWorkflowName
       ? { [workflowTemplateId]: canonicalWorkflowName }
       : {}),
@@ -276,13 +277,39 @@ function waitingTaskBlockedReuseWorkflowIds(item) {
   );
 }
 
-export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], readArtifact = async () => null) {
-  const taskIds = uniqueTrimmedStrings(waitingTasks.map((item) => item?.task_id));
-  const workflowTemplateIds = uniqueTrimmedStrings(waitingTasks.flatMap((item) => [
+function waitingTaskCanonicalWorkflowIds(item) {
+  return uniqueTrimmedStrings([
     item?.workflow_template_id,
     ...waitingTaskSelectionContextWorkflowIds(item),
     ...waitingTaskBlockedReuseWorkflowIds(item),
-  ]));
+  ]);
+}
+
+function workflowNameOverridesForIds(workflowTemplateIds = [], workflowNameById = new Map()) {
+  return Object.fromEntries(
+    uniqueTrimmedStrings(workflowTemplateIds)
+      .map((workflowTemplateId) => [
+        workflowTemplateId,
+        trimString(workflowNameById.get(workflowTemplateId)),
+      ])
+      .filter(([, workflowName]) => Boolean(workflowName)),
+  );
+}
+
+function pickWorkflowNameOverrides(overrides, workflowTemplateIds = []) {
+  const workflowNameOverrides = normalizeCanonicalWorkflowNameMap(overrides);
+  return Object.fromEntries(
+    uniqueTrimmedStrings(workflowTemplateIds)
+      .map((workflowTemplateId) => [workflowTemplateId, workflowNameOverrides[workflowTemplateId] ?? null])
+      .filter(([, workflowName]) => Boolean(workflowName)),
+  );
+}
+
+export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], readArtifact = async () => null) {
+  const taskIds = uniqueTrimmedStrings(waitingTasks.map((item) => item?.task_id));
+  const workflowTemplateIds = uniqueTrimmedStrings(
+    waitingTasks.flatMap((item) => waitingTaskCanonicalWorkflowIds(item)),
+  );
 
   const [loadedTaskResults, loadedWorkflowResults] = await Promise.all([
     Promise.allSettled(taskIds.map((taskId) => readArtifact('task', taskId))),
@@ -316,28 +343,18 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
   return waitingTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const workflowTemplateId = trimString(item?.workflow_template_id);
-    const canonicalSelectionContextWorkflowNames = {
-      ...normalizeCanonicalWorkflowNameMap(item?.canonical_selection_context_workflow_names),
-      ...Object.fromEntries(
-        waitingTaskSelectionContextWorkflowIds(item)
-          .map((candidateWorkflowTemplateId) => [
-            candidateWorkflowTemplateId,
-            workflowNameById.get(candidateWorkflowTemplateId) ?? null,
-          ])
-          .filter(([, workflowName]) => Boolean(workflowName)),
-      ),
+    const canonicalWorkflowNameOverridesForTask = {
+      ...canonicalWorkflowNameOverrides(item),
+      ...workflowNameOverridesForIds(waitingTaskCanonicalWorkflowIds(item), workflowNameById),
     };
-    const canonicalBlockedReuseWorkflowNames = {
-      ...normalizeCanonicalWorkflowNameMap(item?.canonical_governance_blocked_reuse_workflow_names),
-      ...Object.fromEntries(
-        waitingTaskBlockedReuseWorkflowIds(item)
-          .map((candidateWorkflowTemplateId) => [
-            candidateWorkflowTemplateId,
-            workflowNameById.get(candidateWorkflowTemplateId) ?? null,
-          ])
-          .filter(([, workflowName]) => Boolean(workflowName)),
-      ),
-    };
+    const canonicalSelectionContextWorkflowNames = pickWorkflowNameOverrides(
+      canonicalWorkflowNameOverridesForTask,
+      waitingTaskSelectionContextWorkflowIds(item),
+    );
+    const canonicalBlockedReuseWorkflowNames = pickWorkflowNameOverrides(
+      canonicalWorkflowNameOverridesForTask,
+      waitingTaskBlockedReuseWorkflowIds(item),
+    );
 
     return {
       ...item,
@@ -347,10 +364,13 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
         || trimString(item?.task_name)
         || null,
       canonical_workflow_name:
-        workflowNameById.get(workflowTemplateId)
+        canonicalWorkflowNameOverridesForTask[workflowTemplateId]
         || trimString(item?.canonical_workflow_name)
         || trimString(item?.workflow_name)
         || null,
+      ...(Object.keys(canonicalWorkflowNameOverridesForTask).length > 0
+        ? { canonical_workflow_name_overrides: canonicalWorkflowNameOverridesForTask }
+        : {}),
       canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
       ...(Object.keys(canonicalBlockedReuseWorkflowNames).length > 0
         ? { canonical_governance_blocked_reuse_workflow_names: canonicalBlockedReuseWorkflowNames }
@@ -835,6 +855,7 @@ export function sessionGovernanceSelectionContexts(readyTasks = []) {
       workflow_template_id: item?.workflow_template_id,
       workflow_name: item?.workflow_name,
       canonical_workflow_name: item?.canonical_workflow_name,
+      canonical_workflow_name_overrides: item?.canonical_workflow_name_overrides,
       canonical_selection_context_workflow_names: item?.canonical_selection_context_workflow_names,
       selection_context: item?.governance_selection_context,
     });
