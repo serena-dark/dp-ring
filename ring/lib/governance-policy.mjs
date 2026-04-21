@@ -405,17 +405,34 @@ export function governanceBatchSignature(waitingTasks = []) {
   return `${reasonSignature}:${identityFingerprint}`;
 }
 
+function blockedReuseSessionEntryKey(entry) {
+  return [
+    trimString(entry?.task_id),
+    trimString(entry?.workflow_template_id),
+    trimString(entry?.reason),
+    trimString(entry?.checkpoint_id),
+    trimString(entry?.adoption_status),
+    nonNegativeInteger(entry?.branch_budget),
+    trimString(entry?.workflow_tightness),
+    trimString(entry?.oversight_strength),
+  ].join('|');
+}
+
 export function buildSessionGovernanceContext(waitingTasks = []) {
-  const blockedReuse = waitingTasks.flatMap((item) => {
+  const blockedReuse = [];
+  const seenBlockedReuse = new Set();
+  for (const item of waitingTasks) {
     const taskId = trimString(item?.task_id);
     const taskName = trimString(item?.task_name) || null;
     if (!taskId || !Array.isArray(item?.governance_blocked_reuse)) {
-      return [];
+      continue;
     }
-    return item.governance_blocked_reuse
-      .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
-      .filter((candidate) => candidate.id && candidate.name && candidate.reason)
-      .map((candidate) => ({
+    for (const rawCandidate of item.governance_blocked_reuse) {
+      const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
+      if (!candidate.id || !candidate.name || !candidate.reason) {
+        continue;
+      }
+      const entry = {
         task_id: taskId,
         task_name: taskName,
         workflow_template_id: candidate.id,
@@ -427,8 +444,15 @@ export function buildSessionGovernanceContext(waitingTasks = []) {
         workflow_tightness: candidate.workflow_tightness,
         oversight_strength: candidate.oversight_strength,
         detail: describeWorkflowReuseGovernanceBlock(candidate),
-      }));
-  });
+      };
+      const entryKey = blockedReuseSessionEntryKey(entry);
+      if (seenBlockedReuse.has(entryKey)) {
+        continue;
+      }
+      seenBlockedReuse.add(entryKey);
+      blockedReuse.push(entry);
+    }
+  }
 
   if (blockedReuse.length === 0) {
     return null;
