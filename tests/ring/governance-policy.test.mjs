@@ -727,6 +727,52 @@ describe('governance policy', () => {
     assert.equal(buildSessionGovernanceContext([{ task_id: 'task-clean', governance_blocked_reuse: [] }]), null);
   });
 
+  it('deduplicates repeated blocked reuse entries before persisting session governance context', () => {
+    const governanceContext = buildSessionGovernanceContext([
+      {
+        task_id: 'task-dup',
+        task_name: 'Duplicate Task',
+        governance_blocked_reuse: [
+          {
+            id: ' wf-dup ',
+            name: ' Duplicate Workflow ',
+            reason: ' warm_semantic_lineage ',
+            checkpoint_id: ' cp-dup ',
+            adoption_status: ' synthesized ',
+          },
+          {
+            workflow_template_id: 'wf-dup',
+            workflow_name: 'Duplicate Workflow',
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-dup',
+            adoption_status: 'synthesized',
+          },
+        ],
+      },
+    ]);
+
+    assert.deepEqual(governanceContext, {
+      source: 'governance_blocked_reuse',
+      isolated_batch: true,
+      batch_signature: governanceContext?.batch_signature,
+      reasons: ['warm_semantic_lineage'],
+      blocked_reuse: [{
+        task_id: 'task-dup',
+        task_name: 'Duplicate Task',
+        workflow_template_id: 'wf-dup',
+        workflow_name: 'Duplicate Workflow',
+        reason: 'warm_semantic_lineage',
+        checkpoint_id: 'cp-dup',
+        adoption_status: 'synthesized',
+        branch_budget: null,
+        workflow_tightness: null,
+        oversight_strength: null,
+        detail: 'wf-dup (Duplicate Workflow) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
+      }],
+    });
+    assert.match(governanceContext?.batch_signature ?? '', /^warm_semantic_lineage:[a-f0-9]{12}$/);
+  });
+
   it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
     const warmLineageA = buildSessionGovernanceContext([
       {
