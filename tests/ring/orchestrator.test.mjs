@@ -1786,7 +1786,7 @@ ${workflowPlan}
     }
   });
 
-  it('surfaces effective-force governance selection context through workflow preparation retry, finalization, and launch', async () => {
+  it('refreshes effective-force governance selection labels in the stored session-dispatch packet before launch', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -2254,19 +2254,73 @@ ${workflowPlan}
         /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
       );
 
+      const renamedDocumentationTaskName = 'Governed effective-force workflow guidance (renamed before launch)';
+      const renamedPreferredWorkflowName = 'Guidance Docs High Force Policy Carryover Renamed';
+      const renamedComparedWorkflowName = 'Guidance Docs Low Force Policy Carryover Renamed';
+
+      const documentationTaskRecord = await isolatedRing.read('task', finalizedDocumentationTask.task_id);
+      const documentationTaskUpdate = await isolatedRing.update('task', finalizedDocumentationTask.task_id, {
+        data: {
+          ...documentationTaskRecord.data,
+          name: renamedDocumentationTaskName,
+        },
+      });
+      assert.equal(documentationTaskUpdate.ok, true, JSON.stringify(documentationTaskUpdate.errors));
+
+      const preferredWorkflowRecord = await isolatedRing.read(
+        'workflow',
+        finalizedDocumentationTask.workflow_template_id,
+      );
+      const preferredWorkflowUpdate = await isolatedRing.update(
+        'workflow',
+        finalizedDocumentationTask.workflow_template_id,
+        {
+          data: {
+            ...preferredWorkflowRecord.data,
+            name: renamedPreferredWorkflowName,
+          },
+        },
+      );
+      assert.equal(preferredWorkflowUpdate.ok, true, JSON.stringify(preferredWorkflowUpdate.errors));
+
+      const comparedWorkflowId = effectiveForceSelectionContext.compared.workflow_id;
+      const comparedWorkflowRecord = await isolatedRing.read('workflow', comparedWorkflowId);
+      const comparedWorkflowUpdate = await isolatedRing.update('workflow', comparedWorkflowId, {
+        data: {
+          ...comparedWorkflowRecord.data,
+          name: renamedComparedWorkflowName,
+        },
+      });
+      assert.equal(comparedWorkflowUpdate.ok, true, JSON.stringify(comparedWorkflowUpdate.errors));
+
       await isolatedRing.orchestrator.tick();
       const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
       assert.equal(launchedJob.status, 'session_dispatched');
       assert.ok(launchedJob.session_dispatch.session_id);
+      assert.ok(
+        launchedJob.session_dispatch.dispatch.packet.body.includes(
+          `- ${finalizedDocumentationTask.task_id}: ${renamedDocumentationTaskName} -> ${finalizedDocumentationTask.workflow_template_id}`,
+        ),
+      );
+      assert.match(
+        launchedJob.session_dispatch.dispatch.packet.body,
+        new RegExp(
+          `preferred: ${finalizedDocumentationTask.workflow_template_id} \\(${renamedPreferredWorkflowName}\\)`
+            + ` .* compared: ${comparedWorkflowId} \\(${renamedComparedWorkflowName}\\)`,
+        ),
+      );
 
       const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      const expectedSelectionContext = structuredClone(effectiveForceSelectionContext);
+      expectedSelectionContext.preferred.workflow_name = renamedPreferredWorkflowName;
+      expectedSelectionContext.compared.workflow_name = renamedComparedWorkflowName;
       assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
         {
           task_id: finalizedDocumentationTask.task_id,
-          task_name: finalizedDocumentationTask.task_name,
+          task_name: renamedDocumentationTaskName,
           workflow_template_id: finalizedDocumentationTask.workflow_template_id,
-          workflow_name: finalizedDocumentationTask.workflow_name,
-          selection_context: effectiveForceSelectionContext,
+          workflow_name: renamedPreferredWorkflowName,
+          selection_context: expectedSelectionContext,
         },
       ]);
     } finally {

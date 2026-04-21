@@ -16,6 +16,7 @@ import {
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
+  sessionGovernanceSelectionContexts,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -342,6 +343,30 @@ async function readyTasksWithCanonicalSessionLabels(ring, readyTasks = []) {
       canonical_task_name: taskNameById.get(taskId) || trimString(item?.task_name) || null,
       canonical_workflow_name: workflowNameById.get(workflowTemplateId) || trimString(item?.workflow_name) || null,
       canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
+    };
+  });
+}
+
+function readyTasksWithCanonicalDispatchLabels(readyTasks = []) {
+  const selectionContextByTaskId = new Map(
+    sessionGovernanceSelectionContexts(readyTasks).map((entry) => [trimString(entry?.task_id), entry]),
+  );
+
+  return readyTasks.map((item) => {
+    const taskId = trimString(item?.task_id);
+    const selectionContextEntry = selectionContextByTaskId.get(taskId) ?? null;
+    return {
+      ...item,
+      task_name: selectionContextEntry?.task_name
+        || trimString(item?.canonical_task_name)
+        || trimString(item?.task_name)
+        || null,
+      workflow_name: selectionContextEntry?.workflow_name
+        || trimString(item?.canonical_workflow_name)
+        || trimString(item?.workflow_name)
+        || null,
+      governance_selection_context:
+        selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
     };
   });
 }
@@ -4247,6 +4272,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         ? await readDispatchBundle(bundleOrId)
         : normalizeDispatchBundle(bundleOrId);
     const next = clone(job);
+    const rawWaitingTasks = Array.isArray(bundle.workflows.waiting_tasks)
+      ? bundle.workflows.waiting_tasks
+      : [];
+    const canonicalWaitingTasks = rawWaitingTasks.length > 0
+      ? readyTasksWithCanonicalDispatchLabels(
+          await readyTasksWithCanonicalSessionLabels(ring, rawWaitingTasks),
+        )
+      : rawWaitingTasks;
     next.adaptive_dispatch = {
       bundle_id: bundle.id,
       status: bundle.status,
@@ -4280,10 +4313,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         ? 'planning'
         : ['workflow_resolution_failed'].includes(bundle.status)
         ? 'rework_required'
-        : bundle.workflows.waiting_tasks.length > 0 || bundle.workflows.status === 'completed'
+        : canonicalWaitingTasks.length > 0 || bundle.workflows.status === 'completed'
         ? 'completed'
         : next.workflow_preparation.status;
-    next.workflow_preparation.waiting_tasks = bundle.workflows.waiting_tasks ?? [];
+    next.workflow_preparation.waiting_tasks = canonicalWaitingTasks;
     next.workflow_preparation.generated_workflow_ids =
       bundle.workflows.generated_workflow_ids ?? [];
     next.workflow_preparation.reused_workflow_ids =
@@ -4293,7 +4326,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     next.workflow_preparation.parse_error = bundle.workflows.error ?? null;
 
     next.session_dispatch.waiting_task_ids =
-      bundle.workflows.waiting_tasks?.map((item) => item.task_id) ?? [];
+      canonicalWaitingTasks.map((item) => item.task_id);
     next.session_dispatch.session_id = bundle.batching.session_id ?? null;
     next.session_dispatch.workflow_run_ids =
       bundle.batching.workflow_run_ids ?? [];
@@ -4306,6 +4339,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         : ['launch_failed'].includes(bundle.status)
         ? 'pending'
         : next.session_dispatch.status;
+    if (canonicalWaitingTasks.length > 0 && next.session_dispatch.dispatch.packet) {
+      const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
+      if (requirement) {
+        next.session_dispatch.dispatch.packet = {
+          ...next.session_dispatch.dispatch.packet,
+          ...buildSessionBatchPacket(job, requirement, canonicalWaitingTasks),
+        };
+      }
+    }
 
     let transitioned = false;
     async function commitTransition(targetStatus, actor, reason, note, stage) {
@@ -5228,6 +5270,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       });
       const workflowRunIds = [];
       const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(ring, readyTasks);
+      const readyTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
+        readyTasksForSessionContext,
+      );
       const governanceContext = buildSessionGovernanceContext(readyTasks);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
 
@@ -5354,6 +5399,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.session_id = sessionId;
       next.session_dispatch.workflow_run_ids = workflowRunIds;
       next.session_dispatch.launched_at = nowIso();
+      next.session_dispatch.dispatch.packet = {
+        ...next.session_dispatch.dispatch.packet,
+        ...buildSessionBatchPacket(job, requirement, readyTasksForDispatchPacket),
+      };
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
       next.workflow_preparation.waiting_tasks = next.workflow_preparation.waiting_tasks.map(
         (item) =>
