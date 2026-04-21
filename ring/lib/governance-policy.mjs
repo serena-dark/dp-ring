@@ -230,6 +230,135 @@ export function normalizeWorkflowReuseGovernanceBlock(block) {
   };
 }
 
+function normalizeCanonicalWorkflowNameMap(overrides) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(overrides)
+      .map(([workflowTemplateId, workflowName]) => [
+        trimString(workflowTemplateId),
+        trimString(workflowName),
+      ])
+      .filter(([workflowTemplateId, workflowName]) => workflowTemplateId && workflowName),
+  );
+}
+
+function canonicalWorkflowNameOverrides(entry) {
+  const workflowTemplateId = trimString(entry?.workflow_template_id);
+  const canonicalWorkflowName = trimString(entry?.canonical_workflow_name);
+
+  return {
+    ...normalizeCanonicalWorkflowNameMap(entry?.canonical_selection_context_workflow_names),
+    ...normalizeCanonicalWorkflowNameMap(entry?.canonical_governance_blocked_reuse_workflow_names),
+    ...(workflowTemplateId && canonicalWorkflowName
+      ? { [workflowTemplateId]: canonicalWorkflowName }
+      : {}),
+  };
+}
+
+function waitingTaskSelectionContextWorkflowIds(item) {
+  return uniqueTrimmedStrings([
+    item?.workflow_template_id,
+    item?.governance_selection_context?.preferred?.workflow_id,
+    item?.governance_selection_context?.compared?.workflow_id,
+  ]);
+}
+
+function waitingTaskBlockedReuseWorkflowIds(item) {
+  if (!Array.isArray(item?.governance_blocked_reuse)) {
+    return [];
+  }
+
+  return uniqueTrimmedStrings(
+    item.governance_blocked_reuse.map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate)?.id),
+  );
+}
+
+export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], readArtifact = async () => null) {
+  const taskIds = uniqueTrimmedStrings(waitingTasks.map((item) => item?.task_id));
+  const workflowTemplateIds = uniqueTrimmedStrings(waitingTasks.flatMap((item) => [
+    item?.workflow_template_id,
+    ...waitingTaskSelectionContextWorkflowIds(item),
+    ...waitingTaskBlockedReuseWorkflowIds(item),
+  ]));
+
+  const [loadedTaskResults, loadedWorkflowResults] = await Promise.all([
+    Promise.allSettled(taskIds.map((taskId) => readArtifact('task', taskId))),
+    Promise.allSettled(workflowTemplateIds.map((workflowTemplateId) => readArtifact('workflow', workflowTemplateId))),
+  ]);
+
+  const taskNameById = new Map();
+  for (const result of loadedTaskResults) {
+    if (result.status !== 'fulfilled') {
+      continue;
+    }
+    const taskId = trimString(result.value?.id);
+    const taskName = trimString(result.value?.data?.name);
+    if (taskId && taskName) {
+      taskNameById.set(taskId, taskName);
+    }
+  }
+
+  const workflowNameById = new Map();
+  for (const result of loadedWorkflowResults) {
+    if (result.status !== 'fulfilled') {
+      continue;
+    }
+    const workflowTemplateId = trimString(result.value?.id);
+    const workflowName = trimString(result.value?.data?.name);
+    if (workflowTemplateId && workflowName) {
+      workflowNameById.set(workflowTemplateId, workflowName);
+    }
+  }
+
+  return waitingTasks.map((item) => {
+    const taskId = trimString(item?.task_id);
+    const workflowTemplateId = trimString(item?.workflow_template_id);
+    const canonicalSelectionContextWorkflowNames = {
+      ...normalizeCanonicalWorkflowNameMap(item?.canonical_selection_context_workflow_names),
+      ...Object.fromEntries(
+        waitingTaskSelectionContextWorkflowIds(item)
+          .map((candidateWorkflowTemplateId) => [
+            candidateWorkflowTemplateId,
+            workflowNameById.get(candidateWorkflowTemplateId) ?? null,
+          ])
+          .filter(([, workflowName]) => Boolean(workflowName)),
+      ),
+    };
+    const canonicalBlockedReuseWorkflowNames = {
+      ...normalizeCanonicalWorkflowNameMap(item?.canonical_governance_blocked_reuse_workflow_names),
+      ...Object.fromEntries(
+        waitingTaskBlockedReuseWorkflowIds(item)
+          .map((candidateWorkflowTemplateId) => [
+            candidateWorkflowTemplateId,
+            workflowNameById.get(candidateWorkflowTemplateId) ?? null,
+          ])
+          .filter(([, workflowName]) => Boolean(workflowName)),
+      ),
+    };
+
+    return {
+      ...item,
+      canonical_task_name:
+        taskNameById.get(taskId)
+        || trimString(item?.canonical_task_name)
+        || trimString(item?.task_name)
+        || null,
+      canonical_workflow_name:
+        workflowNameById.get(workflowTemplateId)
+        || trimString(item?.canonical_workflow_name)
+        || trimString(item?.workflow_name)
+        || null,
+      canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
+      ...(Object.keys(canonicalBlockedReuseWorkflowNames).length > 0
+        ? { canonical_governance_blocked_reuse_workflow_names: canonicalBlockedReuseWorkflowNames }
+        : {}),
+    };
+  });
+}
+
 export function workflowReuseGovernanceBlock(run, checkpoint = null) {
   const checkpointPolicy = checkpointAutomaticReusePolicyState(checkpoint);
   const checkpointId = checkpointPolicy.checkpointId
@@ -423,27 +552,32 @@ export function buildSessionGovernanceContext(waitingTasks = []) {
   const seenBlockedReuse = new Set();
   for (const item of waitingTasks) {
     const taskId = trimString(item?.task_id);
-    const taskName = trimString(item?.task_name) || null;
+    const taskName = trimString(item?.canonical_task_name) ?? trimString(item?.task_name);
+    const workflowNameOverrides = canonicalWorkflowNameOverrides(item);
     if (!taskId || !Array.isArray(item?.governance_blocked_reuse)) {
       continue;
     }
     for (const rawCandidate of item.governance_blocked_reuse) {
       const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
-      if (!candidate.id || !candidate.name || !candidate.reason) {
+      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
+      if (!candidate.id || !workflowName || !candidate.reason) {
         continue;
       }
       const entry = {
         task_id: taskId,
         task_name: taskName,
         workflow_template_id: candidate.id,
-        workflow_name: candidate.name,
+        workflow_name: workflowName,
         reason: candidate.reason,
         checkpoint_id: candidate.checkpoint_id,
         adoption_status: candidate.adoption_status,
         branch_budget: candidate.branch_budget,
         workflow_tightness: candidate.workflow_tightness,
         oversight_strength: candidate.oversight_strength,
-        detail: describeWorkflowReuseGovernanceBlock(candidate),
+        detail: describeWorkflowReuseGovernanceBlock({
+          ...candidate,
+          name: workflowName,
+        }),
       };
       const entryKey = blockedReuseSessionEntryKey(entry);
       if (seenBlockedReuse.has(entryKey)) {
@@ -657,12 +791,7 @@ function selectionContextSessionEntry(entry) {
   const taskId = trimString(entry?.task_id);
   const workflowTemplateId = trimString(entry?.workflow_template_id);
   const canonicalWorkflowName = trimString(entry?.canonical_workflow_name);
-  const selectionContextWorkflowNames = {
-    ...(entry?.canonical_selection_context_workflow_names ?? {}),
-    ...(workflowTemplateId && canonicalWorkflowName
-      ? { [workflowTemplateId]: canonicalWorkflowName }
-      : {}),
-  };
+  const selectionContextWorkflowNames = canonicalWorkflowNameOverrides(entry);
   const selectionContext = canonicalizeSelectionContextWorkflowLabels(
     normalizeGovernanceSelectionContext(entry?.selection_context),
     selectionContextWorkflowNames,

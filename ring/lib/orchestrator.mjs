@@ -17,6 +17,7 @@ import {
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
+  hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -266,85 +267,6 @@ function normalizeStringList(value) {
 
 function trimString(value) {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-async function readyTasksWithCanonicalSessionLabels(ring, readyTasks = []) {
-  const taskIds = [...new Set(
-    readyTasks
-      .map((item) => trimString(item?.task_id))
-      .filter(Boolean),
-  )];
-  const workflowTemplateIds = [...new Set(
-    readyTasks
-      .flatMap((item) => [
-        trimString(item?.workflow_template_id),
-        trimString(item?.governance_selection_context?.preferred?.workflow_id),
-        trimString(item?.governance_selection_context?.compared?.workflow_id),
-      ])
-      .filter(Boolean),
-  )];
-
-  const [loadedTaskResults, loadedWorkflowResults] = await Promise.all([
-    Promise.allSettled(taskIds.map((taskId) => ring.read('task', taskId))),
-    Promise.allSettled(workflowTemplateIds.map((workflowTemplateId) => ring.read('workflow', workflowTemplateId))),
-  ]);
-
-  const taskNameById = new Map();
-  for (const result of loadedTaskResults) {
-    if (result.status !== 'fulfilled') {
-      continue;
-    }
-    const task = result.value;
-    const taskId = trimString(task?.id);
-    if (!taskId) {
-      continue;
-    }
-    const taskName = trimString(task?.data?.name);
-    if (taskName) {
-      taskNameById.set(taskId, taskName);
-    }
-  }
-
-  const workflowNameById = new Map();
-  for (const result of loadedWorkflowResults) {
-    if (result.status !== 'fulfilled') {
-      continue;
-    }
-    const workflow = result.value;
-    const workflowTemplateId = trimString(workflow?.id);
-    if (!workflowTemplateId) {
-      continue;
-    }
-    const workflowName = trimString(workflow?.data?.name);
-    if (workflowName) {
-      workflowNameById.set(workflowTemplateId, workflowName);
-    }
-  }
-
-  return readyTasks.map((item) => {
-    const taskId = trimString(item?.task_id);
-    const workflowTemplateId = trimString(item?.workflow_template_id);
-    const canonicalSelectionContextWorkflowNames = Object.fromEntries(
-      [
-        workflowTemplateId,
-        trimString(item?.governance_selection_context?.preferred?.workflow_id),
-        trimString(item?.governance_selection_context?.compared?.workflow_id),
-      ]
-        .filter(Boolean)
-        .map((candidateWorkflowTemplateId) => [
-          candidateWorkflowTemplateId,
-          workflowNameById.get(candidateWorkflowTemplateId) || null,
-        ])
-        .filter(([, workflowName]) => Boolean(workflowName)),
-    );
-    return {
-      ...item,
-      // Best-effort label enrichment: do not let missing metadata reads block session launch.
-      canonical_task_name: taskNameById.get(taskId) || trimString(item?.task_name) || null,
-      canonical_workflow_name: workflowNameById.get(workflowTemplateId) || trimString(item?.workflow_name) || null,
-      canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames,
-    };
-  });
 }
 
 async function workflowRunCheckpointContext(ring, workflowRun, activeCheckpoint = null) {
@@ -4253,7 +4175,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       : [];
     const canonicalWaitingTasks = rawWaitingTasks.length > 0
       ? readyTasksWithCanonicalDispatchLabels(
-          await readyTasksWithCanonicalSessionLabels(ring, rawWaitingTasks),
+          await readyTasksWithCanonicalSessionLabels(
+            rawWaitingTasks,
+            (kind, id) => ring.read(kind, id),
+          ),
         )
       : rawWaitingTasks;
     next.adaptive_dispatch = {
@@ -5245,11 +5170,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${job.requirement_name} dispatch batch`,
       });
       const workflowRunIds = [];
-      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(ring, readyTasks);
+      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+        readyTasks,
+        (kind, id) => ring.read(kind, id),
+      );
       const readyTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
         readyTasksForSessionContext,
       );
-      const governanceContext = buildSessionGovernanceContext(readyTasks);
+      const governanceContext = buildSessionGovernanceContext(readyTasksForSessionContext);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
 
       const createSessionResult = await ring.create('session', {
@@ -5481,8 +5409,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${requirement.data.name} bundle batch`,
       });
       const workflowRunIds = [];
-      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(ring, readyTasks);
-      const governanceContext = buildSessionGovernanceContext(readyTasks);
+      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+        readyTasks,
+        (kind, id) => ring.read(kind, id),
+      );
+      const governanceContext = buildSessionGovernanceContext(readyTasksForSessionContext);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
 
       const createSessionResult = await ring.create('session', {
