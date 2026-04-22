@@ -1,9 +1,9 @@
 import { execFile } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { warmSemanticLineageState } from './governance-policy.mjs';
+import { signedWorkflowRunHeaders } from './workflow-run-callback.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -604,20 +604,10 @@ async function applyTaskFileChanges(repoRoot, task, openai) {
 }
 
 function signedHeaders(workflowRun, payload, workerId) {
-  const timestamp = nowIso();
-  const secret = workflowRun.data.callback?.signing_secret;
-  const signature = createHmac('sha256', secret)
-    .update(`${timestamp}.${JSON.stringify(payload)}`)
-    .digest('hex');
-  return {
-    headers: {
-      authorization: `Bearer ${workflowRun.data.callback.token}`,
-      'x-ring-timestamp': timestamp,
-      'x-ring-signature': `sha256=${signature}`,
-      'x-ring-key-version': String(workflowRun.data.callback.key_version ?? 1),
-      'x-ring-worker-id': workerId,
-    },
-  };
+  return signedWorkflowRunHeaders(workflowRun, payload, {
+    workerId,
+    includeKeyVersion: true,
+  });
 }
 
 function supportsProtocol(worker, protocol) {

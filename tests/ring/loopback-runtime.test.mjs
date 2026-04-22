@@ -1,12 +1,12 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
+import { signedWorkflowRunHeaders } from '../../ring/lib/workflow-run-callback.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,29 +17,8 @@ async function run(command, args, cwd) {
   });
 }
 
-function signedHeaders(
-  workflowRun,
-  payload,
-  {
-    timestamp = new Date().toISOString(),
-    workerId = null,
-    includeKeyVersion = false,
-  } = {},
-) {
-  const signature = createHmac('sha256', workflowRun.data.callback.signing_secret)
-    .update(`${timestamp}.${JSON.stringify(payload)}`)
-    .digest('hex');
-  return {
-    headers: {
-      authorization: `Bearer ${workflowRun.data.callback.token}`,
-      'x-ring-timestamp': timestamp,
-      'x-ring-signature': `sha256=${signature}`,
-      ...(workerId ? { 'x-ring-worker-id': workerId } : {}),
-      ...(includeKeyVersion
-        ? { 'x-ring-key-version': String(workflowRun.data.callback.key_version) }
-        : {}),
-    },
-  };
+function signedHeaders(workflowRun, payload, options = {}) {
+  return signedWorkflowRunHeaders(workflowRun, payload, options);
 }
 
 describe('loopback runtime', async () => {

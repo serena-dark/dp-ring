@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import {
@@ -32,6 +32,7 @@ import {
   createValidationResultArtifact,
   summarizeValidationResults,
 } from './validation-artifacts.mjs';
+import { computeCallbackSignature } from './workflow-run-callback.mjs';
 
 const DEFAULT_RUNNER_CONFIG = {
   report_timeout_ms: 120_000,
@@ -149,16 +150,6 @@ function headerValue(headers, name) {
     return value[0] ?? null;
   }
   return typeof value === 'string' ? value : null;
-}
-
-function callbackSignaturePayload(timestamp, payload) {
-  return `${timestamp}.${JSON.stringify(payload ?? {})}`;
-}
-
-function computeCallbackSignature(secret, timestamp, payload) {
-  return createHmac('sha256', secret)
-    .update(callbackSignaturePayload(timestamp, payload))
-    .digest('hex');
 }
 
 function signaturesMatch(expected, actual) {
