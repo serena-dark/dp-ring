@@ -1279,6 +1279,26 @@ describe('governance policy', () => {
     );
   });
 
+  it('describes waiting-task governance with canonical blocked-reuse workflow labels', () => {
+    assert.equal(
+      describeWaitingTaskGovernance({
+        workflow_template_id: ' wf-roomier-template ',
+        workflow_name: ' Roomier Template (Legacy) ',
+        canonical_workflow_name: ' Roomier Template Renamed ',
+        canonical_governance_blocked_reuse_workflow_names: {
+          'wf-lineage-hold': ' Warm Lineage Template Renamed ',
+        },
+        governance_blocked_reuse: [{
+          id: ' wf-lineage-hold ',
+          name: ' Warm Lineage Template (Legacy) ',
+          reason: ' warm_semantic_lineage ',
+          checkpoint_id: ' cp-lineage ',
+        }],
+      }),
+      'wf-lineage-hold (Warm Lineage Template Renamed) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
+    );
+  });
+
   it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
     const warmLineageA = buildSessionGovernanceContext([
       {

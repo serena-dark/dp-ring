@@ -514,8 +514,31 @@ export function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource
     : [];
 }
 
+function canonicalizeWaitingTaskGovernanceBlockedReuse(waitingTask) {
+  if (!Array.isArray(waitingTask?.governance_blocked_reuse)) {
+    return [];
+  }
+
+  const workflowNameOverrides = canonicalWorkflowNameOverrides(waitingTask);
+  return waitingTask.governance_blocked_reuse
+    .map((rawCandidate) => {
+      const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
+      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
+      if (!candidate.id || !workflowName || !candidate.reason) {
+        return null;
+      }
+      return {
+        ...candidate,
+        name: workflowName,
+      };
+    })
+    .filter(Boolean);
+}
+
 export function describeWaitingTaskGovernance(waitingTask) {
-  return describeWorkflowReuseGovernanceBlockList(waitingTask?.governance_blocked_reuse ?? []);
+  return describeWorkflowReuseGovernanceBlockList(
+    canonicalizeWaitingTaskGovernanceBlockedReuse(waitingTask),
+  );
 }
 
 function governanceBatchIdentityEntries(waitingTasks = []) {
@@ -573,31 +596,22 @@ export function buildSessionGovernanceContext(waitingTasks = []) {
   for (const item of waitingTasks) {
     const taskId = trimString(item?.task_id);
     const taskName = trimString(item?.canonical_task_name) ?? trimString(item?.task_name);
-    const workflowNameOverrides = canonicalWorkflowNameOverrides(item);
-    if (!taskId || !Array.isArray(item?.governance_blocked_reuse)) {
+    if (!taskId) {
       continue;
     }
-    for (const rawCandidate of item.governance_blocked_reuse) {
-      const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
-      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
-      if (!candidate.id || !workflowName || !candidate.reason) {
-        continue;
-      }
+    for (const candidate of canonicalizeWaitingTaskGovernanceBlockedReuse(item)) {
       const entry = {
         task_id: taskId,
         task_name: taskName,
         workflow_template_id: candidate.id,
-        workflow_name: workflowName,
+        workflow_name: candidate.name,
         reason: candidate.reason,
         checkpoint_id: candidate.checkpoint_id,
         adoption_status: candidate.adoption_status,
         branch_budget: candidate.branch_budget,
         workflow_tightness: candidate.workflow_tightness,
         oversight_strength: candidate.oversight_strength,
-        detail: describeWorkflowReuseGovernanceBlock({
-          ...candidate,
-          name: workflowName,
-        }),
+        detail: describeWorkflowReuseGovernanceBlock(candidate),
       };
       const entryKey = blockedReuseSessionEntryKey(entry);
       if (seenBlockedReuse.has(entryKey)) {
