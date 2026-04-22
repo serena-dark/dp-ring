@@ -642,6 +642,34 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects a governed session context with an invalid governance source', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.governance_context.source = 'custom_override';
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session context with an empty batch signature', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.governance_context.batch_signature = '';
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session selection context with an unknown basis', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.context_injected.governance_selection_contexts[0].selection_context.basis = 'governance_rank_override';
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session context with an invalid workflow tightness label', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.governance_context.blocked_reuse[0].workflow_tightness = 'chaotic';
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
     it('rejects a governed session selection context when task linkage is missing', () => {
       const doc = buildGovernedSessionDoc();
       delete doc.data.context_injected.governance_selection_contexts[0].task_id;

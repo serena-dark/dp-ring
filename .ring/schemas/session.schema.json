@@ -56,7 +56,13 @@
                     "additionalProperties": false,
                     "required": ["basis", "preferred", "compared"],
                     "properties": {
-                      "basis": { "type": "string" },
+                      "basis": {
+                        "type": "string",
+                        "enum": [
+                          "governance_minimize_policy_carryover",
+                          "governance_prefer_effective_force"
+                        ]
+                      },
                       "preferred": {
                         "type": "object",
                         "additionalProperties": false,
@@ -100,12 +106,15 @@
           "additionalProperties": false,
           "required": ["source", "isolated_batch", "batch_signature", "reasons", "blocked_reuse"],
           "properties": {
-            "source": { "type": "string" },
+            "source": { "const": "governance_blocked_reuse" },
             "isolated_batch": { "type": "boolean" },
-            "batch_signature": { "type": ["string", "null"] },
+            "batch_signature": { "type": "string", "minLength": 1 },
             "reasons": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string",
+                "pattern": "^(warm_semantic_lineage|checkpoint_[a-z0-9_]+)$"
+              },
               "minItems": 1
             },
             "blocked_reuse": {
@@ -120,12 +129,17 @@
                   "task_name": { "type": ["string", "null"] },
                   "workflow_template_id": { "type": "string" },
                   "workflow_name": { "type": "string" },
-                  "reason": { "type": "string" },
+                  "reason": {
+                    "type": "string",
+                    "pattern": "^(warm_semantic_lineage|checkpoint_[a-z0-9_]+)$"
+                  },
                   "checkpoint_id": { "type": ["string", "null"] },
-                  "adoption_status": { "type": ["string", "null"] },
+                  "adoption_status": {
+                    "enum": [null, "candidate", "mainline", "discarded", "synthesized", "archived"]
+                  },
                   "branch_budget": { "type": ["integer", "null"], "minimum": 0 },
-                  "workflow_tightness": { "type": ["string", "null"] },
-                  "oversight_strength": { "type": ["string", "null"] },
+                  "workflow_tightness": { "enum": [null, "loose", "balanced", "tight"] },
+                  "oversight_strength": { "enum": [null, "weak", "normal", "strong"] },
                   "detail": { "type": "string" }
                 }
               }
