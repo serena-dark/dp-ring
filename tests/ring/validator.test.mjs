@@ -89,6 +89,70 @@ function buildValidationReportDoc() {
   };
 }
 
+function buildTaskDoc() {
+  return {
+    id: 't1-test',
+    type: 'task',
+    version: 1,
+    created_at: '2026-04-08T00:00:00Z',
+    updated_at: '2026-04-08T00:00:00Z',
+    created_by: 'test',
+    session_id: null,
+    status: 'pending',
+    data: {
+      name: 'Test Task',
+      description: 'A test',
+      task_type: 'feature-implementation',
+      requirement_id: 'r1-test',
+      milestone_id: 'r1m1-test',
+      scope: {
+        target_type: 'module',
+        target_path: 'ring-gui/components',
+        repo_root: '.',
+        file_paths: ['ring-gui/components/Layout.tsx'],
+      },
+      execution: {
+        judge_agent_id: null,
+        review_status: 'pending',
+        completion_commit_sha: null,
+        changed_files: [],
+        scope_match: null,
+        build_required: true,
+        build_command: 'npm run build',
+        build_status: 'pending',
+        cleanup_paths: ['tmp/task'],
+        cleanup_status: 'pending',
+        merge_status: 'blocked',
+        summary_path: null,
+        review_packet: null,
+        failure_feedback_id: null,
+        failure_distillation_id: null,
+        completion_distillation_id: null,
+        last_error: null,
+        checked_at: null,
+        reviewed_at: null,
+        note: null,
+      },
+      replanning: {
+        replanner_agent_id: 'task-replanner',
+        status: 'awaiting_replan',
+        source_failure: 'scope_mismatch',
+        packet: {
+          agent_id: 'task-replanner',
+          subject: 'Replan task',
+          body: 'Decide whether this task should be redispatched.',
+          dispatched_at: '2026-04-08T00:00:00Z',
+        },
+        successor_task_id: null,
+        parent_task_id: null,
+        decision_note: null,
+        reviewed_at: null,
+      },
+      acceptance_criteria: [{ id: 'ac1', description: 'It works', satisfied: false }],
+    },
+  };
+}
+
 function buildWorkflowRunDoc() {
   return {
     id: 'run-1-test',
@@ -310,59 +374,15 @@ describe('validator', async () => {
     });
 
     it('accepts a valid task', () => {
-      const doc = {
-        id: 't1-test', type: 'task', version: 1,
-        created_at: '2026-04-08T00:00:00Z', updated_at: '2026-04-08T00:00:00Z',
-        created_by: 'test', session_id: null, status: 'pending',
-        data: {
-          name: 'Test Task', description: 'A test', task_type: 'feature-implementation',
-          requirement_id: 'r1-test', milestone_id: 'r1m1-test',
-          scope: {
-            target_type: 'module',
-            target_path: 'ring-gui/components',
-            repo_root: '.',
-            file_paths: ['ring-gui/components/Layout.tsx'],
-          },
-          execution: {
-            judge_agent_id: null,
-            review_status: 'pending',
-            completion_commit_sha: null,
-            changed_files: [],
-            scope_match: null,
-            build_required: true,
-            build_command: 'npm run build',
-            build_status: 'pending',
-            cleanup_paths: ['tmp/task'],
-            cleanup_status: 'pending',
-            merge_status: 'blocked',
-            summary_path: null,
-            review_packet: null,
-            failure_feedback_id: null,
-            failure_distillation_id: null,
-            completion_distillation_id: null,
-            last_error: null,
-            checked_at: null,
-            reviewed_at: null,
-            note: null,
-          },
-          replanning: {
-            replanner_agent_id: 'task-replanner',
-            status: 'awaiting_replan',
-            source_failure: 'scope_mismatch',
-            packet: {
-              agent_id: 'task-replanner',
-              subject: 'Replan task',
-              body: 'Decide whether this task should be redispatched.',
-              dispatched_at: '2026-04-08T00:00:00Z',
-            },
-            successor_task_id: null,
-            parent_task_id: null,
-            decision_note: null,
-            reviewed_at: null,
-          },
-          acceptance_criteria: [{ id: 'ac1', description: 'It works', satisfied: false }],
-        },
-      };
+      const doc = buildTaskDoc();
+      const { valid, errors } = validator.validate('task', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a valid task replanning payload for judge rejection', () => {
+      const doc = buildTaskDoc();
+      doc.data.execution.review_status = 'rejected';
+      doc.data.replanning.source_failure = 'review_rejected';
       const { valid, errors } = validator.validate('task', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
@@ -687,6 +707,13 @@ describe('validator', async () => {
           requirement_id: 'r1', milestone_id: 'm1', acceptance_criteria: [],
         },
       };
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a task replanning payload with an unknown source failure reason', () => {
+      const doc = buildTaskDoc();
+      doc.data.replanning.source_failure = 'mystery_failure';
       const { valid } = validator.validate('task', doc);
       assert.equal(valid, false);
     });

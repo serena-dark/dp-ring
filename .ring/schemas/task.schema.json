@@ -140,7 +140,17 @@
               "type": "string",
               "enum": ["pending", "awaiting_replan", "redispatched", "terminal"]
             },
-            "source_failure": { "type": ["string", "null"] },
+            "source_failure": {
+              "enum": [
+                null,
+                "scope_mismatch",
+                "build_failed",
+                "cleanup_failed",
+                "workflow_failed",
+                "workflow_timeout",
+                "review_rejected"
+              ]
+            },
             "packet": {
               "type": ["object", "null"],
               "additionalProperties": false,
