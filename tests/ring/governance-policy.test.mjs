@@ -792,6 +792,10 @@ describe('governance policy', () => {
             effective_force_score: 0,
           },
         },
+        canonical_workflow_name_overrides: {
+          'wf-roomier-template': 'Roomier Template Renamed',
+          'wf-tight-template': 'Tight Template Renamed',
+        },
       },
       {
         task_id: 'task-review',
@@ -801,8 +805,94 @@ describe('governance policy', () => {
         workflow_name: 'Review Template Renamed',
         canonical_workflow_name: ' Review Template Renamed ',
         governance_selection_context: null,
+        canonical_workflow_name_overrides: {
+          'wf-review-template': 'Review Template Renamed',
+        },
       },
     ]);
+  });
+
+  it('synthesizes shared canonical workflow-name overrides from legacy waiting-task maps', () => {
+    const readyTasks = [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      canonical_task_name: ' Documentation (Renamed) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Legacy) ',
+      canonical_workflow_name: ' Roomier Template Renamed ',
+      canonical_selection_context_workflow_names: {
+        'wf-tight-template': ' Tight Template Renamed ',
+      },
+      canonical_governance_blocked_reuse_workflow_names: {
+        'wf-lineage-hold': ' Warm Lineage Template Renamed ',
+      },
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template (Legacy) ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+      governance_blocked_reuse: [{
+        id: ' wf-lineage-hold ',
+        name: ' Warm Lineage Template (Legacy) ',
+        reason: ' warm_semantic_lineage ',
+        checkpoint_id: ' cp-lineage ',
+      }],
+    }];
+
+    assert.deepEqual(canonicalizeWaitingTaskGovernanceLabels(readyTasks), [{
+      task_id: ' task-docs ',
+      task_name: 'Documentation (Renamed)',
+      canonical_task_name: ' Documentation (Renamed) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name: ' Roomier Template Renamed ',
+      canonical_selection_context_workflow_names: {
+        'wf-tight-template': ' Tight Template Renamed ',
+      },
+      canonical_governance_blocked_reuse_workflow_names: {
+        'wf-lineage-hold': ' Warm Lineage Template Renamed ',
+      },
+      governance_selection_context: {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template Renamed',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template Renamed',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+      governance_blocked_reuse: [{
+        id: ' wf-lineage-hold ',
+        name: ' Warm Lineage Template (Legacy) ',
+        reason: ' warm_semantic_lineage ',
+        checkpoint_id: ' cp-lineage ',
+      }],
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+        'wf-lineage-hold': 'Warm Lineage Template Renamed',
+      },
+    }]);
   });
 
   it('hydrates waiting-task governance labels from live task, selection, and blocked-reuse workflow names', async () => {

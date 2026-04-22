@@ -882,6 +882,7 @@ export function canonicalizeWaitingTaskGovernanceLabels(readyTasks = []) {
   return readyTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const selectionContextEntry = selectionContextByTaskId.get(taskId) ?? null;
+    const workflowNameOverrides = canonicalWorkflowNameOverrides(item);
     return {
       ...item,
       task_name: selectionContextEntry?.task_name
@@ -894,6 +895,9 @@ export function canonicalizeWaitingTaskGovernanceLabels(readyTasks = []) {
         || null,
       governance_selection_context:
         selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
+      ...(Object.keys(workflowNameOverrides).length > 0
+        ? { canonical_workflow_name_overrides: workflowNameOverrides }
+        : {}),
     };
   });
 }
