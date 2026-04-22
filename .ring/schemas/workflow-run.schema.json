@@ -104,7 +104,21 @@
               "worker_id": { "type": ["string", "null"] },
               "protocol": { "type": ["string", "null"] },
               "authenticated": { "type": "boolean" },
-              "outputs": { "type": ["object", "null"] }
+              "outputs": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "properties": {
+                      "replanning_status": {
+                        "enum": [null, "pending", "awaiting_replan", "redispatched", "terminal"]
+                      },
+                      "branch_budget": { "type": ["integer", "null"], "minimum": 0 }
+                    }
+                  }
+                ]
+              }
             }
           }
         },

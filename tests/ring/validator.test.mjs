@@ -714,6 +714,20 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects a workflow-run report with an invalid replanning status', () => {
+      const doc = buildWorkflowRunDoc();
+      doc.data.reports[0].outputs.replanning_status = 'ready';
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a workflow-run report with a non-integer branch budget', () => {
+      const doc = buildWorkflowRunDoc();
+      doc.data.reports[0].outputs.branch_budget = 0.5;
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, false);
+    });
+
     it('rejects a publication-root with an invalid membership digest', () => {
       const doc = buildPublicationRootDoc();
       doc.membership_digest = 'sha256:not-a-digest';
