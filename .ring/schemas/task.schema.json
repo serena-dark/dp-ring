@@ -345,6 +345,54 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": { "const": "pending" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["packet"],
+                "properties": {
+                  "packet": { "const": null }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "enum": ["awaiting_replan", "redispatched", "terminal"]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["packet"],
+                "properties": {
+                  "packet": { "type": "object" }
+                }
+              }
+            }
+          }
         }
       ]
     }

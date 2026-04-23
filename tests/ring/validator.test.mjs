@@ -421,6 +421,31 @@ describe('validator', async () => {
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
 
+    it('accepts a redispatched task replanning payload with a preserved packet', () => {
+      const doc = buildTaskDoc();
+      doc.status = 'failed';
+      doc.data.execution.review_status = 'workflow_failed';
+      doc.data.replanning.status = 'redispatched';
+      doc.data.replanning.source_failure = 'workflow_failed';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      doc.data.replanning.successor_task_id = 't2-retry';
+      doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+      const { valid, errors } = validator.validate('task', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a terminal task replanning payload with a preserved packet', () => {
+      const doc = buildTaskDoc();
+      doc.status = 'failed';
+      doc.data.execution.review_status = 'workflow_timeout';
+      doc.data.replanning.status = 'terminal';
+      doc.data.replanning.source_failure = 'workflow_timeout';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+      const { valid, errors } = validator.validate('task', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
     it('accepts a valid workflow-run with node execution capsule state', () => {
       const doc = buildWorkflowRunDoc();
       const { valid, errors } = validator.validate('workflow-run', doc);
@@ -752,6 +777,38 @@ describe('validator', async () => {
       doc.data.replanning.packet = buildTaskReplanPacket();
       const { valid } = validator.validate('task', doc);
       assert.equal(valid, false);
+    });
+
+    it('rejects a pending task replanning payload with a stale packet', () => {
+      const doc = buildTaskDoc();
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a non-pending task replanning payload without a packet', () => {
+      const cases = [
+        ['awaiting_replan', 'workflow_failed', 'workflow_failed'],
+        ['redispatched', 'workflow_failed', 'workflow_failed'],
+        ['terminal', 'workflow_timeout', 'workflow_timeout'],
+      ];
+
+      for (const [replanningStatus, reviewStatus, sourceFailure] of cases) {
+        const doc = buildTaskDoc();
+        doc.status = 'failed';
+        doc.data.execution.review_status = reviewStatus;
+        doc.data.replanning.status = replanningStatus;
+        doc.data.replanning.source_failure = sourceFailure;
+        doc.data.replanning.packet = null;
+        if (replanningStatus === 'redispatched') {
+          doc.data.replanning.successor_task_id = 't2-retry';
+        }
+        if (replanningStatus !== 'awaiting_replan') {
+          doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+        }
+        const { valid } = validator.validate('task', doc);
+        assert.equal(valid, false, `Expected ${replanningStatus} without packet to be invalid.`);
+      }
     });
 
     it('rejects a task that records a source failure while review is still pending', () => {
