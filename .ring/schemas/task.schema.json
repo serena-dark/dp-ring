@@ -181,7 +181,172 @@
             }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": {
+                    "enum": ["pending", "verifying_scope", "awaiting_judgement", "approved"]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": null }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "scope_failed" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "scope_mismatch" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "build_failed" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "build_failed" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "cleanup_failed" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "cleanup_failed" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "workflow_failed" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "workflow_failed" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "workflow_timeout" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "workflow_timeout" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["execution", "replanning"],
+            "properties": {
+              "execution": {
+                "required": ["review_status"],
+                "properties": {
+                  "review_status": { "const": "rejected" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["source_failure"],
+                "properties": {
+                  "source_failure": { "const": "review_rejected" }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "x-state-machine": {

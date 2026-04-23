@@ -89,6 +89,15 @@ function buildValidationReportDoc() {
   };
 }
 
+function buildTaskReplanPacket() {
+  return {
+    agent_id: 'task-replanner',
+    subject: 'Replan task',
+    body: 'Decide whether this task should be redispatched.',
+    dispatched_at: '2026-04-08T00:00:00Z',
+  };
+}
+
 function buildTaskDoc() {
   return {
     id: 't1-test',
@@ -135,14 +144,9 @@ function buildTaskDoc() {
       },
       replanning: {
         replanner_agent_id: 'task-replanner',
-        status: 'awaiting_replan',
-        source_failure: 'scope_mismatch',
-        packet: {
-          agent_id: 'task-replanner',
-          subject: 'Replan task',
-          body: 'Decide whether this task should be redispatched.',
-          dispatched_at: '2026-04-08T00:00:00Z',
-        },
+        status: 'pending',
+        source_failure: null,
+        packet: null,
         successor_task_id: null,
         parent_task_id: null,
         decision_note: null,
@@ -379,10 +383,40 @@ describe('validator', async () => {
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
 
+    it('accepts task review status and replanning source failure pairs emitted by runtime', () => {
+      const validPairs = [
+        ['verifying_scope', null],
+        ['awaiting_judgement', null],
+        ['approved', null],
+        ['scope_failed', 'scope_mismatch'],
+        ['build_failed', 'build_failed'],
+        ['cleanup_failed', 'cleanup_failed'],
+        ['workflow_failed', 'workflow_failed'],
+        ['workflow_timeout', 'workflow_timeout'],
+        ['rejected', 'review_rejected'],
+      ];
+
+      for (const [reviewStatus, sourceFailure] of validPairs) {
+        const doc = buildTaskDoc();
+        doc.data.execution.review_status = reviewStatus;
+        doc.data.replanning.status = sourceFailure === null ? 'pending' : 'awaiting_replan';
+        doc.data.replanning.source_failure = sourceFailure;
+        doc.data.replanning.packet = sourceFailure === null ? null : buildTaskReplanPacket();
+        const { valid, errors } = validator.validate('task', doc);
+        assert.equal(
+          valid,
+          true,
+          `Expected ${reviewStatus}/${String(sourceFailure)} valid but got errors: ${JSON.stringify(errors)}`,
+        );
+      }
+    });
+
     it('accepts a valid task replanning payload for judge rejection', () => {
       const doc = buildTaskDoc();
       doc.data.execution.review_status = 'rejected';
+      doc.data.replanning.status = 'awaiting_replan';
       doc.data.replanning.source_failure = 'review_rejected';
+      doc.data.replanning.packet = buildTaskReplanPacket();
       const { valid, errors } = validator.validate('task', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
@@ -713,7 +747,28 @@ describe('validator', async () => {
 
     it('rejects a task replanning payload with an unknown source failure reason', () => {
       const doc = buildTaskDoc();
+      doc.data.replanning.status = 'awaiting_replan';
       doc.data.replanning.source_failure = 'mystery_failure';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a task that records a source failure while review is still pending', () => {
+      const doc = buildTaskDoc();
+      doc.data.replanning.status = 'awaiting_replan';
+      doc.data.replanning.source_failure = 'scope_mismatch';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a task whose rejected review state carries the wrong source failure', () => {
+      const doc = buildTaskDoc();
+      doc.data.execution.review_status = 'rejected';
+      doc.data.replanning.status = 'awaiting_replan';
+      doc.data.replanning.source_failure = 'workflow_failed';
+      doc.data.replanning.packet = buildTaskReplanPacket();
       const { valid } = validator.validate('task', doc);
       assert.equal(valid, false);
     });
