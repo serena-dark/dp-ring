@@ -776,6 +776,7 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
         replanning: {
           ...emptyReplanning(),
           parent_task_id: task.id,
+          parent_decision_note: nextReplanning.decision_note,
           status: 'pending',
         },
         acceptance_criteria: acceptanceCriteria,

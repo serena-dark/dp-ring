@@ -164,6 +164,7 @@
             },
             "successor_task_id": { "type": ["string", "null"] },
             "parent_task_id": { "type": ["string", "null"] },
+            "parent_decision_note": { "type": ["string", "null"] },
             "decision_note": { "type": ["string", "null"] },
             "reviewed_at": { "type": ["string", "null"], "format": "date-time" }
           }
@@ -437,6 +438,35 @@
                 "required": ["successor_task_id"],
                 "properties": {
                   "successor_task_id": { "const": null }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["parent_task_id"],
+                "properties": {
+                  "parent_task_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["parent_decision_note"],
+                "properties": {
+                  "parent_decision_note": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  }
                 }
               }
             }

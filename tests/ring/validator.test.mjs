@@ -898,6 +898,30 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects a redispatched child task without a non-empty parent decision note', () => {
+      const cases = [null, '   '];
+
+      for (const parentDecisionNote of cases) {
+        const doc = buildTaskDoc();
+        doc.data.replanning.parent_task_id = 't0-parent';
+        doc.data.replanning.parent_decision_note = parentDecisionNote;
+        const { valid } = validator.validate('task', doc);
+        assert.equal(
+          valid,
+          false,
+          `Expected pending child task with parent_decision_note=${JSON.stringify(parentDecisionNote)} to be invalid.`,
+        );
+      }
+    });
+
+    it('accepts a redispatched child task with a parent decision note handoff', () => {
+      const doc = buildTaskDoc();
+      doc.data.replanning.parent_task_id = 't0-parent';
+      doc.data.replanning.parent_decision_note = 'Retry only the narrowed file set from the governed redispatch review.';
+      const { valid, errors } = validator.validate('task', doc);
+      assert.equal(valid, true, JSON.stringify(errors));
+    });
+
     it('rejects a resolved redispatched replanning payload without a non-empty decision note', () => {
       const cases = [null, '   '];
 

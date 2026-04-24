@@ -265,6 +265,10 @@ describe('task execution', async () => {
     const successorTask = await ring.read('task', replannedTask.data.replanning.successor_task_id);
     assert.equal(successorTask.status, 'ready');
     assert.equal(successorTask.data.replanning.parent_task_id, fixture.task.id);
+    assert.equal(
+      successorTask.data.replanning.parent_decision_note,
+      'Narrow the retry to the actual changed file.',
+    );
     assert.deepEqual(successorTask.data.scope.file_paths, ['src/unexpected.txt']);
     assert.equal(successorTask.data.execution.review_status, 'pending');
 
