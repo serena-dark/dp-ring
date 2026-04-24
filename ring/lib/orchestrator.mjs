@@ -1538,11 +1538,13 @@ function buildWorkflowPreparationPacket(
             describeWorkflowGovernanceReenableGuidanceList(blockedCandidateItems);
           const governanceSelectionContext =
             describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
+          const replanningHandoff = describeWaitingTaskReplanningHandoff(task?.data?.replanning ?? null);
           return [
             `- ${task.id}: ${task.data.name}`,
             `  task_type: ${task.data.task_type}`,
             `  milestone: ${task.data.milestone_id}`,
             `  task_document: docs/tasks/${task.id}/${task.id}.md`,
+            `  replanning_handoff: ${replanningHandoff}`,
             `  preferred_reuse: ${summarizeWorkflowRecommendation(recommendation)}`,
             `  governance_selection_context: ${governanceSelectionContext}`,
             `  reusable_candidates: ${candidates}`,
@@ -1612,6 +1614,7 @@ function buildWorkflowPreparationScaffold(
           describeWorkflowGovernanceReenableGuidanceList(blockedCandidates);
         const governanceSelectionContext =
           describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
+        const replanningHandoff = describeWaitingTaskReplanningHandoff(task?.data?.replanning ?? null);
         const action = preferred ? 'reuse' : 'create';
         const headerLines = [
           `## Task ${task.id}: ${task.data.name}`,
@@ -1620,6 +1623,9 @@ function buildWorkflowPreparationScaffold(
           `Task Document: docs/tasks/${task.id}/${task.id}.md`,
           `Workflow Action: ${action}`,
         ];
+        if (replanningHandoff !== 'none') {
+          headerLines.push(`Replanning handoff: ${replanningHandoff}`);
+        }
 
         if (preferred) {
           headerLines.push(`Workflow ID: ${preferred.id}`);
