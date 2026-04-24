@@ -588,6 +588,15 @@ export function describeWaitingTaskGovernance(waitingTask) {
   );
 }
 
+export function describeWaitingTaskReplanningHandoff(waitingTask) {
+  const replanningHandoff = waitingTaskReplanningHandoff(waitingTask);
+  if (!replanningHandoff) {
+    return 'none';
+  }
+
+  return `parent_task_id: ${replanningHandoff.parent_task_id} | parent_decision_note: ${replanningHandoff.parent_decision_note}`;
+}
+
 function governanceBatchIdentityEntries(waitingTasks = []) {
   return waitingTasks.flatMap((item) =>
     Array.isArray(item?.governance_blocked_reuse)

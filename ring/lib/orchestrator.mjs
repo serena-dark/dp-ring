@@ -14,6 +14,7 @@ import {
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
   describeWaitingTaskGovernance,
+  describeWaitingTaskReplanningHandoff,
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
@@ -1699,7 +1700,8 @@ function buildSessionBatchPacket(job, requirement, waitingTasks) {
           const governanceSelectionContext = describeGovernanceSelectionContext(
             item?.governance_selection_context ?? null,
           );
-          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}${governanceSelectionContext !== 'none' ? ` | governance_selection_context: ${governanceSelectionContext}` : ''}`;
+          const replanningHandoff = describeWaitingTaskReplanningHandoff(item);
+          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}${governanceSelectionContext !== 'none' ? ` | governance_selection_context: ${governanceSelectionContext}` : ''}${replanningHandoff !== 'none' ? ` | replanning_handoff: ${replanningHandoff}` : ''}`;
         })
         .join('\n')
     : '- no waiting tasks';
@@ -5057,9 +5059,17 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         });
       }
 
+      const waitingTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+        waitingTasks,
+        (kind, id) => ring.read(kind, id),
+      );
+      const waitingTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
+        waitingTasksForSessionContext,
+      );
+
       const batchPacket = buildMessageEnvelope(
         job,
-        buildSessionBatchPacket(job, requirement, waitingTasks),
+        buildSessionBatchPacket(job, requirement, waitingTasksForDispatchPacket),
         config,
         mapAgentCards(await getAgents(config)),
         [
@@ -5079,13 +5089,13 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       );
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
-      next.workflow_preparation.waiting_tasks = waitingTasks;
+      next.workflow_preparation.waiting_tasks = waitingTasksForDispatchPacket;
       next.workflow_preparation.generated_workflow_ids = generatedWorkflowIds;
       next.workflow_preparation.reused_workflow_ids = reusedWorkflowIds;
       next.workflow_preparation.parse_error = null;
       next.workflow_preparation.completed_at = nowIso();
       next.session_dispatch.status = 'waiting';
-      next.session_dispatch.waiting_task_ids = waitingTasks.map((item) => item.task_id);
+      next.session_dispatch.waiting_task_ids = waitingTasksForDispatchPacket.map((item) => item.task_id);
       next.session_dispatch.session_id = null;
       next.session_dispatch.workflow_run_ids = [];
       next.session_dispatch.launched_at = null;

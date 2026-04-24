@@ -2180,6 +2180,25 @@ Split milestone prerequisites into ready and blocked sets.
           > (effectiveForceSelectionContext?.compared?.effective_force_score ?? 0),
       );
 
+      const replanningParentTaskId = 't-parent-governed-docs';
+      const replanningDecisionNote = 'Retry only the narrowed governed documentation path before another launch.';
+      const documentationTaskBeforeRetry = await isolatedRing.read('task', documentationTask.task_id);
+      const documentationTaskReplanningUpdate = await isolatedRing.update('task', documentationTask.task_id, {
+        data: {
+          ...documentationTaskBeforeRetry.data,
+          replanning: {
+            ...(documentationTaskBeforeRetry.data.replanning ?? {}),
+            parent_task_id: replanningParentTaskId,
+            parent_decision_note: replanningDecisionNote,
+          },
+        },
+      });
+      assert.equal(
+        documentationTaskReplanningUpdate.ok,
+        true,
+        JSON.stringify(documentationTaskReplanningUpdate.errors),
+      );
+
       const jobPath = join(
         repoRoot,
         '.ring',
@@ -2249,9 +2268,16 @@ ${workflowPlan}
         finalizedDocumentationTask?.governance_selection_context,
         effectiveForceSelectionContext,
       );
+      assert.equal(finalizedDocumentationTask?.parent_task_id, replanningParentTaskId);
+      assert.equal(finalizedDocumentationTask?.parent_decision_note, replanningDecisionNote);
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
         /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+      );
+      assert.ok(
+        finalized.session_dispatch.dispatch.packet.body.includes(
+          `replanning_handoff: parent_task_id: ${replanningParentTaskId} | parent_decision_note: ${replanningDecisionNote}`,
+        ),
       );
 
       const renamedDocumentationTaskName = 'Governed effective-force workflow guidance (renamed before launch)';
@@ -2309,6 +2335,11 @@ ${workflowPlan}
             + ` .* compared: ${comparedWorkflowId} \\(${renamedComparedWorkflowName}\\)`,
         ),
       );
+      assert.ok(
+        launchedJob.session_dispatch.dispatch.packet.body.includes(
+          `replanning_handoff: parent_task_id: ${replanningParentTaskId} | parent_decision_note: ${replanningDecisionNote}`,
+        ),
+      );
 
       const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
       const expectedSelectionContext = structuredClone(effectiveForceSelectionContext);
@@ -2321,6 +2352,14 @@ ${workflowPlan}
           workflow_template_id: finalizedDocumentationTask.workflow_template_id,
           workflow_name: renamedPreferredWorkflowName,
           selection_context: expectedSelectionContext,
+        },
+      ]);
+      assert.deepEqual(launchedSession.data.context_injected.replanning_handoffs, [
+        {
+          task_id: finalizedDocumentationTask.task_id,
+          task_name: renamedDocumentationTaskName,
+          parent_task_id: replanningParentTaskId,
+          parent_decision_note: replanningDecisionNote,
         },
       ]);
     } finally {

@@ -15,6 +15,7 @@ import {
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
   describeWaitingTaskGovernance,
+  describeWaitingTaskReplanningHandoff,
   describeWorkflowReuseGovernanceBlock,
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidance,
@@ -1318,6 +1319,17 @@ describe('governance policy', () => {
       }),
       'wf-lineage-hold (Warm Lineage Template Renamed) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
     );
+  });
+
+  it('describes waiting-task replanning handoffs with stable trimmed text', () => {
+    assert.equal(
+      describeWaitingTaskReplanningHandoff({
+        parent_task_id: ' t-parent-docs ',
+        parent_decision_note: ' Narrow the governed retry to publication-root artifacts only. ',
+      }),
+      'parent_task_id: t-parent-docs | parent_decision_note: Narrow the governed retry to publication-root artifacts only.',
+    );
+    assert.equal(describeWaitingTaskReplanningHandoff({ parent_task_id: 't-parent-docs' }), 'none');
   });
 
   it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
