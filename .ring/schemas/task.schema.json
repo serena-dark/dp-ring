@@ -459,6 +459,31 @@
           "then": {
             "properties": {
               "replanning": {
+                "required": ["decision_note"],
+                "properties": {
+                  "decision_note": { "const": null }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "enum": ["pending", "awaiting_replan"]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
                 "required": ["reviewed_at"],
                 "properties": {
                   "reviewed_at": { "const": null }
