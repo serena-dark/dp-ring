@@ -317,6 +317,7 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
   ]);
 
   const taskNameById = new Map();
+  const taskReplanningHandoffById = new Map();
   for (const result of loadedTaskResults) {
     if (result.status !== 'fulfilled') {
       continue;
@@ -325,6 +326,10 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
     const taskName = trimString(result.value?.data?.name);
     if (taskId && taskName) {
       taskNameById.set(taskId, taskName);
+    }
+    const replanningHandoff = waitingTaskReplanningHandoff(result.value?.data?.replanning);
+    if (taskId && replanningHandoff) {
+      taskReplanningHandoffById.set(taskId, replanningHandoff);
     }
   }
 
@@ -343,6 +348,8 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
   return waitingTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const workflowTemplateId = trimString(item?.workflow_template_id);
+    const replanningHandoff =
+      taskReplanningHandoffById.get(taskId) ?? waitingTaskReplanningHandoff(item);
     const canonicalWorkflowNameOverridesForTask = {
       ...canonicalWorkflowNameOverrides(item),
       ...workflowNameOverridesForIds(waitingTaskCanonicalWorkflowIds(item), workflowNameById),
@@ -368,6 +375,7 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
         || trimString(item?.canonical_workflow_name)
         || trimString(item?.workflow_name)
         || null,
+      ...(replanningHandoff ?? {}),
       ...(Object.keys(canonicalWorkflowNameOverridesForTask).length > 0
         ? { canonical_workflow_name_overrides: canonicalWorkflowNameOverridesForTask }
         : {}),
@@ -377,6 +385,45 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
         : {}),
     };
   });
+}
+
+function waitingTaskReplanningHandoff(replanning) {
+  const parentTaskId = trimString(replanning?.parent_task_id);
+  const parentDecisionNote = trimString(replanning?.parent_decision_note);
+  if (!parentTaskId || !parentDecisionNote) {
+    return null;
+  }
+
+  return {
+    parent_task_id: parentTaskId,
+    parent_decision_note: parentDecisionNote,
+  };
+}
+
+function sessionReplanningHandoffs(readyTasks = []) {
+  const handoffs = [];
+  const seenTaskIds = new Set();
+  for (const item of readyTasks) {
+    const taskId = trimString(item?.task_id);
+    if (!taskId || seenTaskIds.has(taskId)) {
+      continue;
+    }
+
+    const replanningHandoff = waitingTaskReplanningHandoff(item);
+    if (!replanningHandoff) {
+      continue;
+    }
+
+    seenTaskIds.add(taskId);
+    handoffs.push({
+      task_id: taskId,
+      task_name: trimString(item?.canonical_task_name) || trimString(item?.task_name) || null,
+      parent_task_id: replanningHandoff.parent_task_id,
+      parent_decision_note: replanningHandoff.parent_decision_note,
+    });
+  }
+
+  return handoffs;
 }
 
 export function workflowReuseGovernanceBlock(run, checkpoint = null) {
@@ -927,6 +974,7 @@ export function buildSessionContextInjected(readyTasks = []) {
     workflow_template: workflowTemplateIds.length === 1 ? workflowTemplateIds[0] : null,
     distillations_applied: [],
     registry_rank_at_selection: null,
+    replanning_handoffs: sessionReplanningHandoffs(readyTasks),
     governance_selection_contexts: sessionGovernanceSelectionContexts(readyTasks),
   };
 }

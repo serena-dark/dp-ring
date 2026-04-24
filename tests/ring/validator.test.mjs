@@ -281,6 +281,14 @@ function buildGovernedSessionDoc() {
         workflow_template: 'wf-1-test',
         distillations_applied: [],
         registry_rank_at_selection: null,
+        replanning_handoffs: [
+          {
+            task_id: 't1-test',
+            task_name: 'Governed task',
+            parent_task_id: 't0-parent',
+            parent_decision_note: 'Reuse the governed workflow only if the narrowed retry stays inside the publication scope.',
+          },
+        ],
         governance_selection_contexts: [
           {
             task_id: 't1-test',
@@ -766,6 +774,13 @@ describe('validator', async () => {
     it('rejects a governed session selection context when task linkage is missing', () => {
       const doc = buildGovernedSessionDoc();
       delete doc.data.context_injected.governance_selection_contexts[0].task_id;
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a session replanning handoff with a blank parent decision note', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.context_injected.replanning_handoffs[0].parent_decision_note = '   ';
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
     });

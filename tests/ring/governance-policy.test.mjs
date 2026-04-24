@@ -584,6 +584,8 @@ describe('governance policy', () => {
       {
         task_id: ' task-docs ',
         task_name: ' Documentation ',
+        parent_task_id: ' t-parent-docs ',
+        parent_decision_note: ' Narrow the retry to the publication-only files. ',
         workflow_template_id: ' wf-roomier-template ',
         workflow_name: ' Roomier Template ',
         governance_selection_context: {
@@ -664,6 +666,12 @@ describe('governance policy', () => {
       distillations_applied: [],
       registry_rank_at_selection: null,
       governance_selection_contexts: expectedSelectionContexts,
+      replanning_handoffs: [{
+        task_id: 'task-docs',
+        task_name: 'Documentation',
+        parent_task_id: 't-parent-docs',
+        parent_decision_note: 'Narrow the retry to the publication-only files.',
+      }],
     });
   });
 
@@ -926,7 +934,16 @@ describe('governance policy', () => {
       }],
     }];
     const liveDocs = new Map([
-      ['task:task-docs', { id: 'task-docs', data: { name: 'Documentation Refresh' } }],
+      ['task:task-docs', {
+        id: 'task-docs',
+        data: {
+          name: 'Documentation Refresh',
+          replanning: {
+            parent_task_id: ' t-parent-docs ',
+            parent_decision_note: ' Narrow the retry to publication-root artifacts only. ',
+          },
+        },
+      }],
       ['workflow:wf-roomier-template', { id: 'wf-roomier-template', data: { name: 'Roomier Template Renamed' } }],
       ['workflow:wf-tight-template', { id: 'wf-tight-template', data: { name: 'Tight Template Renamed' } }],
       ['workflow:wf-lineage-hold', { id: 'wf-lineage-hold', data: { name: 'Warm Lineage Template Renamed' } }],
@@ -966,6 +983,8 @@ describe('governance policy', () => {
         checkpoint_id: ' cp-lineage ',
       }],
       canonical_task_name: 'Documentation Refresh',
+      parent_task_id: 't-parent-docs',
+      parent_decision_note: 'Narrow the retry to publication-root artifacts only.',
       canonical_workflow_name: 'Roomier Template Renamed',
       canonical_workflow_name_overrides: {
         'wf-roomier-template': 'Roomier Template Renamed',
@@ -1061,6 +1080,7 @@ describe('governance policy', () => {
       workflow_template: 'wf-roomier-template',
       distillations_applied: [],
       registry_rank_at_selection: null,
+      replanning_handoffs: [],
       governance_selection_contexts: expectedSelectionContexts,
     });
   });
@@ -1137,6 +1157,7 @@ describe('governance policy', () => {
       workflow_template: 'wf-roomier-template',
       distillations_applied: [],
       registry_rank_at_selection: null,
+      replanning_handoffs: [],
       governance_selection_contexts: expectedSelectionContexts,
     });
   });

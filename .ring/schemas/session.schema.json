@@ -40,6 +40,21 @@
             "workflow_template":          { "type": ["string", "null"] },
             "distillations_applied":      { "type": "array", "items": { "type": "string" }, "default": [] },
             "registry_rank_at_selection": { "type": ["integer", "null"] },
+            "replanning_handoffs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["task_id", "parent_task_id", "parent_decision_note"],
+                "properties": {
+                  "task_id": { "type": "string" },
+                  "task_name": { "type": ["string", "null"] },
+                  "parent_task_id": { "type": "string" },
+                  "parent_decision_note": { "type": "string", "pattern": "\\S" }
+                }
+              },
+              "default": []
+            },
             "governance_selection_contexts": {
               "type": "array",
               "items": {
@@ -98,6 +113,7 @@
             "workflow_template": null,
             "distillations_applied": [],
             "registry_rank_at_selection": null,
+            "replanning_handoffs": [],
             "governance_selection_contexts": []
           }
         },
