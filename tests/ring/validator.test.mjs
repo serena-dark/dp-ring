@@ -811,6 +811,41 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects a redispatched task replanning payload without a successor task id', () => {
+      const doc = buildTaskDoc();
+      doc.status = 'failed';
+      doc.data.execution.review_status = 'workflow_failed';
+      doc.data.replanning.status = 'redispatched';
+      doc.data.replanning.source_failure = 'workflow_failed';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a non-redispatched task replanning payload with a stale successor task id', () => {
+      const cases = [
+        ['pending', 'pending', null],
+        ['awaiting_replan', 'workflow_failed', 'workflow_failed'],
+        ['terminal', 'workflow_timeout', 'workflow_timeout'],
+      ];
+
+      for (const [replanningStatus, reviewStatus, sourceFailure] of cases) {
+        const doc = buildTaskDoc();
+        doc.status = replanningStatus === 'pending' ? 'pending' : 'failed';
+        doc.data.execution.review_status = reviewStatus;
+        doc.data.replanning.status = replanningStatus;
+        doc.data.replanning.source_failure = sourceFailure;
+        doc.data.replanning.packet = replanningStatus === 'pending' ? null : buildTaskReplanPacket();
+        doc.data.replanning.successor_task_id = 't2-retry';
+        if (replanningStatus === 'terminal') {
+          doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+        }
+        const { valid } = validator.validate('task', doc);
+        assert.equal(valid, false, `Expected ${replanningStatus} with stale successor task id to be invalid.`);
+      }
+    });
+
     it('rejects a task that records a source failure while review is still pending', () => {
       const doc = buildTaskDoc();
       doc.data.replanning.status = 'awaiting_replan';

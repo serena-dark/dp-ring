@@ -393,6 +393,54 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": { "const": "redispatched" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["successor_task_id"],
+                "properties": {
+                  "successor_task_id": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "enum": ["pending", "awaiting_replan", "terminal"]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["successor_task_id"],
+                "properties": {
+                  "successor_task_id": { "const": null }
+                }
+              }
+            }
+          }
         }
       ]
     }
