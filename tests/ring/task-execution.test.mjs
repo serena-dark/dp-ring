@@ -259,6 +259,7 @@ describe('task execution', async () => {
 
     assert.equal(replannedTask.status, 'failed');
     assert.equal(replannedTask.data.replanning.status, 'redispatched');
+    assert.equal(replannedTask.data.replanning.decision_note, 'Narrow the retry to the actual changed file.');
     assert.ok(replannedTask.data.replanning.successor_task_id);
 
     const successorTask = await ring.read('task', replannedTask.data.replanning.successor_task_id);
@@ -269,6 +270,41 @@ describe('task execution', async () => {
 
     const successorDoc = join(tempDir, 'docs', 'tasks', successorTask.id, `${successorTask.id}.md`);
     await access(successorDoc);
+  });
+
+  it('requires a non-empty note when redispatch replanning creates a successor task', async () => {
+    const fixture = await createExecutionFixture('Redispatch note required');
+
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'src', 'redispatch-note-required.txt'), 'retry me with a fresh path\n', 'utf-8');
+    await run('git', ['add', 'src/redispatch-note-required.txt'], tempDir);
+    await run('git', ['commit', '-m', 'redispatch note required source'], tempDir);
+    const { stdout } = await run('git', ['rev-parse', 'HEAD'], tempDir);
+
+    const failedTask = await ring.taskExecution.finalize(fixture.task.id, {
+      commit_sha: stdout.trim(),
+      note: 'Initial scope was wrong.',
+    });
+    assert.equal(failedTask.data.replanning.status, 'awaiting_replan');
+
+    await assert.rejects(
+      ring.taskExecution.replan(fixture.task.id, {
+        verdict: 'redispatch',
+        replanner_agent_id: 'task-replanner',
+        note: '   ',
+        task: {
+          name: 'Redispatch after failure retry',
+          target_type: 'file',
+          target_path: 'src/redispatch-note-required.txt',
+          repo_root: '.',
+          file_paths: ['src/redispatch-note-required.txt'],
+          workflow_template_id: fixture.workflow.id,
+          execution_mode: 'serial',
+          acceptance_criteria: [{ description: 'Only update the redispatched file.' }],
+        },
+      }),
+      /Redispatch replanning decisions require a non-empty note\./,
+    );
   });
 
   it('requires an explicit workflow reuse choice when semantic checkpoint lineage already requested replay', async () => {

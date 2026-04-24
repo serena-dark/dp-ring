@@ -524,7 +524,9 @@
               "replanning": {
                 "required": ["status"],
                 "properties": {
-                  "status": { "const": "terminal" }
+                  "status": {
+                    "enum": ["redispatched", "terminal"]
+                  }
                 }
               }
             }

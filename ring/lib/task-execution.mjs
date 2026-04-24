@@ -666,8 +666,11 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
     }
     const governance = await semanticCheckpointGovernanceContext(ring, task, replanning.source_failure);
     const decisionNote = payload.note?.trim() || null;
-    if (payload.verdict === 'terminal' && !decisionNote) {
-      throw new Error('Terminal replanning decisions require a non-empty note.');
+    if (!decisionNote) {
+      if (payload.verdict === 'terminal') {
+        throw new Error('Terminal replanning decisions require a non-empty note.');
+      }
+      throw new Error('Redispatch replanning decisions require a non-empty note.');
     }
 
     const nextReplanning = {

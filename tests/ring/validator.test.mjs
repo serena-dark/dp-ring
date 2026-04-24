@@ -429,6 +429,7 @@ describe('validator', async () => {
       doc.data.replanning.source_failure = 'workflow_failed';
       doc.data.replanning.packet = buildTaskReplanPacket();
       doc.data.replanning.successor_task_id = 't2-retry';
+      doc.data.replanning.decision_note = 'Retry with a narrower executable file contract.';
       doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
       const { valid, errors } = validator.validate('task', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
@@ -894,6 +895,24 @@ describe('validator', async () => {
         doc.data.replanning.decision_note = 'This stale decision should not exist yet.';
         const { valid } = validator.validate('task', doc);
         assert.equal(valid, false, `Expected ${replanningStatus} with stale decision_note to be invalid.`);
+      }
+    });
+
+    it('rejects a resolved redispatched replanning payload without a non-empty decision note', () => {
+      const cases = [null, '   '];
+
+      for (const decisionNote of cases) {
+        const doc = buildTaskDoc();
+        doc.status = 'failed';
+        doc.data.execution.review_status = 'workflow_failed';
+        doc.data.replanning.status = 'redispatched';
+        doc.data.replanning.source_failure = 'workflow_failed';
+        doc.data.replanning.packet = buildTaskReplanPacket();
+        doc.data.replanning.successor_task_id = 't2-retry';
+        doc.data.replanning.decision_note = decisionNote;
+        doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+        const { valid } = validator.validate('task', doc);
+        assert.equal(valid, false, `Expected redispatched payload with decision_note=${JSON.stringify(decisionNote)} to be invalid.`);
       }
     });
 
