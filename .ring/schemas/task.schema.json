@@ -516,6 +516,32 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "required": ["replanning"],
+            "properties": {
+              "replanning": {
+                "required": ["status"],
+                "properties": {
+                  "status": { "const": "terminal" }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "replanning": {
+                "required": ["decision_note"],
+                "properties": {
+                  "decision_note": {
+                    "type": "string",
+                    "pattern": "\\S"
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     }

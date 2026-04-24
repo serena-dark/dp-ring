@@ -665,11 +665,15 @@ export function createTaskExecution(repoRoot, ring, getConfig) {
       throw new Error('verdict must be "redispatch" or "terminal".');
     }
     const governance = await semanticCheckpointGovernanceContext(ring, task, replanning.source_failure);
+    const decisionNote = payload.note?.trim() || null;
+    if (payload.verdict === 'terminal' && !decisionNote) {
+      throw new Error('Terminal replanning decisions require a non-empty note.');
+    }
 
     const nextReplanning = {
       ...replanning,
       replanner_agent_id: payload.replanner_agent_id?.trim() || config.task_replanner_agent_id,
-      decision_note: payload.note?.trim() || null,
+      decision_note: decisionNote,
       reviewed_at: nowIso(),
       packet: replanning.packet,
     };

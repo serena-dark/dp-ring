@@ -441,9 +441,22 @@ describe('validator', async () => {
       doc.data.replanning.status = 'terminal';
       doc.data.replanning.source_failure = 'workflow_timeout';
       doc.data.replanning.packet = buildTaskReplanPacket();
+      doc.data.replanning.decision_note = 'Needs a broader milestone-level redesign.';
       doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
       const { valid, errors } = validator.validate('task', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('rejects a terminal task replanning payload without a final decision note', () => {
+      const doc = buildTaskDoc();
+      doc.status = 'failed';
+      doc.data.execution.review_status = 'workflow_timeout';
+      doc.data.replanning.status = 'terminal';
+      doc.data.replanning.source_failure = 'workflow_timeout';
+      doc.data.replanning.packet = buildTaskReplanPacket();
+      doc.data.replanning.reviewed_at = '2026-04-08T00:05:00Z';
+      const { valid } = validator.validate('task', doc);
+      assert.equal(valid, false);
     });
 
     it('accepts a valid workflow-run with node execution capsule state', () => {

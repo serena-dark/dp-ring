@@ -526,4 +526,52 @@ describe('task execution', async () => {
     assert.equal(terminalTask.data.replanning.successor_task_id, null);
     assert.equal(terminalTask.data.replanning.decision_note, 'Needs a broader milestone-level redesign.');
   });
+
+  it('requires a non-empty note when terminal replanning refuses redispatch', async () => {
+    const fixture = await createExecutionFixture('Terminal note required', {
+      execution: {
+        judge_agent_id: null,
+        review_status: 'pending',
+        completion_commit_sha: null,
+        changed_files: [],
+        scope_match: null,
+        build_required: true,
+        build_command: 'exit 1',
+        build_status: 'pending',
+        cleanup_paths: [],
+        cleanup_status: 'skipped',
+        merge_status: 'blocked',
+        summary_path: null,
+        review_packet: null,
+        failure_feedback_id: null,
+        failure_distillation_id: null,
+        completion_distillation_id: null,
+        last_error: null,
+        checked_at: null,
+        reviewed_at: null,
+        note: null,
+      },
+    });
+
+    await mkdir(join(tempDir, 'src'), { recursive: true });
+    await writeFile(join(tempDir, 'src', 'feature.txt'), 'terminal note required fixture\n', 'utf-8');
+    await run('git', ['add', 'src/feature.txt'], tempDir);
+    await run('git', ['commit', '-m', 'terminal note required source'], tempDir);
+    const { stdout } = await run('git', ['rev-parse', 'HEAD'], tempDir);
+
+    const failedTask = await ring.taskExecution.finalize(fixture.task.id, {
+      commit_sha: stdout.trim(),
+      note: 'Scope matches but build should fail.',
+    });
+    assert.equal(failedTask.data.replanning.status, 'awaiting_replan');
+
+    await assert.rejects(
+      ring.taskExecution.replan(fixture.task.id, {
+        verdict: 'terminal',
+        replanner_agent_id: 'task-replanner',
+        note: '   ',
+      }),
+      /Terminal replanning decisions require a non-empty note\./,
+    );
+  });
 });
