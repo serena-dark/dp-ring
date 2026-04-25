@@ -1338,6 +1338,29 @@ Split milestone prerequisites into ready and blocked sets.
       ),
       false,
     );
+    const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
+      (task) => task.task_type === 'documentation',
+    );
+    assert.ok(documentationTask);
+    assert.ok(prerequisiteCompleted.session_dispatch.dispatch.packet);
+    assert.ok(Array.isArray(prerequisiteCompleted.session_dispatch.dispatch.packet.payload.waiting_tasks));
+    const sessionDispatchGuidanceTask = prerequisiteCompleted.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+      (item) => item.task_id === documentationTask.task_id,
+    );
+    assert.deepEqual(
+      sessionDispatchGuidanceTask,
+      {
+        task_id: documentationTask.task_id,
+        task_name: documentationTask.task_name,
+        task_type: documentationTask.task_type,
+        milestone_id: documentationTask.milestone_id,
+        task_document_path: documentationTask.task_document_path,
+        replanning_handoff: null,
+        governance_selection_context: documentationTask.governance_selection_context ?? null,
+        governance_blocked_reuse: documentationTask.governance_blocked_reuse ?? [],
+        governance_reenable_guidance: 'none',
+      },
+    );
 
     const jobPath = join(
       tempDir,
@@ -1381,10 +1404,6 @@ Split milestone prerequisites into ready and blocked sets.
       retried.workflow_preparation.dispatch.packet.body,
       /governance_reenable_guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
     );
-    const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
-      (task) => task.task_type === 'documentation',
-    );
-    assert.ok(documentationTask);
     assert.ok(Array.isArray(retried.workflow_preparation.dispatch.packet.payload.waiting_tasks));
     const guidancePayloadTask = retried.workflow_preparation.dispatch.packet.payload.waiting_tasks.find(
       (item) => item.task_id === documentationTask.task_id,
@@ -2415,11 +2434,31 @@ ${workflowPlan}
           `replanning_handoff: parent_task_id: ${replanningParentTaskId} | parent_decision_note: ${replanningDecisionNote}`,
         ),
       );
-
-      const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
       const expectedSelectionContext = structuredClone(effectiveForceSelectionContext);
       expectedSelectionContext.preferred.workflow_name = renamedPreferredWorkflowName;
       expectedSelectionContext.compared.workflow_name = renamedComparedWorkflowName;
+      assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      assert.deepEqual(
+        launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+          (item) => item.task_id === finalizedDocumentationTask.task_id,
+        ),
+        {
+          task_id: finalizedDocumentationTask.task_id,
+          task_name: renamedDocumentationTaskName,
+          task_type: finalizedDocumentationTask.task_type,
+          milestone_id: finalizedDocumentationTask.milestone_id,
+          task_document_path: finalizedDocumentationTask.task_document_path,
+          replanning_handoff: {
+            parent_task_id: replanningParentTaskId,
+            parent_decision_note: replanningDecisionNote,
+          },
+          governance_selection_context: expectedSelectionContext,
+          governance_blocked_reuse: [],
+          governance_reenable_guidance: 'none',
+        },
+      );
+
+      const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
       assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
         {
           task_id: finalizedDocumentationTask.task_id,

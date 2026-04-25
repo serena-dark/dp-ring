@@ -1550,6 +1550,43 @@ function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
   };
 }
 
+function sessionDispatchPayloadWaitingTask(waitingTask) {
+  const taskId = trimString(waitingTask?.task_id);
+  const taskName = trimString(waitingTask?.task_name) || null;
+  const taskType = trimString(waitingTask?.task_type) || null;
+  const milestoneId = trimString(waitingTask?.milestone_id) || null;
+  const taskDocumentPath = trimString(waitingTask?.task_document_path)
+    || (taskId ? `docs/tasks/${taskId}/${taskId}.md` : null);
+  const parentTaskId = trimString(waitingTask?.parent_task_id);
+  const parentDecisionNote = trimString(waitingTask?.parent_decision_note);
+  const governanceSelectionContext = waitingTask?.governance_selection_context
+    ? clone(waitingTask.governance_selection_context)
+    : null;
+  const governanceBlockedReuse = Array.isArray(waitingTask?.governance_blocked_reuse)
+    ? waitingTask.governance_blocked_reuse
+        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
+        .filter((item) => item.id && item.name && item.reason)
+    : [];
+  const governanceReenableGuidance = trimString(waitingTask?.governance_reenable_guidance)
+    || describeWorkflowGovernanceReenableGuidanceList(governanceBlockedReuse);
+  return {
+    task_id: taskId,
+    task_name: taskName,
+    task_type: taskType,
+    milestone_id: milestoneId,
+    task_document_path: taskDocumentPath,
+    replanning_handoff: parentTaskId && parentDecisionNote
+      ? {
+          parent_task_id: parentTaskId,
+          parent_decision_note: parentDecisionNote,
+        }
+      : null,
+    governance_selection_context: governanceSelectionContext,
+    governance_blocked_reuse: governanceBlockedReuse,
+    governance_reenable_guidance: governanceReenableGuidance,
+  };
+}
+
 function buildWorkflowPreparationPacket(
   requirement,
   tasks,
@@ -1777,6 +1814,7 @@ function buildSessionBatchPacket(job, requirement, waitingTasks) {
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: job.workflow_preparation.document.path,
       source_document_path: job.post_milestone.task_dispatch.document.path,
+      waiting_tasks: waitingTasks.map((item) => sessionDispatchPayloadWaitingTask(item)),
     },
   };
 }
@@ -4288,13 +4326,38 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         : ['launch_failed'].includes(bundle.status)
         ? 'pending'
         : next.session_dispatch.status;
-    if (canonicalWaitingTasks.length > 0 && next.session_dispatch.dispatch.packet) {
+    if (canonicalWaitingTasks.length > 0) {
       const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
       if (requirement) {
-        next.session_dispatch.dispatch.packet = {
-          ...next.session_dispatch.dispatch.packet,
-          ...buildSessionBatchPacket(job, requirement, canonicalWaitingTasks),
-        };
+        const sessionBatchPacket = buildSessionBatchPacket(job, requirement, canonicalWaitingTasks);
+        if (next.session_dispatch.dispatch.packet) {
+          next.session_dispatch.dispatch.packet = {
+            ...next.session_dispatch.dispatch.packet,
+            ...sessionBatchPacket,
+          };
+        } else {
+          const config = await getConfig();
+          next.session_dispatch.dispatch.packet = buildMessageEnvelope(
+            job,
+            sessionBatchPacket,
+            config,
+            mapAgentCards(await getAgents(config)),
+            [
+              {
+                kind: 'task_dispatch',
+                id: null,
+                path: job.post_milestone.task_dispatch.document.path,
+                role: 'source',
+              },
+              {
+                kind: 'session_batch',
+                id: null,
+                path: null,
+                role: 'target',
+              },
+            ],
+          );
+        }
       }
     }
 
