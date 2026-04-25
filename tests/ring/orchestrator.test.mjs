@@ -2258,6 +2258,7 @@ Split milestone prerequisites into ready and blocked sets.
             parent_task_id: replanningParentTaskId,
             parent_decision_note: replanningDecisionNote,
           },
+          governance_selection_context: effectiveForceSelectionContext,
         },
       );
 
