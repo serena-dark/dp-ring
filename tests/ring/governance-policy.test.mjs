@@ -9,6 +9,7 @@ import {
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
   checkpointEffectiveForceState,
+  canonicalizeWaitingTaskGovernanceBlockedReuse,
   canonicalizeWaitingTaskGovernanceLabels,
   checkpointGovernancePressureState,
   compareAutomaticReusePolicies,
@@ -1000,6 +1001,74 @@ describe('governance policy', () => {
         'wf-lineage-hold': 'Warm Lineage Template Renamed',
       },
     }]);
+  });
+
+  it('hydrates canonical blocked-reuse workflow names from fallback packet tasks for reused waiting tasks', async () => {
+    const readyTasks = [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Legacy) ',
+      governance_selection_context: null,
+      governance_blocked_reuse: [],
+    }];
+    const fallbackWaitingTasks = [{
+      task_id: 'task-docs',
+      governance_blocked_reuse: [{
+        id: ' wf-lineage-hold ',
+        name: ' Warm Lineage Template (Legacy) ',
+        reason: ' warm_semantic_lineage ',
+        checkpoint_id: ' cp-lineage ',
+      }],
+    }];
+    const liveDocs = new Map([
+      ['task:task-docs', { id: 'task-docs', data: { name: 'Documentation Refresh' } }],
+      ['workflow:wf-roomier-template', { id: 'wf-roomier-template', data: { name: 'Roomier Template Renamed' } }],
+      ['workflow:wf-lineage-hold', { id: 'wf-lineage-hold', data: { name: 'Warm Lineage Template Renamed' } }],
+    ]);
+
+    const hydrated = await hydrateWaitingTaskGovernanceLabels(
+      readyTasks,
+      async (kind, id) => liveDocs.get(`${kind}:${id}`) ?? null,
+      fallbackWaitingTasks,
+    );
+
+    assert.deepEqual(hydrated, [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Legacy) ',
+      governance_selection_context: null,
+      governance_blocked_reuse: [],
+      canonical_task_name: 'Documentation Refresh',
+      canonical_workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-lineage-hold': 'Warm Lineage Template Renamed',
+      },
+      canonical_selection_context_workflow_names: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+      },
+      canonical_governance_blocked_reuse_workflow_names: {
+        'wf-lineage-hold': 'Warm Lineage Template Renamed',
+      },
+    }]);
+    assert.deepEqual(
+      canonicalizeWaitingTaskGovernanceBlockedReuse(
+        hydrated[0],
+        fallbackWaitingTasks[0].governance_blocked_reuse,
+      ),
+      [{
+        id: 'wf-lineage-hold',
+        name: 'Warm Lineage Template Renamed',
+        reason: 'warm_semantic_lineage',
+        checkpoint_id: 'cp-lineage',
+        adoption_status: null,
+        branch_budget: null,
+        workflow_tightness: null,
+        oversight_strength: null,
+      }],
+    );
   });
 
   it('deduplicates normalized session governance selection context injection entries', () => {

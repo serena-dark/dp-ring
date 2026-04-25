@@ -1513,6 +1513,81 @@ ${workflowPlan}
         'wf-guidance-docs-lineage-hold (Guidance Docs Warm Lineage Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
       ],
     );
+
+    const renamedLineageBlockedWorkflowName = 'Guidance Docs Warm Lineage Template Renamed';
+    const renamedBudgetBlockedWorkflowName = 'Guidance Docs Branch Budget Template Renamed';
+    const lineageBlockedWorkflowRecord = await ring.read('workflow', 'wf-guidance-docs-lineage-hold');
+    const lineageBlockedWorkflowUpdate = await ring.update('workflow', 'wf-guidance-docs-lineage-hold', {
+      data: {
+        ...lineageBlockedWorkflowRecord.data,
+        name: renamedLineageBlockedWorkflowName,
+      },
+    });
+    assert.equal(
+      lineageBlockedWorkflowUpdate.ok,
+      true,
+      JSON.stringify(lineageBlockedWorkflowUpdate.errors),
+    );
+    const budgetBlockedWorkflowRecord = await ring.read('workflow', 'wf-guidance-docs-budget-hold');
+    const budgetBlockedWorkflowUpdate = await ring.update('workflow', 'wf-guidance-docs-budget-hold', {
+      data: {
+        ...budgetBlockedWorkflowRecord.data,
+        name: renamedBudgetBlockedWorkflowName,
+      },
+    });
+    assert.equal(
+      budgetBlockedWorkflowUpdate.ok,
+      true,
+      JSON.stringify(budgetBlockedWorkflowUpdate.errors),
+    );
+
+    await ring.orchestrator.tick();
+    const launchedJob = await ring.orchestrator.readJob(result.job.id);
+    assert.equal(launchedJob.status, 'session_dispatched');
+    assert.ok(launchedJob.session_dispatch.session_id);
+    assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+    const launchedPayloadTask = launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+      (item) => item.task_id === documentationTask.task_id,
+    );
+    assert.deepEqual(
+      [...(launchedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+        left.id.localeCompare(right.id)
+      ),
+      [
+        {
+          id: 'wf-guidance-docs-budget-hold',
+          name: renamedBudgetBlockedWorkflowName,
+          reason: 'checkpoint_branch_budget_exhausted',
+          checkpoint_id: 'cp-guidance-docs-budget-hold',
+          adoption_status: 'mainline',
+          branch_budget: 0,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+        },
+        {
+          id: 'wf-guidance-docs-lineage-hold',
+          name: renamedLineageBlockedWorkflowName,
+          reason: 'warm_semantic_lineage',
+          checkpoint_id: 'cp-guidance-docs-lineage-2',
+          adoption_status: null,
+          branch_budget: null,
+          workflow_tightness: null,
+          oversight_strength: null,
+        },
+      ],
+    );
+    assert.deepEqual(
+      (launchedPayloadTask?.governance_reenable_guidance ?? '')
+        .split('; ')
+        .filter(Boolean)
+        .sort(),
+      [
+        `wf-guidance-docs-budget-hold (${renamedBudgetBlockedWorkflowName}) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.`,
+        `wf-guidance-docs-lineage-hold (${renamedLineageBlockedWorkflowName}) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`,
+      ],
+    );
+    const launchedSession = await ring.read('session', launchedJob.session_dispatch.session_id);
+    assert.equal(launchedSession.data.governance_context, null);
   });
 
   it('surfaces governed automatic-reuse selection context when workflow preparation is retried', async () => {

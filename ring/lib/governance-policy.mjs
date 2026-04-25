@@ -267,21 +267,27 @@ function waitingTaskSelectionContextWorkflowIds(item) {
   ]);
 }
 
-function waitingTaskBlockedReuseWorkflowIds(item) {
-  if (!Array.isArray(item?.governance_blocked_reuse)) {
-    return [];
-  }
+function waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask = null) {
+  const currentCandidateIds = Array.isArray(item?.governance_blocked_reuse)
+    ? item.governance_blocked_reuse.map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate)?.id)
+    : [];
+  const fallbackCandidateIds = Array.isArray(fallbackWaitingTask?.governance_blocked_reuse)
+    ? fallbackWaitingTask.governance_blocked_reuse.map(
+        (candidate) => normalizeWorkflowReuseGovernanceBlock(candidate)?.id,
+      )
+    : [];
 
-  return uniqueTrimmedStrings(
-    item.governance_blocked_reuse.map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate)?.id),
-  );
+  return uniqueTrimmedStrings([
+    ...currentCandidateIds,
+    ...fallbackCandidateIds,
+  ]);
 }
 
-function waitingTaskCanonicalWorkflowIds(item) {
+function waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTask = null) {
   return uniqueTrimmedStrings([
     item?.workflow_template_id,
     ...waitingTaskSelectionContextWorkflowIds(item),
-    ...waitingTaskBlockedReuseWorkflowIds(item),
+    ...waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
   ]);
 }
 
@@ -305,10 +311,38 @@ function pickWorkflowNameOverrides(overrides, workflowTemplateIds = []) {
   );
 }
 
-export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], readArtifact = async () => null) {
+function waitingTaskLookup(waitingTasks = []) {
+  if (waitingTasks instanceof Map) {
+    return new Map(
+      [...waitingTasks.entries()]
+        .map(([taskId, item]) => [trimString(taskId) ?? trimString(item?.task_id), item])
+        .filter(([taskId]) => Boolean(taskId)),
+    );
+  }
+
+  if (Array.isArray(waitingTasks)) {
+    return new Map(
+      waitingTasks
+        .map((item) => [trimString(item?.task_id), item])
+        .filter(([taskId]) => Boolean(taskId)),
+    );
+  }
+
+  return new Map();
+}
+
+export async function hydrateWaitingTaskGovernanceLabels(
+  waitingTasks = [],
+  readArtifact = async () => null,
+  fallbackWaitingTasks = [],
+) {
+  const fallbackWaitingTaskById = waitingTaskLookup(fallbackWaitingTasks);
   const taskIds = uniqueTrimmedStrings(waitingTasks.map((item) => item?.task_id));
   const workflowTemplateIds = uniqueTrimmedStrings(
-    waitingTasks.flatMap((item) => waitingTaskCanonicalWorkflowIds(item)),
+    waitingTasks.flatMap((item) => {
+      const taskId = trimString(item?.task_id);
+      return waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTaskById.get(taskId) ?? null);
+    }),
   );
 
   const [loadedTaskResults, loadedWorkflowResults] = await Promise.all([
@@ -348,11 +382,15 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
   return waitingTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const workflowTemplateId = trimString(item?.workflow_template_id);
+    const fallbackWaitingTask = fallbackWaitingTaskById.get(taskId) ?? null;
     const replanningHandoff =
       taskReplanningHandoffById.get(taskId) ?? waitingTaskReplanningHandoff(item);
     const canonicalWorkflowNameOverridesForTask = {
       ...canonicalWorkflowNameOverrides(item),
-      ...workflowNameOverridesForIds(waitingTaskCanonicalWorkflowIds(item), workflowNameById),
+      ...workflowNameOverridesForIds(
+        waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTask),
+        workflowNameById,
+      ),
     };
     const canonicalSelectionContextWorkflowNames = pickWorkflowNameOverrides(
       canonicalWorkflowNameOverridesForTask,
@@ -360,7 +398,7 @@ export async function hydrateWaitingTaskGovernanceLabels(waitingTasks = [], read
     );
     const canonicalBlockedReuseWorkflowNames = pickWorkflowNameOverrides(
       canonicalWorkflowNameOverridesForTask,
-      waitingTaskBlockedReuseWorkflowIds(item),
+      waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
     );
 
     return {
@@ -561,13 +599,19 @@ export function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource
     : [];
 }
 
-function canonicalizeWaitingTaskGovernanceBlockedReuse(waitingTask) {
-  if (!Array.isArray(waitingTask?.governance_blocked_reuse)) {
-    return [];
-  }
+export function canonicalizeWaitingTaskGovernanceBlockedReuse(
+  waitingTask,
+  fallbackCandidates = null,
+) {
+  const rawCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
+    && waitingTask.governance_blocked_reuse.length > 0
+    ? waitingTask.governance_blocked_reuse
+    : Array.isArray(fallbackCandidates)
+      ? fallbackCandidates
+      : [];
 
   const workflowNameOverrides = canonicalWorkflowNameOverrides(waitingTask);
-  return waitingTask.governance_blocked_reuse
+  return rawCandidates
     .map((rawCandidate) => {
       const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
       const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;

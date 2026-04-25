@@ -7,6 +7,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionGovernanceContext,
+  canonicalizeWaitingTaskGovernanceBlockedReuse,
   canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
@@ -1559,10 +1560,29 @@ function sessionDispatchPacketGovernanceBlockedReuse(waitingTask, workflowPrepar
     && Array.isArray(workflowPreparationPayloadTask?.governance_blocked_reuse)
       ? workflowPreparationPayloadTask.governance_blocked_reuse
       : [];
+  const labelCarrier = {
+    ...workflowPreparationPayloadTask,
+    ...waitingTask,
+    canonical_workflow_name_overrides: {
+      ...(workflowPreparationPayloadTask?.canonical_workflow_name_overrides ?? {}),
+      ...(waitingTask?.canonical_workflow_name_overrides ?? {}),
+    },
+    canonical_selection_context_workflow_names: {
+      ...(workflowPreparationPayloadTask?.canonical_selection_context_workflow_names ?? {}),
+      ...(waitingTask?.canonical_selection_context_workflow_names ?? {}),
+    },
+    canonical_governance_blocked_reuse_workflow_names: {
+      ...(workflowPreparationPayloadTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+      ...(waitingTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+    },
+  };
   const seen = new Set();
   const candidates = [];
-  for (const rawCandidate of currentCandidates.length > 0 ? currentCandidates : fallbackCandidates) {
-    const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
+  const canonicalCandidates = canonicalizeWaitingTaskGovernanceBlockedReuse(
+    labelCarrier,
+    fallbackCandidates,
+  );
+  for (const candidate of canonicalCandidates) {
     if (!candidate.id || !candidate.name || !candidate.reason || candidate.id === chosenWorkflowId) {
       continue;
     }
@@ -1809,14 +1829,21 @@ ${taskSections}
 `;
 }
 
-function buildSessionBatchPacket(job, requirement, waitingTasks) {
-  const workflowPreparationPayloadWaitingTasks = Array.isArray(
-    job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
+function buildSessionBatchPacket(
+  job,
+  requirement,
+  waitingTasks,
+  workflowPreparationPayloadWaitingTasks = null,
+) {
+  const workflowPreparationPayloadWaitingTasksSource = Array.isArray(
+    workflowPreparationPayloadWaitingTasks,
   )
-    ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-    : [];
+    ? workflowPreparationPayloadWaitingTasks
+    : Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
+      ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+      : [];
   const workflowPreparationPayloadWaitingTaskById = new Map(
-    workflowPreparationPayloadWaitingTasks
+    workflowPreparationPayloadWaitingTasksSource
       .map((item) => [trimString(item?.task_id), item])
       .filter(([taskId]) => Boolean(taskId)),
   );
@@ -4378,7 +4405,22 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     if (canonicalWaitingTasks.length > 0) {
       const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
       if (requirement) {
-        const sessionBatchPacket = buildSessionBatchPacket(job, requirement, canonicalWaitingTasks);
+        const workflowPreparationPayloadWaitingTasks = Array.isArray(
+          job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
+        )
+          ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+          : [];
+        const workflowPreparationPayloadWaitingTasksForDispatchPacket =
+          await readyTasksWithCanonicalSessionLabels(
+            workflowPreparationPayloadWaitingTasks,
+            (kind, id) => ring.read(kind, id),
+          );
+        const sessionBatchPacket = buildSessionBatchPacket(
+          job,
+          requirement,
+          canonicalWaitingTasks,
+          workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        );
         if (next.session_dispatch.dispatch.packet) {
           next.session_dispatch.dispatch.packet = {
             ...next.session_dispatch.dispatch.packet,
@@ -5217,9 +5259,20 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         });
       }
 
+      const workflowPreparationPayloadWaitingTasks = Array.isArray(
+        job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
+      )
+        ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+        : [];
+      const workflowPreparationPayloadWaitingTasksForDispatchPacket =
+        await readyTasksWithCanonicalSessionLabels(
+          workflowPreparationPayloadWaitingTasks,
+          (kind, id) => ring.read(kind, id),
+        );
       const waitingTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
         waitingTasks,
         (kind, id) => ring.read(kind, id),
+        workflowPreparationPayloadWaitingTasks,
       );
       const waitingTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
         waitingTasksForSessionContext,
@@ -5227,7 +5280,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
 
       const batchPacket = buildMessageEnvelope(
         job,
-        buildSessionBatchPacket(job, requirement, waitingTasksForDispatchPacket),
+        buildSessionBatchPacket(
+          job,
+          requirement,
+          waitingTasksForDispatchPacket,
+          workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        ),
         config,
         mapAgentCards(await getAgents(config)),
         [
@@ -5338,9 +5396,20 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${job.requirement_name} dispatch batch`,
       });
       const workflowRunIds = [];
+      const workflowPreparationPayloadWaitingTasks = Array.isArray(
+        job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
+      )
+        ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+        : [];
+      const workflowPreparationPayloadWaitingTasksForDispatchPacket =
+        await readyTasksWithCanonicalSessionLabels(
+          workflowPreparationPayloadWaitingTasks,
+          (kind, id) => ring.read(kind, id),
+        );
       const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
         readyTasks,
         (kind, id) => ring.read(kind, id),
+        workflowPreparationPayloadWaitingTasks,
       );
       const readyTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
         readyTasksForSessionContext,
@@ -5473,7 +5542,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.launched_at = nowIso();
       next.session_dispatch.dispatch.packet = {
         ...next.session_dispatch.dispatch.packet,
-        ...buildSessionBatchPacket(job, requirement, readyTasksForDispatchPacket),
+        ...buildSessionBatchPacket(
+          job,
+          requirement,
+          readyTasksForDispatchPacket,
+          workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        ),
       };
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
       next.workflow_preparation.waiting_tasks = next.workflow_preparation.waiting_tasks.map(
