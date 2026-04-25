@@ -2243,6 +2243,23 @@ Split milestone prerequisites into ready and blocked sets.
           `replanning_handoff: parent_task_id: ${replanningParentTaskId} | parent_decision_note: ${replanningDecisionNote}`,
         ),
       );
+      assert.ok(Array.isArray(retried.workflow_preparation.dispatch.packet.payload.waiting_tasks));
+      assert.deepEqual(
+        retried.workflow_preparation.dispatch.packet.payload.waiting_tasks.find(
+          (item) => item.task_id === documentationTask.task_id,
+        ),
+        {
+          task_id: documentationTask.task_id,
+          task_name: documentationTask.task_name,
+          task_type: documentationTask.task_type,
+          milestone_id: documentationTask.milestone_id,
+          task_document_path: `docs/tasks/${documentationTask.task_id}/${documentationTask.task_id}.md`,
+          replanning_handoff: {
+            parent_task_id: replanningParentTaskId,
+            parent_decision_note: replanningDecisionNote,
+          },
+        },
+      );
 
       const workflowPlan = prerequisiteCompleted.workflow_preparation.waiting_tasks
         .map(

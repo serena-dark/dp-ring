@@ -1513,6 +1513,28 @@ function summarizeWorkflowRecommendation(recommendation) {
   return note ? `${summary} ${note}` : summary;
 }
 
+function workflowPreparationPayloadWaitingTask(task) {
+  const taskId = trimString(task?.id);
+  const taskName = trimString(task?.data?.name) || null;
+  const taskType = trimString(task?.data?.task_type) || null;
+  const milestoneId = trimString(task?.data?.milestone_id) || null;
+  const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
+  const parentDecisionNote = trimString(task?.data?.replanning?.parent_decision_note);
+  return {
+    task_id: taskId,
+    task_name: taskName,
+    task_type: taskType,
+    milestone_id: milestoneId,
+    task_document_path: `docs/tasks/${taskId}/${taskId}.md`,
+    replanning_handoff: parentTaskId && parentDecisionNote
+      ? {
+          parent_task_id: parentTaskId,
+          parent_decision_note: parentDecisionNote,
+        }
+      : null,
+  };
+}
+
 function buildWorkflowPreparationPacket(
   requirement,
   tasks,
@@ -1594,6 +1616,7 @@ function buildWorkflowPreparationPacket(
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: workflowDocumentPath,
       source_document_path: null,
+      waiting_tasks: tasks.map((task) => workflowPreparationPayloadWaitingTask(task)),
     },
   };
 }
