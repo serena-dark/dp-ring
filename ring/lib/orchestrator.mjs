@@ -19,6 +19,7 @@ import {
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
+  normalizeWorkflowReuseGovernanceBlock,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -1523,6 +1524,14 @@ function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
   const governanceSelectionContext = recommendation?.recommended?.selection_context
     ? clone(recommendation.recommended.selection_context)
     : null;
+  const governanceBlockedReuse = Array.isArray(recommendation?.governance_blocked_candidates)
+    ? recommendation.governance_blocked_candidates
+        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
+        .filter((item) => item.id && item.name && item.reason)
+    : [];
+  const governanceReenableGuidance = describeWorkflowGovernanceReenableGuidanceList(
+    governanceBlockedReuse,
+  );
   return {
     task_id: taskId,
     task_name: taskName,
@@ -1536,6 +1545,8 @@ function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
         }
       : null,
     governance_selection_context: governanceSelectionContext,
+    governance_blocked_reuse: governanceBlockedReuse,
+    governance_reenable_guidance: governanceReenableGuidance,
   };
 }
 

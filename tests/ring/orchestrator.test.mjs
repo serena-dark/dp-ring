@@ -1381,6 +1381,51 @@ Split milestone prerequisites into ready and blocked sets.
       retried.workflow_preparation.dispatch.packet.body,
       /governance_reenable_guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
     );
+    const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
+      (task) => task.task_type === 'documentation',
+    );
+    assert.ok(documentationTask);
+    assert.ok(Array.isArray(retried.workflow_preparation.dispatch.packet.payload.waiting_tasks));
+    const guidancePayloadTask = retried.workflow_preparation.dispatch.packet.payload.waiting_tasks.find(
+      (item) => item.task_id === documentationTask.task_id,
+    );
+    assert.deepEqual(
+      [...(guidancePayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+        left.id.localeCompare(right.id)
+      ),
+      [
+        {
+          id: 'wf-guidance-docs-budget-hold',
+          name: 'Guidance Docs Branch Budget Template',
+          reason: 'checkpoint_branch_budget_exhausted',
+          checkpoint_id: 'cp-guidance-docs-budget-hold',
+          adoption_status: 'mainline',
+          branch_budget: 0,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+        },
+        {
+          id: 'wf-guidance-docs-lineage-hold',
+          name: 'Guidance Docs Warm Lineage Template',
+          reason: 'warm_semantic_lineage',
+          checkpoint_id: 'cp-guidance-docs-lineage-2',
+          adoption_status: null,
+          branch_budget: null,
+          workflow_tightness: null,
+          oversight_strength: null,
+        },
+      ],
+    );
+    assert.deepEqual(
+      (guidancePayloadTask?.governance_reenable_guidance ?? '')
+        .split('; ')
+        .filter(Boolean)
+        .sort(),
+      [
+        'wf-guidance-docs-budget-hold (Guidance Docs Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.',
+        'wf-guidance-docs-lineage-hold (Guidance Docs Warm Lineage Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+      ],
+    );
   });
 
   it('surfaces governed automatic-reuse selection context when workflow preparation is retried', async () => {
@@ -2259,6 +2304,8 @@ Split milestone prerequisites into ready and blocked sets.
             parent_decision_note: replanningDecisionNote,
           },
           governance_selection_context: effectiveForceSelectionContext,
+          governance_blocked_reuse: [],
+          governance_reenable_guidance: 'none',
         },
       );
 
