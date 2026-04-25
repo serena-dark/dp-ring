@@ -1550,7 +1550,41 @@ function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
   };
 }
 
-function sessionDispatchPayloadWaitingTask(waitingTask) {
+function sessionDispatchPacketGovernanceBlockedReuse(waitingTask, workflowPreparationPayloadTask = null) {
+  const chosenWorkflowId = trimString(waitingTask?.workflow_template_id);
+  const currentCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
+    ? waitingTask.governance_blocked_reuse
+    : [];
+  const fallbackCandidates = currentCandidates.length === 0
+    && Array.isArray(workflowPreparationPayloadTask?.governance_blocked_reuse)
+      ? workflowPreparationPayloadTask.governance_blocked_reuse
+      : [];
+  const seen = new Set();
+  const candidates = [];
+  for (const rawCandidate of currentCandidates.length > 0 ? currentCandidates : fallbackCandidates) {
+    const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
+    if (!candidate.id || !candidate.name || !candidate.reason || candidate.id === chosenWorkflowId) {
+      continue;
+    }
+    const dedupeKey = [
+      candidate.id,
+      candidate.reason,
+      candidate.checkpoint_id ?? '',
+      candidate.adoption_status ?? '',
+      candidate.branch_budget ?? '',
+      candidate.workflow_tightness ?? '',
+      candidate.oversight_strength ?? '',
+    ].join('|');
+    if (seen.has(dedupeKey)) {
+      continue;
+    }
+    seen.add(dedupeKey);
+    candidates.push(candidate);
+  }
+  return candidates;
+}
+
+function sessionDispatchPayloadWaitingTask(waitingTask, workflowPreparationPayloadTask = null) {
   const taskId = trimString(waitingTask?.task_id);
   const taskName = trimString(waitingTask?.task_name) || null;
   const taskType = trimString(waitingTask?.task_type) || null;
@@ -1562,13 +1596,13 @@ function sessionDispatchPayloadWaitingTask(waitingTask) {
   const governanceSelectionContext = waitingTask?.governance_selection_context
     ? clone(waitingTask.governance_selection_context)
     : null;
-  const governanceBlockedReuse = Array.isArray(waitingTask?.governance_blocked_reuse)
-    ? waitingTask.governance_blocked_reuse
-        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
-        .filter((item) => item.id && item.name && item.reason)
-    : [];
-  const governanceReenableGuidance = trimString(waitingTask?.governance_reenable_guidance)
-    || describeWorkflowGovernanceReenableGuidanceList(governanceBlockedReuse);
+  const governanceBlockedReuse = sessionDispatchPacketGovernanceBlockedReuse(
+    waitingTask,
+    workflowPreparationPayloadTask,
+  );
+  const governanceReenableGuidance = describeWorkflowGovernanceReenableGuidanceList(
+    governanceBlockedReuse,
+  );
   return {
     task_id: taskId,
     task_name: taskName,
@@ -1776,6 +1810,16 @@ ${taskSections}
 }
 
 function buildSessionBatchPacket(job, requirement, waitingTasks) {
+  const workflowPreparationPayloadWaitingTasks = Array.isArray(
+    job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
+  )
+    ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+    : [];
+  const workflowPreparationPayloadWaitingTaskById = new Map(
+    workflowPreparationPayloadWaitingTasks
+      .map((item) => [trimString(item?.task_id), item])
+      .filter(([taskId]) => Boolean(taskId)),
+  );
   const taskLines = waitingTasks.length > 0
     ? waitingTasks
         .map((item) => {
@@ -1814,7 +1858,12 @@ function buildSessionBatchPacket(job, requirement, waitingTasks) {
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: job.workflow_preparation.document.path,
       source_document_path: job.post_milestone.task_dispatch.document.path,
-      waiting_tasks: waitingTasks.map((item) => sessionDispatchPayloadWaitingTask(item)),
+      waiting_tasks: waitingTasks.map((item) =>
+        sessionDispatchPayloadWaitingTask(
+          item,
+          workflowPreparationPayloadWaitingTaskById.get(trimString(item?.task_id)) ?? null,
+        )
+      ),
     },
   };
 }
