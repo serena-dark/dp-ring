@@ -863,6 +863,18 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(prerequisiteCompleted.workflow_preparation.reused_workflow_ids.length, 1);
     assert.equal(prerequisiteCompleted.workflow_preparation.generated_workflow_ids.length, 1);
     assert.equal(prerequisiteCompleted.session_dispatch.waiting_task_ids.length, 2);
+    assert.equal(
+      prerequisiteCompleted.session_dispatch.dispatch.packet.artifacts?.[0]?.kind,
+      'workflow_plan',
+    );
+    assert.equal(
+      prerequisiteCompleted.session_dispatch.dispatch.packet.artifacts?.[0]?.path,
+      prerequisiteCompleted.workflow_preparation.document.path,
+    );
+    assert.equal(
+      prerequisiteCompleted.session_dispatch.dispatch.packet.artifacts?.[1]?.kind,
+      'session_batch',
+    );
 
     const readyTasks = await ring.list('task');
     const sessionReadyTasks = readyTasks.filter(
@@ -883,6 +895,14 @@ Split milestone prerequisites into ready and blocked sets.
     assert.equal(launchedJob.status, 'session_dispatched');
     assert.ok(launchedJob.session_dispatch.session_id);
     assert.equal(launchedJob.session_dispatch.workflow_run_ids.length, 2);
+    assert.equal(
+      launchedJob.session_dispatch.dispatch.packet.artifacts?.[0]?.kind,
+      'workflow_plan',
+    );
+    assert.equal(
+      launchedJob.session_dispatch.dispatch.packet.artifacts?.[0]?.path,
+      prerequisiteCompleted.workflow_preparation.document.path,
+    );
 
     const launchedSession = await ring.read(
       'session',

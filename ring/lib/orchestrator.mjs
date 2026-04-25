@@ -1924,6 +1924,41 @@ function buildSessionBatchPacket(
   };
 }
 
+function buildSessionDispatchMessageEnvelope(
+  job,
+  requirement,
+  waitingTasks,
+  workflowPreparationPayloadWaitingTasks,
+  config,
+  agentCards,
+) {
+  return buildMessageEnvelope(
+    job,
+    buildSessionBatchPacket(
+      job,
+      requirement,
+      waitingTasks,
+      workflowPreparationPayloadWaitingTasks,
+    ),
+    config,
+    agentCards,
+    [
+      {
+        kind: 'workflow_plan',
+        id: null,
+        path: job.workflow_preparation.document.path,
+        role: 'source',
+      },
+      {
+        kind: 'session_batch',
+        id: null,
+        path: null,
+        role: 'target',
+      },
+    ],
+  );
+}
+
 function parseTaskScopedSections(documentText) {
   const sectionMatches = [
     ...documentText.matchAll(/^##\s+Task\s+([a-z0-9-]+)\s*:\s+(.+)$/gim),
@@ -4440,40 +4475,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             null,
             (kind, id) => ring.read(kind, id),
           );
-        const sessionBatchPacket = buildSessionBatchPacket(
+        const config = await getConfig();
+        next.session_dispatch.dispatch.packet = buildSessionDispatchMessageEnvelope(
           job,
           requirement,
           canonicalWaitingTasks,
           workflowPreparationPayloadWaitingTasksForDispatchPacket,
+          config,
+          mapAgentCards(await getAgents(config)),
         );
-        if (next.session_dispatch.dispatch.packet) {
-          next.session_dispatch.dispatch.packet = {
-            ...next.session_dispatch.dispatch.packet,
-            ...sessionBatchPacket,
-          };
-        } else {
-          const config = await getConfig();
-          next.session_dispatch.dispatch.packet = buildMessageEnvelope(
-            job,
-            sessionBatchPacket,
-            config,
-            mapAgentCards(await getAgents(config)),
-            [
-              {
-                kind: 'task_dispatch',
-                id: null,
-                path: job.post_milestone.task_dispatch.document.path,
-                role: 'source',
-              },
-              {
-                kind: 'session_batch',
-                id: null,
-                path: null,
-                role: 'target',
-              },
-            ],
-          );
-        }
       }
     }
 
@@ -5286,7 +5296,6 @@ function inferTaskTypeFromContext(goal, contextText = '') {
 
       const {
         workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        waitingTasksForSessionContext,
         waitingTasksForDispatchPacket,
       } = await sessionDispatchPacketWaitingTaskViews(
         job,
@@ -5294,30 +5303,13 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         (kind, id) => ring.read(kind, id),
       );
 
-      const batchPacket = buildMessageEnvelope(
+      const batchPacket = buildSessionDispatchMessageEnvelope(
         job,
-        buildSessionBatchPacket(
-          job,
-          requirement,
-          waitingTasksForDispatchPacket,
-          workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        ),
+        requirement,
+        waitingTasksForDispatchPacket,
+        workflowPreparationPayloadWaitingTasksForDispatchPacket,
         config,
         mapAgentCards(await getAgents(config)),
-        [
-          {
-            kind: 'workflow_plan',
-            id: null,
-            path: job.workflow_preparation.document.path,
-            role: 'source',
-          },
-          {
-            kind: 'session_batch',
-            id: null,
-            path: null,
-            role: 'target',
-          },
-        ],
       );
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
@@ -5547,15 +5539,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.session_id = sessionId;
       next.session_dispatch.workflow_run_ids = workflowRunIds;
       next.session_dispatch.launched_at = nowIso();
-      next.session_dispatch.dispatch.packet = {
-        ...next.session_dispatch.dispatch.packet,
-        ...buildSessionBatchPacket(
-          job,
-          requirement,
-          readyTasksForDispatchPacket,
-          workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        ),
-      };
+      const config = await getConfig();
+      next.session_dispatch.dispatch.packet = buildSessionDispatchMessageEnvelope(
+        job,
+        requirement,
+        readyTasksForDispatchPacket,
+        workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        config,
+        mapAgentCards(await getAgents(config)),
+      );
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
       next.workflow_preparation.waiting_tasks = next.workflow_preparation.waiting_tasks.map(
         (item) =>
