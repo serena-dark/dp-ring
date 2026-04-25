@@ -1641,6 +1641,35 @@ function sessionDispatchPayloadWaitingTask(waitingTask, workflowPreparationPaylo
   };
 }
 
+function workflowPreparationPayloadWaitingTasks(job) {
+  return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
+    ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+    : [];
+}
+
+async function sessionDispatchPacketWaitingTaskViews(job, waitingTasks = null, readArtifact) {
+  const payloadWaitingTasks = workflowPreparationPayloadWaitingTasks(job);
+  const payloadWaitingTasksForDispatchPacket = await readyTasksWithCanonicalSessionLabels(
+    payloadWaitingTasks,
+    readArtifact,
+  );
+  const waitingTasksForSessionContext = Array.isArray(waitingTasks)
+    ? await readyTasksWithCanonicalSessionLabels(
+        waitingTasks,
+        readArtifact,
+        payloadWaitingTasks,
+      )
+    : [];
+
+  return {
+    workflowPreparationPayloadWaitingTasksForDispatchPacket: payloadWaitingTasksForDispatchPacket,
+    waitingTasksForSessionContext,
+    waitingTasksForDispatchPacket: Array.isArray(waitingTasks)
+      ? readyTasksWithCanonicalDispatchLabels(waitingTasksForSessionContext)
+      : [],
+  };
+}
+
 function buildWorkflowPreparationPacket(
   requirement,
   tasks,
@@ -4405,14 +4434,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     if (canonicalWaitingTasks.length > 0) {
       const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
       if (requirement) {
-        const workflowPreparationPayloadWaitingTasks = Array.isArray(
-          job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
-        )
-          ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-          : [];
-        const workflowPreparationPayloadWaitingTasksForDispatchPacket =
-          await readyTasksWithCanonicalSessionLabels(
-            workflowPreparationPayloadWaitingTasks,
+        const { workflowPreparationPayloadWaitingTasksForDispatchPacket } =
+          await sessionDispatchPacketWaitingTaskViews(
+            job,
+            null,
             (kind, id) => ring.read(kind, id),
           );
         const sessionBatchPacket = buildSessionBatchPacket(
@@ -5259,23 +5284,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         });
       }
 
-      const workflowPreparationPayloadWaitingTasks = Array.isArray(
-        job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
-      )
-        ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-        : [];
-      const workflowPreparationPayloadWaitingTasksForDispatchPacket =
-        await readyTasksWithCanonicalSessionLabels(
-          workflowPreparationPayloadWaitingTasks,
-          (kind, id) => ring.read(kind, id),
-        );
-      const waitingTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+      const {
+        workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        waitingTasksForSessionContext,
+        waitingTasksForDispatchPacket,
+      } = await sessionDispatchPacketWaitingTaskViews(
+        job,
         waitingTasks,
         (kind, id) => ring.read(kind, id),
-        workflowPreparationPayloadWaitingTasks,
-      );
-      const waitingTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
-        waitingTasksForSessionContext,
       );
 
       const batchPacket = buildMessageEnvelope(
@@ -5396,23 +5412,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${job.requirement_name} dispatch batch`,
       });
       const workflowRunIds = [];
-      const workflowPreparationPayloadWaitingTasks = Array.isArray(
-        job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks,
-      )
-        ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-        : [];
-      const workflowPreparationPayloadWaitingTasksForDispatchPacket =
-        await readyTasksWithCanonicalSessionLabels(
-          workflowPreparationPayloadWaitingTasks,
-          (kind, id) => ring.read(kind, id),
-        );
-      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+      const {
+        workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        waitingTasksForSessionContext: readyTasksForSessionContext,
+        waitingTasksForDispatchPacket: readyTasksForDispatchPacket,
+      } = await sessionDispatchPacketWaitingTaskViews(
+        job,
         readyTasks,
         (kind, id) => ring.read(kind, id),
-        workflowPreparationPayloadWaitingTasks,
-      );
-      const readyTasksForDispatchPacket = readyTasksWithCanonicalDispatchLabels(
-        readyTasksForSessionContext,
       );
       const governanceContext = buildSessionGovernanceContext(readyTasksForSessionContext);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
