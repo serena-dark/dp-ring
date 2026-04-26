@@ -4585,6 +4585,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         );
       }
     } else if (bundle.status === 'session_launched') {
+      if (next.status === 'failed' && next.current_stage === 'session_dispatch') {
+        await commitTransition(
+          'waiting_for_session_dispatch',
+          SESSION_DISPATCHER_ID,
+          'adaptive_session_launch_resynced',
+          `Adaptive bundle ${bundle.id} already launched session ${bundle.batching.session_id}.`,
+          'session_dispatch',
+        );
+      }
       if (
         ['post_milestone_dispatched', 'post_milestone_in_progress'].includes(next.status)
       ) {
@@ -7563,7 +7572,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         const bundle = await readDispatchBundle(job.adaptive_dispatch.bundle_id).catch(
           () => null,
         );
-        if (bundle && ['launch_failed', 'session_batched', 'ready_queued'].includes(bundle.status)) {
+        if (
+          bundle
+          && ['launch_failed', 'session_batched', 'ready_queued', 'session_launched'].includes(bundle.status)
+        ) {
           const nextBundle = clone(bundle);
           const previousStatus = nextBundle.status;
           if (previousStatus === 'launch_failed') {
