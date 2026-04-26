@@ -802,6 +802,8 @@ describe('governance policy', () => {
             effective_force_score: 0,
           },
         },
+        governance_blocked_reuse: [],
+        governance_reenable_guidance: 'none',
         canonical_workflow_name_overrides: {
           'wf-roomier-template': 'Roomier Template Renamed',
           'wf-tight-template': 'Tight Template Renamed',
@@ -815,6 +817,8 @@ describe('governance policy', () => {
         workflow_name: 'Review Template Renamed',
         canonical_workflow_name: ' Review Template Renamed ',
         governance_selection_context: null,
+        governance_blocked_reuse: [],
+        governance_reenable_guidance: 'none',
         canonical_workflow_name_overrides: {
           'wf-review-template': 'Review Template Renamed',
         },
@@ -892,11 +896,17 @@ describe('governance policy', () => {
         },
       },
       governance_blocked_reuse: [{
-        id: ' wf-lineage-hold ',
-        name: ' Warm Lineage Template (Legacy) ',
-        reason: ' warm_semantic_lineage ',
-        checkpoint_id: ' cp-lineage ',
+        id: 'wf-lineage-hold',
+        name: 'Warm Lineage Template Renamed',
+        reason: 'warm_semantic_lineage',
+        checkpoint_id: 'cp-lineage',
+        adoption_status: null,
+        branch_budget: null,
+        workflow_tightness: null,
+        oversight_strength: null,
       }],
+      governance_reenable_guidance:
+        'wf-lineage-hold (Warm Lineage Template Renamed) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
       canonical_workflow_name_overrides: {
         'wf-roomier-template': 'Roomier Template Renamed',
         'wf-tight-template': 'Tight Template Renamed',

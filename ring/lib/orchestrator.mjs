@@ -1641,6 +1641,43 @@ function sessionDispatchPayloadWaitingTask(waitingTask, workflowPreparationPaylo
   };
 }
 
+function mergeSessionDispatchPayloadIntoWaitingTask(waitingTask, sessionDispatchPayloadTask = null) {
+  if (!sessionDispatchPayloadTask) {
+    return waitingTask;
+  }
+
+  return {
+    ...waitingTask,
+    task_name: sessionDispatchPayloadTask.task_name ?? waitingTask.task_name ?? null,
+    task_type: sessionDispatchPayloadTask.task_type ?? waitingTask.task_type ?? null,
+    milestone_id: sessionDispatchPayloadTask.milestone_id ?? waitingTask.milestone_id ?? null,
+    task_document_path:
+      sessionDispatchPayloadTask.task_document_path ?? waitingTask.task_document_path ?? null,
+    replanning_handoff:
+      sessionDispatchPayloadTask.replanning_handoff ?? waitingTask.replanning_handoff ?? null,
+    governance_selection_context:
+      sessionDispatchPayloadTask.governance_selection_context
+      ?? waitingTask.governance_selection_context
+      ?? null,
+    governance_blocked_reuse:
+      sessionDispatchPayloadTask.governance_blocked_reuse
+      ?? waitingTask.governance_blocked_reuse
+      ?? [],
+    governance_reenable_guidance:
+      sessionDispatchPayloadTask.governance_reenable_guidance
+      ?? waitingTask.governance_reenable_guidance
+      ?? 'none',
+  };
+}
+
+function sessionDispatchPayloadWaitingTaskLookup(packet) {
+  return new Map(
+    (Array.isArray(packet?.payload?.waiting_tasks) ? packet.payload.waiting_tasks : [])
+      .map((item) => [trimString(item?.task_id), item])
+      .filter(([taskId]) => Boolean(taskId)),
+  );
+}
+
 function workflowPreparationPayloadWaitingTasks(job) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
@@ -1665,7 +1702,7 @@ async function sessionDispatchPacketWaitingTaskViews(job, waitingTasks = null, r
     workflowPreparationPayloadWaitingTasksForDispatchPacket: payloadWaitingTasksForDispatchPacket,
     waitingTasksForSessionContext,
     waitingTasksForDispatchPacket: Array.isArray(waitingTasks)
-      ? readyTasksWithCanonicalDispatchLabels(waitingTasksForSessionContext)
+      ? readyTasksWithCanonicalDispatchLabels(waitingTasksForSessionContext, payloadWaitingTasks)
       : [],
   };
 }
@@ -4484,6 +4521,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           config,
           mapAgentCards(await getAgents(config)),
         );
+        const sessionDispatchPayloadTaskById = sessionDispatchPayloadWaitingTaskLookup(
+          next.session_dispatch.dispatch.packet,
+        );
+        next.workflow_preparation.waiting_tasks = canonicalWaitingTasks.map((item) =>
+          mergeSessionDispatchPayloadIntoWaitingTask(
+            item,
+            sessionDispatchPayloadTaskById.get(trimString(item?.task_id)) ?? null,
+          )
+        );
       }
     }
 
@@ -5311,9 +5357,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         config,
         mapAgentCards(await getAgents(config)),
       );
+      const batchPacketWaitingTaskById = sessionDispatchPayloadWaitingTaskLookup(batchPacket);
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
-      next.workflow_preparation.waiting_tasks = waitingTasksForDispatchPacket;
+      next.workflow_preparation.waiting_tasks = waitingTasksForDispatchPacket.map((item) =>
+        mergeSessionDispatchPayloadIntoWaitingTask(
+          item,
+          batchPacketWaitingTaskById.get(trimString(item?.task_id)) ?? null,
+        )
+      );
       next.workflow_preparation.generated_workflow_ids = generatedWorkflowIds;
       next.workflow_preparation.reused_workflow_ids = reusedWorkflowIds;
       next.workflow_preparation.parse_error = null;
@@ -5549,11 +5601,27 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         mapAgentCards(await getAgents(config)),
       );
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
+      const dispatchedAt = nowIso();
+      const readyTaskById = new Map(
+        readyTasksForDispatchPacket.map((item) => [item.task_id, item]),
+      );
+      const sessionDispatchPayloadTaskById = sessionDispatchPayloadWaitingTaskLookup(
+        next.session_dispatch.dispatch.packet,
+      );
       next.workflow_preparation.waiting_tasks = next.workflow_preparation.waiting_tasks.map(
-        (item) =>
-          readyTasks.some((readyItem) => readyItem.task_id === item.task_id)
-            ? { ...item, dispatched_at: nowIso() }
-            : item,
+        (item) => {
+          const refreshedReadyTask = readyTaskById.get(item.task_id);
+          if (!refreshedReadyTask) {
+            return item;
+          }
+          return {
+            ...mergeSessionDispatchPayloadIntoWaitingTask(
+              { ...item, ...refreshedReadyTask },
+              sessionDispatchPayloadTaskById.get(item.task_id) ?? null,
+            ),
+            dispatched_at: dispatchedAt,
+          };
+        },
       );
       closeTraceStage(
         next,

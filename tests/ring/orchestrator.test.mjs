@@ -2269,6 +2269,43 @@ ${workflowPlan}
         refreshedDocumentationTask?.workflow_template_id,
         finalizedDocumentationTask.workflow_template_id,
       );
+      assert.deepEqual(
+        [...(refreshedDocumentationTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [
+          {
+            id: 'wf-guidance-docs-budget-hold',
+            name: renamedBudgetBlockedWorkflowName,
+            reason: 'checkpoint_branch_budget_exhausted',
+            checkpoint_id: 'cp-guidance-docs-budget-hold',
+            adoption_status: 'mainline',
+            branch_budget: 0,
+            workflow_tightness: 'tight',
+            oversight_strength: 'strong',
+          },
+          {
+            id: 'wf-guidance-docs-lineage-hold',
+            name: renamedLineageBlockedWorkflowName,
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-guidance-docs-lineage-2',
+            adoption_status: null,
+            branch_budget: null,
+            workflow_tightness: null,
+            oversight_strength: null,
+          },
+        ],
+      );
+      assert.deepEqual(
+        (refreshedDocumentationTask?.governance_reenable_guidance ?? '')
+          .split('; ')
+          .filter(Boolean)
+          .sort(),
+        [
+          `wf-guidance-docs-budget-hold (${renamedBudgetBlockedWorkflowName}) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.`,
+          `wf-guidance-docs-lineage-hold (${renamedLineageBlockedWorkflowName}) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`,
+        ],
+      );
       assert.ok(
         refreshedStoredJob.session_dispatch.dispatch.packet.body.includes(
           `- ${finalizedDocumentationTask.task_id}: ${finalizedDocumentationTask.task_name} -> ${finalizedDocumentationTask.workflow_template_id}`,

@@ -988,15 +988,43 @@ export function sessionGovernanceSelectionContexts(readyTasks = []) {
   return selectionContexts;
 }
 
-export function canonicalizeWaitingTaskGovernanceLabels(readyTasks = []) {
+export function canonicalizeWaitingTaskGovernanceLabels(
+  readyTasks = [],
+  fallbackWaitingTasks = [],
+) {
   const selectionContextByTaskId = new Map(
     sessionGovernanceSelectionContexts(readyTasks).map((entry) => [trimString(entry?.task_id), entry]),
   );
+  const fallbackWaitingTaskById = waitingTaskLookup(fallbackWaitingTasks);
 
   return readyTasks.map((item) => {
     const taskId = trimString(item?.task_id);
     const selectionContextEntry = selectionContextByTaskId.get(taskId) ?? null;
-    const workflowNameOverrides = canonicalWorkflowNameOverrides(item);
+    const fallbackWaitingTask = fallbackWaitingTaskById.get(taskId) ?? null;
+    const labelCarrier = {
+      ...fallbackWaitingTask,
+      ...item,
+      canonical_workflow_name_overrides: {
+        ...(fallbackWaitingTask?.canonical_workflow_name_overrides ?? {}),
+        ...(item?.canonical_workflow_name_overrides ?? {}),
+      },
+      canonical_selection_context_workflow_names: {
+        ...(fallbackWaitingTask?.canonical_selection_context_workflow_names ?? {}),
+        ...(item?.canonical_selection_context_workflow_names ?? {}),
+      },
+      canonical_governance_blocked_reuse_workflow_names: {
+        ...(fallbackWaitingTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+        ...(item?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+      },
+    };
+    const workflowNameOverrides = canonicalWorkflowNameOverrides(labelCarrier);
+    const governanceBlockedReuse = canonicalizeWaitingTaskGovernanceBlockedReuse(
+      labelCarrier,
+      fallbackWaitingTask?.governance_blocked_reuse,
+    );
+    const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
+      governanceBlockedReuse,
+    );
     return {
       ...item,
       task_name: selectionContextEntry?.task_name
@@ -1009,6 +1037,8 @@ export function canonicalizeWaitingTaskGovernanceLabels(readyTasks = []) {
         || null,
       governance_selection_context:
         selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
+      governance_blocked_reuse: governanceBlockedReuse,
+      governance_reenable_guidance: governanceReenableGuidance,
       ...(Object.keys(workflowNameOverrides).length > 0
         ? { canonical_workflow_name_overrides: workflowNameOverrides }
         : {}),
