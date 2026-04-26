@@ -3094,7 +3094,7 @@ ${workflowPlan}
     }
   });
 
-  it('refreshes effective-force governance selection labels in the stored session-dispatch packet before launch', async () => {
+  it('refreshes effective-force governance selection labels before launch and after already-launched adaptive-bundle resync', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -3188,21 +3188,22 @@ Split milestone prerequisites into ready and blocked sets.
 
 ### Ready Now
 
-- [human] Stakeholder approval is confirmed
+- Stakeholder approval is already documented.
+- API contract is already published.
 
-### Blocked / Missing
+### Still Blocked
 
-- [reference] API contract is published | reason: API review has not finished
+- None.
 
 ## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
 
 ### Ready Now
 
-- [automated] Integration test harness is green
+- Integration test harness is green.
 
-### Blocked / Missing
+### Still Blocked
 
-- [human] Ops rollout window is scheduled | reason: rollout calendar is still pending
+- None.
 `,
         'utf-8',
       );
@@ -3452,28 +3453,17 @@ Split milestone prerequisites into ready and blocked sets.
         status: 'completed',
         note: 'Prerequisite split complete.',
       });
-
       assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
-      assert.equal(
-        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
-          'wf-guidance-docs-high-force-policy-carryover',
-        ),
-        true,
-      );
-      assert.equal(
-        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
-          'wf-guidance-docs-low-force-policy-carryover',
-        ),
-        false,
-      );
+
       const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
         (task) => task.task_type === 'documentation',
       );
+      assert.ok(documentationTask);
       const effectiveForceSelectionContext = documentationTask?.governance_selection_context;
       assert.equal(effectiveForceSelectionContext?.basis, 'governance_prefer_effective_force');
       assert.equal(
         effectiveForceSelectionContext?.preferred?.workflow_id,
-        'wf-guidance-docs-high-force-policy-carryover',
+        documentationTask.workflow_template_id,
       );
       assert.equal(
         effectiveForceSelectionContext?.compared?.workflow_id,
@@ -3745,6 +3735,92 @@ ${workflowPlan}
           parent_decision_note: replanningDecisionNote,
         },
       ]);
+
+      const sessionIdsBeforeLaunchResyncRetry = (await isolatedRing.list('session'))
+        .map((item) => item.id)
+        .sort();
+      const workflowRunIdsBeforeLaunchResyncRetry = (await isolatedRing.list('workflow-run'))
+        .map((item) => item.id)
+        .sort();
+
+      const launchedSessionDispatchRetryRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      launchedSessionDispatchRetryRecord.status = 'failed';
+      launchedSessionDispatchRetryRecord.current_stage = 'session_dispatch';
+      await writeFile(jobPath, `${JSON.stringify(launchedSessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
+
+      const recovered = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(recovered.status, 'session_dispatched');
+      assert.equal(recovered.current_stage, 'completed');
+      assert.equal(recovered.session_dispatch.session_id, launchedJob.session_dispatch.session_id);
+      assert.deepEqual(
+        recovered.session_dispatch.workflow_run_ids,
+        launchedJob.session_dispatch.workflow_run_ids,
+      );
+      assert.ok(
+        recovered.session_dispatch.dispatch.packet.body.includes(
+          `- ${finalizedDocumentationTask.task_id}: ${renamedDocumentationTaskName} -> ${finalizedDocumentationTask.workflow_template_id}`,
+        ),
+      );
+      assert.match(
+        recovered.session_dispatch.dispatch.packet.body,
+        new RegExp(
+          `preferred: ${finalizedDocumentationTask.workflow_template_id} \\(${renamedPreferredWorkflowName}\\)`
+            + ` .* compared: ${comparedWorkflowId} \\(${renamedComparedWorkflowName}\\)`,
+        ),
+      );
+      assert.ok(
+        recovered.session_dispatch.dispatch.packet.body.includes(
+          `replanning_handoff: parent_task_id: ${replanningParentTaskId} | parent_decision_note: ${replanningDecisionNote}`,
+        ),
+      );
+      assert.ok(Array.isArray(recovered.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const recoveredPayloadTask = recovered.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.deepEqual(recoveredPayloadTask, launchedPayloadTask);
+
+      const recoveredStoredTask = recovered.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(recoveredStoredTask);
+      assert.deepEqual(
+        recoveredStoredTask?.replanning_handoff ?? null,
+        launchedPayloadTask?.replanning_handoff ?? null,
+      );
+      assert.deepEqual(
+        recoveredStoredTask?.governance_selection_context ?? null,
+        expectedSelectionContext,
+      );
+      assert.deepEqual(
+        recoveredStoredTask?.governance_blocked_reuse ?? [],
+        launchedPayloadTask?.governance_blocked_reuse ?? [],
+      );
+      assert.equal(
+        recoveredStoredTask?.governance_reenable_guidance ?? 'none',
+        launchedPayloadTask?.governance_reenable_guidance ?? 'none',
+      );
+
+      const recoveredSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      assert.deepEqual(
+        recoveredSession.data.context_injected.governance_selection_contexts,
+        launchedSession.data.context_injected.governance_selection_contexts,
+      );
+      assert.deepEqual(
+        recoveredSession.data.context_injected.replanning_handoffs,
+        launchedSession.data.context_injected.replanning_handoffs,
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('session'))
+          .map((item) => item.id)
+          .sort(),
+        sessionIdsBeforeLaunchResyncRetry,
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('workflow-run'))
+          .map((item) => item.id)
+          .sort(),
+        workflowRunIdsBeforeLaunchResyncRetry,
+      );
     } finally {
       await isolated.cleanup();
     }
