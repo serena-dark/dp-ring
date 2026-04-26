@@ -931,7 +931,7 @@ Split milestone prerequisites into ready and blocked sets.
     );
   });
 
-  it('surfaces warm-lineage governance reasons when workflow preparation is retried', async () => {
+  it('surfaces governance-blocked reuse guidance when workflow preparation is retried, launched, and later resynced from an already-launched adaptive bundle', async () => {
     const result = await ring.orchestrator.createRequirementDispatch({
       name: 'Workflow Guidance Warm Lineage',
       description:
@@ -2385,6 +2385,97 @@ ${workflowPlan}
           `wf-guidance-docs-budget-hold (${renamedBudgetBlockedWorkflowName}) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.`,
           `wf-guidance-docs-lineage-hold (${renamedLineageBlockedWorkflowName}) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`,
         ],
+      );
+
+      await isolatedRing.orchestrator.tick();
+      const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
+      assert.equal(launchedJob.status, 'session_dispatched');
+      assert.equal(launchedJob.current_stage, 'completed');
+      assert.ok(launchedJob.session_dispatch.session_id);
+      assert.ok(launchedJob.session_dispatch.workflow_run_ids.length > 0);
+      assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const launchedPayloadTask = launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.deepEqual(launchedPayloadTask, refreshedPayloadTask);
+
+      const launchedStoredTask = launchedJob.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(launchedStoredTask);
+      assert.equal(launchedStoredTask?.task_name, finalizedDocumentationTask.task_name);
+      assert.equal(launchedStoredTask?.task_type, finalizedDocumentationTask.task_type);
+      assert.equal(launchedStoredTask?.milestone_id, finalizedDocumentationTask.milestone_id);
+      assert.equal(launchedStoredTask?.task_document_path, finalizedDocumentationTask.task_document_path);
+      assert.deepEqual(launchedStoredTask?.replanning_handoff ?? null, null);
+      assert.deepEqual(launchedStoredTask?.governance_selection_context ?? null, null);
+      assert.deepEqual(
+        [...(launchedStoredTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [...(launchedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+      );
+      assert.equal(
+        launchedStoredTask?.governance_reenable_guidance ?? 'none',
+        launchedPayloadTask?.governance_reenable_guidance ?? 'none',
+      );
+
+      const sessionIdsBeforeLaunchResyncRetry = (await isolatedRing.list('session'))
+        .map((item) => item.id)
+        .sort();
+      const workflowRunIdsBeforeLaunchResyncRetry = (await isolatedRing.list('workflow-run'))
+        .map((item) => item.id)
+        .sort();
+
+      const launchedSessionDispatchRetryRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      launchedSessionDispatchRetryRecord.status = 'failed';
+      launchedSessionDispatchRetryRecord.current_stage = 'session_dispatch';
+      await writeFile(jobPath, `${JSON.stringify(launchedSessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
+
+      const recovered = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(recovered.status, 'session_dispatched');
+      assert.equal(recovered.current_stage, 'completed');
+      assert.equal(recovered.session_dispatch.session_id, launchedJob.session_dispatch.session_id);
+      assert.deepEqual(
+        recovered.session_dispatch.workflow_run_ids,
+        launchedJob.session_dispatch.workflow_run_ids,
+      );
+      assert.ok(Array.isArray(recovered.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const recoveredPayloadTask = recovered.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.deepEqual(recoveredPayloadTask, launchedPayloadTask);
+
+      const recoveredStoredTask = recovered.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(recoveredStoredTask);
+      assert.deepEqual(recoveredStoredTask?.governance_selection_context ?? null, null);
+      assert.deepEqual(
+        [...(recoveredStoredTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [...(launchedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+      );
+      assert.equal(
+        recoveredStoredTask?.governance_reenable_guidance ?? 'none',
+        launchedPayloadTask?.governance_reenable_guidance ?? 'none',
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('session'))
+          .map((item) => item.id)
+          .sort(),
+        sessionIdsBeforeLaunchResyncRetry,
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('workflow-run'))
+          .map((item) => item.id)
+          .sort(),
+        workflowRunIdsBeforeLaunchResyncRetry,
       );
 
     } finally {
