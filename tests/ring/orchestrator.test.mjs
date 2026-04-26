@@ -3826,7 +3826,7 @@ ${workflowPlan}
     }
   });
 
-  it('preserves multiple governed selection contexts when a requirement-dispatch batch session launches', async () => {
+  it('preserves multiple governed selection contexts across requirement-dispatch batch launch and already-launched session-dispatch resync', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -4177,10 +4177,121 @@ Split milestone prerequisites into ready and blocked sets.
         assert.equal(task.governance_selection_context?.compared?.workflow_id, expected.compared);
       }
 
+      const renamedTaskNamesById = new Map();
+      for (const task of governedWaitingTasks) {
+        const renamedTaskName = `${task.task_name} (renamed before launch)`;
+        renamedTaskNamesById.set(task.task_id, renamedTaskName);
+        const taskRecord = await isolatedRing.read('task', task.task_id);
+        const taskUpdate = await isolatedRing.update('task', task.task_id, {
+          data: {
+            ...taskRecord.data,
+            name: renamedTaskName,
+          },
+        });
+        assert.equal(taskUpdate.ok, true, JSON.stringify(taskUpdate.errors));
+      }
+
+      const renamedWorkflowNamesById = new Map([
+        ['wf-testing-budget-policy-carryover-launch', 'Testing Budget Policy Carryover Launch Renamed'],
+        ['wf-testing-tight-policy-carryover-launch', 'Testing Tight Policy Carryover Launch Renamed'],
+        ['wf-bug-fix-budget-policy-carryover-launch', 'Bug Fix Budget Policy Carryover Launch Renamed'],
+        ['wf-bug-fix-tight-policy-carryover-launch', 'Bug Fix Tight Policy Carryover Launch Renamed'],
+      ]);
+      for (const [workflowId, renamedWorkflowName] of renamedWorkflowNamesById) {
+        const workflowRecord = await isolatedRing.read('workflow', workflowId);
+        const workflowUpdate = await isolatedRing.update('workflow', workflowId, {
+          data: {
+            ...workflowRecord.data,
+            name: renamedWorkflowName,
+          },
+        });
+        assert.equal(workflowUpdate.ok, true, JSON.stringify(workflowUpdate.errors));
+      }
+
+      const expectedLaunchEntriesByTaskId = new Map(
+        governedWaitingTasks.map((task) => {
+          const refreshedSelectionContext = structuredClone(task.governance_selection_context);
+          refreshedSelectionContext.preferred.workflow_name = renamedWorkflowNamesById.get(
+            refreshedSelectionContext.preferred.workflow_id,
+          );
+          refreshedSelectionContext.compared.workflow_name = renamedWorkflowNamesById.get(
+            refreshedSelectionContext.compared.workflow_id,
+          );
+          return [
+            task.task_id,
+            {
+              task_id: task.task_id,
+              task_name: renamedTaskNamesById.get(task.task_id),
+              task_type: task.task_type,
+              milestone_id: task.milestone_id,
+              task_document_path: task.task_document_path,
+              workflow_template_id: task.workflow_template_id,
+              workflow_name: renamedWorkflowNamesById.get(task.workflow_template_id),
+              selection_context: refreshedSelectionContext,
+            },
+          ];
+        }),
+      );
+
       await isolatedRing.orchestrator.tick();
       const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
       assert.equal(launchedJob.status, 'session_dispatched');
       assert.ok(launchedJob.session_dispatch.session_id);
+      for (const waitingTask of governedWaitingTasks) {
+        const expectedLaunchEntry = expectedLaunchEntriesByTaskId.get(waitingTask.task_id);
+        assert.ok(expectedLaunchEntry);
+        assert.ok(
+          launchedJob.session_dispatch.dispatch.packet.body.includes(
+            `- ${waitingTask.task_id}: ${expectedLaunchEntry.task_name} -> ${waitingTask.workflow_template_id}`,
+          ),
+        );
+        assert.match(
+          launchedJob.session_dispatch.dispatch.packet.body,
+          new RegExp(
+            `preferred: ${waitingTask.workflow_template_id} \\(${expectedLaunchEntry.workflow_name}\\)`
+              + ` .* compared: ${expectedLaunchEntry.selection_context.compared.workflow_id} \\(${expectedLaunchEntry.selection_context.compared.workflow_name}\\)`,
+          ),
+        );
+      }
+      assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const launchedPayloadTaskById = new Map(
+        launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.map((task) => [task.task_id, task]),
+      );
+      for (const waitingTask of governedWaitingTasks) {
+        const expectedLaunchEntry = expectedLaunchEntriesByTaskId.get(waitingTask.task_id);
+        assert.deepEqual(launchedPayloadTaskById.get(waitingTask.task_id), {
+          task_id: waitingTask.task_id,
+          task_name: expectedLaunchEntry.task_name,
+          task_type: waitingTask.task_type,
+          milestone_id: waitingTask.milestone_id,
+          task_document_path: waitingTask.task_document_path,
+          replanning_handoff: null,
+          governance_selection_context: expectedLaunchEntry.selection_context,
+          governance_blocked_reuse: [],
+          governance_reenable_guidance: 'none',
+        });
+      }
+
+      const launchedStoredTaskById = new Map(
+        launchedJob.workflow_preparation.waiting_tasks.map((task) => [task.task_id, task]),
+      );
+      for (const waitingTask of governedWaitingTasks) {
+        const expectedLaunchEntry = expectedLaunchEntriesByTaskId.get(waitingTask.task_id);
+        const launchedStoredTask = launchedStoredTaskById.get(waitingTask.task_id);
+        assert.ok(launchedStoredTask);
+        assert.equal(launchedStoredTask?.task_name, expectedLaunchEntry.task_name);
+        assert.equal(launchedStoredTask?.workflow_name, expectedLaunchEntry.workflow_name);
+        assert.equal(launchedStoredTask?.task_type, waitingTask.task_type);
+        assert.equal(launchedStoredTask?.milestone_id, waitingTask.milestone_id);
+        assert.equal(launchedStoredTask?.task_document_path, waitingTask.task_document_path);
+        assert.deepEqual(launchedStoredTask?.replanning_handoff ?? null, null);
+        assert.deepEqual(
+          launchedStoredTask?.governance_selection_context ?? null,
+          expectedLaunchEntry.selection_context,
+        );
+        assert.deepEqual(launchedStoredTask?.governance_blocked_reuse ?? [], []);
+        assert.equal(launchedStoredTask?.governance_reenable_guidance ?? 'none', 'none');
+      }
 
       const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
       assert.equal(launchedSession.data.context_injected.workflow_template, null);
@@ -4190,14 +4301,104 @@ Split milestone prerequisites into ready and blocked sets.
         launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
       );
       for (const waitingTask of governedWaitingTasks) {
+        const expectedLaunchEntry = expectedLaunchEntriesByTaskId.get(waitingTask.task_id);
         assert.deepEqual(launchedSelectionContexts.get(waitingTask.task_id), {
           task_id: waitingTask.task_id,
-          task_name: waitingTask.task_name,
+          task_name: expectedLaunchEntry.task_name,
           workflow_template_id: waitingTask.workflow_template_id,
-          workflow_name: waitingTask.workflow_name,
-          selection_context: waitingTask.governance_selection_context,
+          workflow_name: expectedLaunchEntry.workflow_name,
+          selection_context: expectedLaunchEntry.selection_context,
         });
       }
+
+      const sessionIdsBeforeLaunchResyncRetry = (await isolatedRing.list('session'))
+        .map((item) => item.id)
+        .sort();
+      const workflowRunIdsBeforeLaunchResyncRetry = (await isolatedRing.list('workflow-run'))
+        .map((item) => item.id)
+        .sort();
+
+      const jobPath = join(
+        repoRoot,
+        '.ring',
+        'orchestrator',
+        'jobs',
+        `${result.job.id}.json`,
+      );
+      const launchedSessionDispatchRetryRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      launchedSessionDispatchRetryRecord.status = 'failed';
+      launchedSessionDispatchRetryRecord.current_stage = 'session_dispatch';
+      await writeFile(jobPath, `${JSON.stringify(launchedSessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
+
+      const recovered = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(recovered.status, 'session_dispatched');
+      assert.equal(recovered.current_stage, 'completed');
+      assert.equal(recovered.session_dispatch.session_id, launchedJob.session_dispatch.session_id);
+      assert.deepEqual(
+        recovered.session_dispatch.workflow_run_ids,
+        launchedJob.session_dispatch.workflow_run_ids,
+      );
+      assert.ok(Array.isArray(recovered.session_dispatch.dispatch.packet.payload.waiting_tasks));
+
+      const recoveredPayloadTaskById = new Map(
+        recovered.session_dispatch.dispatch.packet.payload.waiting_tasks.map((task) => [task.task_id, task]),
+      );
+      for (const waitingTask of governedWaitingTasks) {
+        const expectedLaunchEntry = expectedLaunchEntriesByTaskId.get(waitingTask.task_id);
+        assert.ok(
+          recovered.session_dispatch.dispatch.packet.body.includes(
+            `- ${waitingTask.task_id}: ${expectedLaunchEntry.task_name} -> ${waitingTask.workflow_template_id}`,
+          ),
+        );
+        assert.match(
+          recovered.session_dispatch.dispatch.packet.body,
+          new RegExp(
+            `preferred: ${waitingTask.workflow_template_id} \\(${expectedLaunchEntry.workflow_name}\\)`
+              + ` .* compared: ${expectedLaunchEntry.selection_context.compared.workflow_id} \\(${expectedLaunchEntry.selection_context.compared.workflow_name}\\)`,
+          ),
+        );
+        assert.deepEqual(
+          recoveredPayloadTaskById.get(waitingTask.task_id),
+          launchedPayloadTaskById.get(waitingTask.task_id),
+        );
+      }
+
+      const recoveredStoredTaskById = new Map(
+        recovered.workflow_preparation.waiting_tasks.map((task) => [task.task_id, task]),
+      );
+      for (const waitingTask of governedWaitingTasks) {
+        const recoveredStoredTask = recoveredStoredTaskById.get(waitingTask.task_id);
+        assert.ok(recoveredStoredTask);
+        assert.deepEqual(recoveredStoredTask?.replanning_handoff ?? null, null);
+        assert.deepEqual(
+          recoveredStoredTask?.governance_selection_context ?? null,
+          expectedLaunchEntriesByTaskId.get(waitingTask.task_id)?.selection_context ?? null,
+        );
+        assert.deepEqual(recoveredStoredTask?.governance_blocked_reuse ?? [], []);
+        assert.equal(recoveredStoredTask?.governance_reenable_guidance ?? 'none', 'none');
+      }
+
+      const recoveredSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      assert.deepEqual(
+        [...recoveredSession.data.context_injected.governance_selection_contexts].sort((left, right) =>
+          left.task_id.localeCompare(right.task_id),
+        ),
+        [...launchedSession.data.context_injected.governance_selection_contexts].sort((left, right) =>
+          left.task_id.localeCompare(right.task_id),
+        ),
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('session'))
+          .map((item) => item.id)
+          .sort(),
+        sessionIdsBeforeLaunchResyncRetry,
+      );
+      assert.deepEqual(
+        (await isolatedRing.list('workflow-run'))
+          .map((item) => item.id)
+          .sort(),
+        workflowRunIdsBeforeLaunchResyncRetry,
+      );
     } finally {
       await isolated.cleanup();
     }
