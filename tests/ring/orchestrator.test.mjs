@@ -1606,6 +1606,33 @@ ${workflowPlan}
         `wf-guidance-docs-lineage-hold (${renamedLineageBlockedWorkflowName}) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`,
       ],
     );
+    const launchedStoredTask = launchedJob.workflow_preparation.waiting_tasks.find(
+      (task) => task.task_id === documentationTask.task_id,
+    );
+    assert.ok(launchedStoredTask);
+    assert.equal(launchedStoredTask?.task_name, documentationTask.task_name);
+    assert.equal(launchedStoredTask?.task_type, documentationTask.task_type);
+    assert.equal(launchedStoredTask?.milestone_id, documentationTask.milestone_id);
+    assert.equal(launchedStoredTask?.task_document_path, documentationTask.task_document_path);
+    assert.deepEqual(launchedStoredTask?.governance_selection_context ?? null, null);
+    assert.deepEqual(
+      [...(launchedStoredTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+        left.id.localeCompare(right.id)
+      ),
+      [...(launchedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+        left.id.localeCompare(right.id)
+      ),
+    );
+    assert.deepEqual(
+      (launchedStoredTask?.governance_reenable_guidance ?? '')
+        .split('; ')
+        .filter(Boolean)
+        .sort(),
+      (launchedPayloadTask?.governance_reenable_guidance ?? '')
+        .split('; ')
+        .filter(Boolean)
+        .sort(),
+    );
     const launchedSession = await ring.read('session', launchedJob.session_dispatch.session_id);
     assert.equal(launchedSession.data.governance_context, null);
   });
