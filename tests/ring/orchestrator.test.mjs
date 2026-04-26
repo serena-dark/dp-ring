@@ -3475,10 +3475,11 @@ ${workflowPlan}
       expectedSelectionContext.preferred.workflow_name = renamedPreferredWorkflowName;
       expectedSelectionContext.compared.workflow_name = renamedComparedWorkflowName;
       assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const launchedPayloadTask = launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
       assert.deepEqual(
-        launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
-          (item) => item.task_id === finalizedDocumentationTask.task_id,
-        ),
+        launchedPayloadTask,
         {
           task_id: finalizedDocumentationTask.task_id,
           task_name: renamedDocumentationTaskName,
@@ -3493,6 +3494,30 @@ ${workflowPlan}
           governance_blocked_reuse: [],
           governance_reenable_guidance: 'none',
         },
+      );
+      const launchedStoredTask = launchedJob.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(launchedStoredTask);
+      assert.equal(launchedStoredTask?.task_name, renamedDocumentationTaskName);
+      assert.equal(launchedStoredTask?.task_type, finalizedDocumentationTask.task_type);
+      assert.equal(launchedStoredTask?.milestone_id, finalizedDocumentationTask.milestone_id);
+      assert.equal(launchedStoredTask?.task_document_path, finalizedDocumentationTask.task_document_path);
+      assert.deepEqual(
+        launchedStoredTask?.replanning_handoff ?? null,
+        launchedPayloadTask?.replanning_handoff ?? null,
+      );
+      assert.deepEqual(
+        launchedStoredTask?.governance_selection_context ?? null,
+        expectedSelectionContext,
+      );
+      assert.deepEqual(
+        launchedStoredTask?.governance_blocked_reuse ?? [],
+        launchedPayloadTask?.governance_blocked_reuse ?? [],
+      );
+      assert.equal(
+        launchedStoredTask?.governance_reenable_guidance ?? 'none',
+        launchedPayloadTask?.governance_reenable_guidance ?? 'none',
       );
 
       const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
