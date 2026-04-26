@@ -2283,7 +2283,7 @@ ${workflowPlan}
       await writeFile(jobPath, `${JSON.stringify(sessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
 
       const refreshed = await isolatedRing.orchestrator.retryJob(result.job.id);
-      assert.equal(refreshed.status, 'failed');
+      assert.equal(refreshed.status, 'waiting_for_session_dispatch');
       assert.equal(refreshed.current_stage, 'session_dispatch');
 
       const refreshedStoredJob = await isolatedRing.orchestrator.readJob(result.job.id);
@@ -2392,7 +2392,7 @@ ${workflowPlan}
     }
   });
 
-  it('surfaces governed automatic-reuse selection context when workflow preparation is retried', async () => {
+  it('surfaces governed automatic-reuse selection context when workflow preparation is retried and later launched', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
     try {
@@ -2837,7 +2837,7 @@ ${workflowPlan}
       await writeFile(jobPath, `${JSON.stringify(sessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
 
       const refreshed = await isolatedRing.orchestrator.retryJob(result.job.id);
-      assert.equal(refreshed.status, 'failed');
+      assert.equal(refreshed.status, 'waiting_for_session_dispatch');
       assert.equal(refreshed.current_stage, 'session_dispatch');
 
       const refreshedStoredJob = await isolatedRing.orchestrator.readJob(result.job.id);
@@ -2866,10 +2866,11 @@ ${workflowPlan}
         ),
       );
       assert.ok(Array.isArray(refreshedStoredJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const refreshedPayloadTask = refreshedStoredJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
       assert.deepEqual(
-        refreshedStoredJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
-          (item) => item.task_id === finalizedDocumentationTask.task_id,
-        ),
+        refreshedPayloadTask,
         {
           task_id: finalizedDocumentationTask.task_id,
           task_name: renamedDocumentationTaskName,
@@ -2882,6 +2883,61 @@ ${workflowPlan}
           governance_reenable_guidance: 'none',
         },
       );
+
+      await isolatedRing.orchestrator.tick();
+      const launchedJob = await isolatedRing.orchestrator.readJob(result.job.id);
+      assert.equal(launchedJob.status, 'session_dispatched');
+      assert.ok(launchedJob.session_dispatch.session_id);
+      assert.ok(
+        launchedJob.session_dispatch.dispatch.packet.body.includes(
+          `- ${finalizedDocumentationTask.task_id}: ${renamedDocumentationTaskName} -> ${finalizedDocumentationTask.workflow_template_id}`,
+        ),
+      );
+      assert.match(
+        launchedJob.session_dispatch.dispatch.packet.body,
+        new RegExp(
+          `preferred: ${finalizedDocumentationTask.workflow_template_id} \\(${renamedPreferredWorkflowName}\\)`
+            + ` .* compared: ${comparedWorkflowId} \\(${renamedComparedWorkflowName}\\)`,
+        ),
+      );
+      assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const launchedPayloadTask = launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.deepEqual(launchedPayloadTask, refreshedPayloadTask);
+
+      const launchedStoredTask = launchedJob.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(launchedStoredTask);
+      assert.equal(launchedStoredTask?.task_name, renamedDocumentationTaskName);
+      assert.equal(launchedStoredTask?.task_type, finalizedDocumentationTask.task_type);
+      assert.equal(launchedStoredTask?.milestone_id, finalizedDocumentationTask.milestone_id);
+      assert.equal(launchedStoredTask?.task_document_path, finalizedDocumentationTask.task_document_path);
+      assert.deepEqual(launchedStoredTask?.replanning_handoff ?? null, null);
+      assert.deepEqual(
+        launchedStoredTask?.governance_selection_context ?? null,
+        expectedSelectionContext,
+      );
+      assert.deepEqual(
+        launchedStoredTask?.governance_blocked_reuse ?? [],
+        launchedPayloadTask?.governance_blocked_reuse ?? [],
+      );
+      assert.equal(
+        launchedStoredTask?.governance_reenable_guidance ?? 'none',
+        launchedPayloadTask?.governance_reenable_guidance ?? 'none',
+      );
+
+      const launchedSession = await isolatedRing.read('session', launchedJob.session_dispatch.session_id);
+      assert.deepEqual(launchedSession.data.context_injected.governance_selection_contexts, [
+        {
+          task_id: finalizedDocumentationTask.task_id,
+          task_name: renamedDocumentationTaskName,
+          workflow_template_id: finalizedDocumentationTask.workflow_template_id,
+          workflow_name: renamedPreferredWorkflowName,
+          selection_context: expectedSelectionContext,
+        },
+      ]);
     } finally {
       await isolated.cleanup();
     }

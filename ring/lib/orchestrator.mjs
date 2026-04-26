@@ -4548,6 +4548,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     }
 
     if (['ready_queued', 'session_batched'].includes(bundle.status)) {
+      if (next.status === 'failed' && next.current_stage === 'session_dispatch') {
+        await commitTransition(
+          'waiting_for_session_dispatch',
+          SESSION_DISPATCHER_ID,
+          'adaptive_waiting_area_resynced',
+          `Adaptive bundle ${bundle.id} still has ${bundle.workflows.waiting_tasks.length} tasks queued for session dispatch.`,
+          'session_dispatch',
+        );
+      }
       if (next.status === 'post_milestone_dispatched') {
         await commitTransition(
           'post_milestone_in_progress',
