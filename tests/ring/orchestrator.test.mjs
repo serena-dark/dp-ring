@@ -1610,6 +1610,724 @@ ${workflowPlan}
     assert.equal(launchedSession.data.governance_context, null);
   });
 
+  it('refreshes governance-blocked reuse and re-enable guidance labels in the stored session-dispatch packet before launch', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      async function writeRepoDoc(relativePath, content) {
+        await mkdir(join(repoRoot, dirname(relativePath)), { recursive: true });
+        await writeFile(join(repoRoot, relativePath), content, 'utf-8');
+      }
+
+      const result = await isolatedRing.orchestrator.createRequirementDispatch({
+        name: 'Workflow Guidance Warm Lineage',
+        description:
+          'Workflow preparation guidance should explain why a reusable template is governance-blocked.',
+        priority: 'high',
+        acceptance_criteria: [
+          { id: 'ac1', description: 'Guidance exposes governance reasons', satisfied: false },
+        ],
+        created_by: 'test',
+      });
+
+      await writeRepoDoc(
+        result.job.requirement_document.document.path,
+        `# Workflow Guidance Warm Lineage
+
+## Goal
+
+This requirement document is complete and ready for milestone planning. It is
+explicit enough that prerequisites and early tasks can be split once the
+milestones are generated.
+
+## Acceptance Criteria
+
+- Guidance explains governance-blocked workflow reuse
+- Ready tasks can still reuse healthy templates
+`,
+      );
+
+      const milestonePlanning = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'writer-agent',
+        status: 'completed',
+        note: 'Requirement doc complete.',
+      });
+
+      await writeRepoDoc(
+        milestonePlanning.milestone_plan.document.path,
+        `# Workflow Guidance Warm Lineage Milestone Plan
+
+## Planning Context
+
+Split the work into a foundation phase and an execution phase.
+
+## Milestone 1: Foundation
+
+Set up the project baseline and approvals.
+
+### Acceptance Checks
+
+- Baseline is documented
+
+### Prerequisites
+
+- [human] Stakeholder approval is confirmed
+- [reference] API contract is published
+
+## Milestone 2: Execution
+
+Implement the dispatchable work once dependencies are ready.
+
+### Acceptance Checks
+
+- Dispatchable work is identified
+
+### Prerequisites
+
+- [automated] Integration test harness is green
+`,
+      );
+
+      const postMilestone = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'milestone-planner',
+        status: 'completed',
+        note: 'Milestones complete.',
+      });
+
+      await writeRepoDoc(
+        postMilestone.post_milestone.prerequisite_analysis.document.path,
+        `# Workflow Guidance Warm Lineage Prerequisite Analysis
+
+## Goal
+
+Split milestone prerequisites into ready and blocked sets.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder approval is confirmed
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: API review has not finished
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Execution
+
+### Ready Now
+
+- [automated] Integration test harness is green
+
+### Blocked / Missing
+
+- [human] Ops rollout window is scheduled | reason: rollout calendar is still pending
+`,
+      );
+
+      const reusableWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-guidance-docs-template',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Guidance Docs Template',
+          description: 'Reusable workflow for documentation tasks with a healthy latest run.',
+          applicable_to: ['documentation'],
+          steps: [
+            { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+            { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+            { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+          ],
+        },
+      });
+      assert.equal(reusableWorkflow.ok, true, JSON.stringify(reusableWorkflow.errors));
+      await isolatedRing.registry.recordScore('documentation', 'wf-guidance-docs-template', 0.92);
+
+      const blockedWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-guidance-docs-lineage-hold',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Guidance Docs Warm Lineage Template',
+          description:
+            'Reusable workflow for documentation tasks that should be withheld once warm timeout lineage exists.',
+          applicable_to: ['documentation'],
+          steps: [
+            { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+            { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+            { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+          ],
+        },
+      });
+      assert.equal(blockedWorkflow.ok, true, JSON.stringify(blockedWorkflow.errors));
+      await isolatedRing.registry.recordScore('documentation', 'wf-guidance-docs-lineage-hold', 0.99);
+
+      const branchBudgetBlockedWorkflow = await isolatedRing.create('workflow', {
+        id: 'wf-guidance-docs-budget-hold',
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Guidance Docs Branch Budget Template',
+          description:
+            'Reusable workflow for documentation tasks that should stay off automatic reuse once inherited mainline branch budget is exhausted.',
+          applicable_to: ['documentation'],
+          steps: [
+            { id: 's1', name: 'inspect', description: 'Inspect the task document.' },
+            { id: 's2', name: 'draft', description: 'Produce the documentation output.' },
+            { id: 's3', name: 'verify', description: 'Check acceptance criteria.' },
+          ],
+        },
+      });
+      assert.equal(branchBudgetBlockedWorkflow.ok, true, JSON.stringify(branchBudgetBlockedWorkflow.errors));
+      await isolatedRing.registry.recordScore('documentation', 'wf-guidance-docs-budget-hold', 0.98);
+
+      const branchBudgetCheckpoint = createWorkflowRunCheckpoint({
+        id: 'cp-guidance-docs-budget-hold',
+        status: 'mainline',
+        created_by: 'session-runner',
+        node_id: 'n-guidance-docs-budget-hold',
+        scope_ref: { kind: 'workflow-run', id: 'run-guidance-docs-budget-hold', path: null },
+        execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 2 },
+        adoption_status: 'mainline',
+        policy_snapshot: {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 0,
+          notes: 'Inherited mainline checkpoint policy already consumed the reusable branch budget.',
+        },
+      });
+
+      const branchBudgetCheckpointResult = await isolatedRing.create('checkpoint', {
+        id: branchBudgetCheckpoint.id,
+        status: branchBudgetCheckpoint.status,
+        created_by: branchBudgetCheckpoint.created_by,
+        session_id: branchBudgetCheckpoint.session_id,
+        data: branchBudgetCheckpoint.data,
+      });
+      assert.equal(
+        branchBudgetCheckpointResult.ok,
+        true,
+        JSON.stringify(branchBudgetCheckpointResult.errors),
+      );
+
+      const branchBudgetRun = await isolatedRing.create('workflow-run', {
+        id: 'run-guidance-docs-budget-hold',
+        type: 'workflow-run',
+        version: 1,
+        created_at: '2026-04-17T00:10:00Z',
+        updated_at: '2026-04-17T00:11:00Z',
+        created_by: 'session-runner',
+        session_id: 'session-guidance-docs-budget-hold',
+        status: 'completed',
+        data: {
+          workflow_template_id: 'wf-guidance-docs-budget-hold',
+          workflow_template_version: 1,
+          task_id: 'task-guidance-docs-budget-hold',
+          current_step_index: 2,
+          callback: {
+            auth_scheme: 'bearer',
+            report_url:
+              'http://127.0.0.1:3100/api/workflow-run/run-guidance-docs-budget-hold/report',
+            token: 'token-guidance-docs-budget-hold',
+            signing_secret: 'signing-secret-guidance-docs-budget-hold',
+            signature_algorithm: 'hmac-sha256',
+            key_version: 1,
+            status: 'completed',
+            issued_at: '2026-04-17T00:10:00Z',
+            prepared_at: '2026-04-17T00:10:05Z',
+            last_report_at: '2026-04-17T00:10:50Z',
+            last_retry_at: null,
+            last_rotated_at: null,
+            next_retry_at: null,
+            report_timeout_ms: 300000,
+            max_retries: 0,
+            retry_count: 0,
+            retry_backoff_ms: 1000,
+            signature_ttl_ms: 60000,
+            timeout_at: '2026-04-17T00:15:00Z',
+            packet_path:
+              '.ring/orchestrator/runner/sessions/session-guidance-docs-budget-hold/run-guidance-docs-budget-hold.json',
+            allowed_worker_ids: ['worker-guidance'],
+            accepted_protocols: ['ring.workflow-run-report.v1'],
+            last_worker_id: 'worker-guidance',
+            last_protocol: 'ring.workflow-run-report.v1',
+            last_error: null,
+          },
+          reports: [
+            {
+              at: '2026-04-17T00:10:50Z',
+              status: 'completed',
+              actor: 'worker-guidance',
+              step_id: 'verify',
+              note: 'Completed under a root checkpoint that already exhausted branch budget.',
+              commit_sha: null,
+              worker_id: 'worker-guidance',
+              protocol: 'ring.workflow-run-report.v1',
+              authenticated: true,
+              outputs: {
+                summary: 'Completed under inherited branch-budget exhaustion.',
+              },
+            },
+          ],
+          node_execution: {
+            node_id: 'n-guidance-docs-budget-hold',
+            branch_id: 'main',
+            active_checkpoint_id: 'cp-guidance-docs-budget-hold',
+            checkpoint_ids: ['cp-guidance-docs-budget-hold'],
+            branch_event_ids: ['be-guidance-docs-budget-hold-1'],
+            capsule_state: createEmptyCapsuleState({
+              node_id: 'n-guidance-docs-budget-hold',
+              runtime_status: 'completed',
+              current_checkpoint_id: 'cp-guidance-docs-budget-hold',
+            }),
+          },
+          steps: [
+            {
+              step_id: 'inspect',
+              status: 'completed',
+              started_at: '2026-04-17T00:10:10Z',
+              ended_at: '2026-04-17T00:10:20Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'draft',
+              status: 'completed',
+              started_at: '2026-04-17T00:10:21Z',
+              ended_at: '2026-04-17T00:10:35Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'verify',
+              status: 'completed',
+              started_at: '2026-04-17T00:10:36Z',
+              ended_at: '2026-04-17T00:10:50Z',
+              outputs: {},
+              notes: 'Completed under branch_budget=0 inherited policy.',
+            },
+          ],
+        },
+      });
+      assert.equal(branchBudgetRun.ok, true, JSON.stringify(branchBudgetRun.errors));
+
+      const warmLineageRun = await isolatedRing.create('workflow-run', {
+        id: 'run-guidance-docs-lineage-hold',
+        type: 'workflow-run',
+        version: 1,
+        created_at: '2026-04-17T00:00:00Z',
+        updated_at: '2026-04-17T00:01:00Z',
+        created_by: 'session-runner',
+        session_id: 'session-guidance-docs-lineage-hold',
+        status: 'failed',
+        data: {
+          workflow_template_id: 'wf-guidance-docs-lineage-hold',
+          workflow_template_version: 1,
+          task_id: 'task-guidance-docs-lineage-hold',
+          current_step_index: 1,
+          callback: {
+            auth_scheme: 'bearer',
+            report_url:
+              'http://127.0.0.1:3100/api/workflow-run/run-guidance-docs-lineage-hold/report',
+            token: 'token-guidance-docs-lineage-hold',
+            signing_secret: 'signing-secret-guidance-docs-lineage-hold',
+            signature_algorithm: 'hmac-sha256',
+            key_version: 1,
+            status: 'timed_out',
+            issued_at: '2026-04-17T00:00:00Z',
+            prepared_at: '2026-04-17T00:00:05Z',
+            last_report_at: '2026-04-17T00:00:40Z',
+            last_retry_at: null,
+            last_rotated_at: null,
+            next_retry_at: null,
+            report_timeout_ms: 300000,
+            max_retries: 3,
+            retry_count: 1,
+            retry_backoff_ms: 1000,
+            signature_ttl_ms: 60000,
+            timeout_at: '2026-04-17T00:05:00Z',
+            packet_path:
+              '.ring/orchestrator/runner/sessions/session-guidance-docs-lineage-hold/run-guidance-docs-lineage-hold.json',
+            allowed_worker_ids: ['worker-guidance'],
+            accepted_protocols: ['ring.workflow-run-report.v1', 'a2a.task-status.v1'],
+            last_worker_id: 'worker-guidance',
+            last_protocol: 'ring.workflow-run-report.v1',
+            last_error: 'Timed out after progress was already reported.',
+          },
+          reports: [
+            {
+              at: '2026-04-17T00:00:40Z',
+              status: 'progress',
+              actor: 'worker-guidance',
+              step_id: 'draft',
+              note: 'Semantic progress advanced the checkpoint lineage before timeout.',
+              commit_sha: null,
+              worker_id: 'worker-guidance',
+              protocol: 'ring.workflow-run-report.v1',
+              authenticated: true,
+              outputs: {
+                summary: 'Execution made semantic progress.',
+              },
+            },
+          ],
+          node_execution: {
+            node_id: 'n-guidance-docs-lineage-hold',
+            branch_id: 'main',
+            active_checkpoint_id: 'cp-guidance-docs-lineage-2',
+            checkpoint_ids: [
+              'cp-guidance-docs-root',
+              'cp-guidance-docs-lineage-1',
+              'cp-guidance-docs-lineage-2',
+            ],
+            branch_event_ids: ['be-guidance-docs-lineage-1', 'be-guidance-docs-lineage-2'],
+            capsule_state: createEmptyCapsuleState({
+              node_id: 'n-guidance-docs-lineage-hold',
+              runtime_status: 'recovering',
+              current_checkpoint_id: 'cp-guidance-docs-lineage-2',
+              replay: {
+                status: 'requested',
+                requested_at: '2026-04-17T00:00:45Z',
+                completed_at: null,
+                requested_by: 'session-runner',
+                reason: 'workflow_timeout',
+                source_checkpoint_id: 'cp-guidance-docs-lineage-2',
+                target_checkpoint_id: 'cp-guidance-docs-lineage-2',
+                cursor: { phase: 'execute', step_id: 'draft' },
+                journal_state: {
+                  mode: 'semantic',
+                  last_applied_entry_id: 'journal-guidance-1',
+                  pending_entry_ids: ['journal-guidance-2'],
+                },
+              },
+            }),
+          },
+          steps: [
+            {
+              step_id: 'inspect',
+              status: 'completed',
+              started_at: '2026-04-17T00:00:10Z',
+              ended_at: '2026-04-17T00:00:20Z',
+              outputs: {},
+              notes: null,
+            },
+            {
+              step_id: 'draft',
+              status: 'failed',
+              started_at: '2026-04-17T00:00:21Z',
+              ended_at: '2026-04-17T00:01:00Z',
+              outputs: {},
+              notes: 'Timed out after semantic progress.',
+            },
+          ],
+        },
+      });
+      assert.equal(warmLineageRun.ok, true, JSON.stringify(warmLineageRun.errors));
+
+      const prerequisiteCompleted = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'prerequisite-preparer',
+        status: 'completed',
+        note: 'Prerequisite split complete.',
+      });
+
+      assert.equal(prerequisiteCompleted.status, 'waiting_for_session_dispatch');
+      assert.ok(Array.isArray(prerequisiteCompleted.workflow_preparation.reused_workflow_ids));
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-lineage-hold',
+        ),
+        false,
+      );
+      assert.equal(
+        prerequisiteCompleted.workflow_preparation.reused_workflow_ids.includes(
+          'wf-guidance-docs-budget-hold',
+        ),
+        false,
+      );
+      const documentationTask = prerequisiteCompleted.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_type === 'documentation',
+      );
+      assert.ok(documentationTask);
+      assert.ok(prerequisiteCompleted.session_dispatch.dispatch.packet);
+      assert.ok(Array.isArray(prerequisiteCompleted.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const sessionDispatchGuidanceTask = prerequisiteCompleted.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === documentationTask.task_id,
+      );
+      assert.deepEqual(
+        sessionDispatchGuidanceTask,
+        {
+          task_id: documentationTask.task_id,
+          task_name: documentationTask.task_name,
+          task_type: documentationTask.task_type,
+          milestone_id: documentationTask.milestone_id,
+          task_document_path: documentationTask.task_document_path,
+          replanning_handoff: null,
+          governance_selection_context: documentationTask.governance_selection_context ?? null,
+          governance_blocked_reuse: documentationTask.governance_blocked_reuse ?? [],
+          governance_reenable_guidance: 'none',
+        },
+      );
+
+      const jobPath = join(
+        repoRoot,
+        '.ring',
+        'orchestrator',
+        'jobs',
+        `${result.job.id}.json`,
+      );
+      const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      jobRecord.status = 'workflow_rework_required';
+      jobRecord.current_stage = 'workflow_preparation';
+      jobRecord.workflow_preparation.status = 'rework_required';
+      jobRecord.workflow_preparation.parse_error =
+        'Retry requested so the workflow planner can review governance guidance.';
+      jobRecord.workflow_preparation.completed_at = null;
+      await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+      const retried = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(retried.status, 'workflow_dispatched');
+      assert.equal(retried.current_stage, 'workflow_preparation');
+      assert.equal(retried.workflow_preparation.status, 'planning');
+      assert.ok(retried.workflow_preparation.dispatch.packet);
+
+      const scaffold = await readFile(
+        join(repoRoot, retried.workflow_preparation.document.path),
+        'utf-8',
+      );
+      assert.match(
+        scaffold,
+        /Governance-blocked reuse: .*wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+      );
+      assert.match(
+        scaffold,
+        /Governance re-enable guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /governance_blocked_reuse: .*wf-guidance-docs-lineage-hold \(Guidance Docs Warm Lineage Template\) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse/,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /governance_reenable_guidance: .*wf-guidance-docs-budget-hold \(Guidance Docs Branch Budget Template\) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold\./,
+      );
+      assert.ok(Array.isArray(retried.workflow_preparation.dispatch.packet.payload.waiting_tasks));
+      const guidancePayloadTask = retried.workflow_preparation.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === documentationTask.task_id,
+      );
+      assert.deepEqual(
+        [...(guidancePayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [
+          {
+            id: 'wf-guidance-docs-budget-hold',
+            name: 'Guidance Docs Branch Budget Template',
+            reason: 'checkpoint_branch_budget_exhausted',
+            checkpoint_id: 'cp-guidance-docs-budget-hold',
+            adoption_status: 'mainline',
+            branch_budget: 0,
+            workflow_tightness: 'tight',
+            oversight_strength: 'strong',
+          },
+          {
+            id: 'wf-guidance-docs-lineage-hold',
+            name: 'Guidance Docs Warm Lineage Template',
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-guidance-docs-lineage-2',
+            adoption_status: null,
+            branch_budget: null,
+            workflow_tightness: null,
+            oversight_strength: null,
+          },
+        ],
+      );
+      assert.deepEqual(
+        (guidancePayloadTask?.governance_reenable_guidance ?? '')
+          .split('; ')
+          .filter(Boolean)
+          .sort(),
+        [
+          'wf-guidance-docs-budget-hold (Guidance Docs Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.',
+          'wf-guidance-docs-lineage-hold (Guidance Docs Warm Lineage Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+        ],
+      );
+
+      const workflowPlan = prerequisiteCompleted.workflow_preparation.waiting_tasks
+        .map(
+          (task) => `## Task ${task.task_id}: ${task.task_name}
+Workflow Action: reuse
+Workflow ID: ${task.workflow_template_id}`,
+        )
+        .join('\n\n');
+      await writeRepoDoc(
+        retried.workflow_preparation.document.path,
+        `# Workflow Guidance Warm Lineage Finalization
+
+## Goal
+
+Finalize the workflow plan by reusing the recommended healthy waiting-area workflows.
+
+${workflowPlan}
+`,
+      );
+
+      const finalized = await isolatedRing.orchestrator.reportAgent(result.job.id, {
+        agent_id: 'workflow-architect',
+        status: 'completed',
+        note: 'Workflow plan finalized for governed blocked-reuse packet carryover coverage.',
+      });
+      assert.equal(finalized.status, 'waiting_for_session_dispatch');
+      assert.ok(Array.isArray(finalized.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const finalizedPayloadTask = finalized.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === documentationTask.task_id,
+      );
+      assert.deepEqual(
+        [...(finalizedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [
+          {
+            id: 'wf-guidance-docs-budget-hold',
+            name: 'Guidance Docs Branch Budget Template',
+            reason: 'checkpoint_branch_budget_exhausted',
+            checkpoint_id: 'cp-guidance-docs-budget-hold',
+            adoption_status: 'mainline',
+            branch_budget: 0,
+            workflow_tightness: 'tight',
+            oversight_strength: 'strong',
+          },
+          {
+            id: 'wf-guidance-docs-lineage-hold',
+            name: 'Guidance Docs Warm Lineage Template',
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-guidance-docs-lineage-2',
+            adoption_status: null,
+            branch_budget: null,
+            workflow_tightness: null,
+            oversight_strength: null,
+          },
+        ],
+      );
+      assert.deepEqual(
+        (finalizedPayloadTask?.governance_reenable_guidance ?? '')
+          .split('; ')
+          .filter(Boolean)
+          .sort(),
+        [
+          'wf-guidance-docs-budget-hold (Guidance Docs Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.',
+          'wf-guidance-docs-lineage-hold (Guidance Docs Warm Lineage Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+        ],
+      );
+
+      const finalizedDocumentationTask = finalized.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === documentationTask.task_id,
+      );
+      assert.ok(finalizedDocumentationTask);
+
+      const renamedLineageBlockedWorkflowName = 'Guidance Docs Warm Lineage Template Renamed';
+      const renamedBudgetBlockedWorkflowName = 'Guidance Docs Branch Budget Template Renamed';
+      const lineageBlockedWorkflowRecord = await isolatedRing.read('workflow', 'wf-guidance-docs-lineage-hold');
+      const lineageBlockedWorkflowUpdate = await isolatedRing.update('workflow', 'wf-guidance-docs-lineage-hold', {
+        data: {
+          ...lineageBlockedWorkflowRecord.data,
+          name: renamedLineageBlockedWorkflowName,
+        },
+      });
+      assert.equal(
+        lineageBlockedWorkflowUpdate.ok,
+        true,
+        JSON.stringify(lineageBlockedWorkflowUpdate.errors),
+      );
+      const budgetBlockedWorkflowRecord = await isolatedRing.read('workflow', 'wf-guidance-docs-budget-hold');
+      const budgetBlockedWorkflowUpdate = await isolatedRing.update('workflow', 'wf-guidance-docs-budget-hold', {
+        data: {
+          ...budgetBlockedWorkflowRecord.data,
+          name: renamedBudgetBlockedWorkflowName,
+        },
+      });
+      assert.equal(
+        budgetBlockedWorkflowUpdate.ok,
+        true,
+        JSON.stringify(budgetBlockedWorkflowUpdate.errors),
+      );
+
+      const sessionDispatchRetryRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+      sessionDispatchRetryRecord.status = 'failed';
+      sessionDispatchRetryRecord.current_stage = 'session_dispatch';
+      await writeFile(jobPath, `${JSON.stringify(sessionDispatchRetryRecord, null, 2)}\n`, 'utf-8');
+
+      const refreshed = await isolatedRing.orchestrator.retryJob(result.job.id);
+      assert.equal(refreshed.status, 'failed');
+      assert.equal(refreshed.current_stage, 'session_dispatch');
+
+      const refreshedStoredJob = await isolatedRing.orchestrator.readJob(result.job.id);
+      const refreshedDocumentationTask = refreshedStoredJob.workflow_preparation.waiting_tasks.find(
+        (task) => task.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(refreshedDocumentationTask);
+      assert.equal(refreshedDocumentationTask?.task_name, finalizedDocumentationTask.task_name);
+      assert.equal(
+        refreshedDocumentationTask?.workflow_template_id,
+        finalizedDocumentationTask.workflow_template_id,
+      );
+      assert.ok(
+        refreshedStoredJob.session_dispatch.dispatch.packet.body.includes(
+          `- ${finalizedDocumentationTask.task_id}: ${finalizedDocumentationTask.task_name} -> ${finalizedDocumentationTask.workflow_template_id}`,
+        ),
+      );
+      assert.ok(Array.isArray(refreshedStoredJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
+      const refreshedPayloadTask = refreshedStoredJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
+        (item) => item.task_id === finalizedDocumentationTask.task_id,
+      );
+      assert.ok(refreshedPayloadTask);
+      assert.equal(refreshedPayloadTask?.task_name, finalizedDocumentationTask.task_name);
+      assert.equal(refreshedPayloadTask?.task_type, finalizedDocumentationTask.task_type);
+      assert.equal(refreshedPayloadTask?.milestone_id, finalizedDocumentationTask.milestone_id);
+      assert.equal(refreshedPayloadTask?.task_document_path, finalizedDocumentationTask.task_document_path);
+      assert.deepEqual(refreshedPayloadTask?.replanning_handoff ?? null, null);
+      assert.deepEqual(refreshedPayloadTask?.governance_selection_context ?? null, null);
+      assert.deepEqual(
+        [...(refreshedPayloadTask?.governance_blocked_reuse ?? [])].sort((left, right) =>
+          left.id.localeCompare(right.id)
+        ),
+        [
+          {
+            id: 'wf-guidance-docs-budget-hold',
+            name: renamedBudgetBlockedWorkflowName,
+            reason: 'checkpoint_branch_budget_exhausted',
+            checkpoint_id: 'cp-guidance-docs-budget-hold',
+            adoption_status: 'mainline',
+            branch_budget: 0,
+            workflow_tightness: 'tight',
+            oversight_strength: 'strong',
+          },
+          {
+            id: 'wf-guidance-docs-lineage-hold',
+            name: renamedLineageBlockedWorkflowName,
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-guidance-docs-lineage-2',
+            adoption_status: null,
+            branch_budget: null,
+            workflow_tightness: null,
+            oversight_strength: null,
+          },
+        ],
+      );
+      assert.deepEqual(
+        (refreshedPayloadTask?.governance_reenable_guidance ?? '')
+          .split('; ')
+          .filter(Boolean)
+          .sort(),
+        [
+          `wf-guidance-docs-budget-hold (${renamedBudgetBlockedWorkflowName}) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-guidance-docs-budget-hold.`,
+          `wf-guidance-docs-lineage-hold (${renamedLineageBlockedWorkflowName}) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.`,
+        ],
+      );
+
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
   it('surfaces governed automatic-reuse selection context when workflow preparation is retried', async () => {
     const isolated = await createIsolatedOrchestratorRing();
 
