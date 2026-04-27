@@ -1324,6 +1324,15 @@ export function buildSessionDispatchPayloadWaitingTask(
     task_type: waitingTaskRecord?.task_type || trimString(mergedWaitingTask.task_type) || null,
     milestone_id: waitingTaskRecord?.milestone_id || trimString(mergedWaitingTask.milestone_id) || null,
     task_document_path: waitingTaskRecord?.task_document_path || taskDocumentPath,
+    workflow_template_id:
+      waitingTaskRecord?.workflow_template_id
+      || trimString(mergedWaitingTask.workflow_template_id)
+      || null,
+    workflow_name:
+      waitingTaskRecord?.workflow_name
+      || trimString(mergedWaitingTask.workflow_name)
+      || trimString(mergedWaitingTask.workflow_template_id)
+      || null,
     replanning_handoff: waitingTaskRecord?.parent_task_id && waitingTaskRecord?.parent_decision_note
       ? {
           parent_task_id: waitingTaskRecord.parent_task_id,
@@ -1334,6 +1343,30 @@ export function buildSessionDispatchPayloadWaitingTask(
     governance_blocked_reuse: governanceBlockedReuse,
     governance_reenable_guidance: governanceReenableGuidance,
   };
+}
+
+export function describeSessionDispatchPayloadWaitingTask(waitingTask = {}) {
+  const taskId = trimString(waitingTask?.task_id) ?? 'unknown-task';
+  const taskName = trimString(waitingTask?.task_name) ?? 'Unnamed task';
+  const workflowTemplateId = trimString(waitingTask?.workflow_template_id) ?? 'unknown-workflow';
+  const governance = describeWaitingTaskGovernance(waitingTask);
+  const governanceSelectionContext = describeGovernanceSelectionContext(
+    waitingTask?.governance_selection_context ?? null,
+  );
+  const replanningHandoff = describeWaitingTaskReplanningHandoff(waitingTask);
+  const parts = [`- ${taskId}: ${taskName} -> ${workflowTemplateId}`];
+
+  if (governance !== 'none') {
+    parts.push(`governance: ${governance}`);
+  }
+  if (governanceSelectionContext !== 'none') {
+    parts.push(`governance_selection_context: ${governanceSelectionContext}`);
+  }
+  if (replanningHandoff !== 'none') {
+    parts.push(`replanning_handoff: ${replanningHandoff}`);
+  }
+
+  return parts.join(' | ');
 }
 
 export function buildWaitingTaskRecord(waitingTask = {}) {

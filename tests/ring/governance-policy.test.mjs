@@ -18,6 +18,7 @@ import {
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
   describeGovernanceSelectionContext,
+  describeSessionDispatchPayloadWaitingTask,
   describeWaitingTaskGovernance,
   describeWaitingTaskReplanningHandoff,
   describeWorkflowPreparationPayloadWaitingTask,
@@ -852,6 +853,8 @@ describe('governance policy', () => {
         task_type: 'documentation',
         milestone_id: 'ms-governance',
         task_document_path: 'docs/tasks/task-docs/task-docs.md',
+        workflow_template_id: 'wf-selected',
+        workflow_name: 'Selected Workflow Canonical',
         replanning_handoff: {
           parent_task_id: 't-parent-governed-docs',
           parent_decision_note: 'Retry only the governed documentation path before another launch.',
@@ -886,6 +889,68 @@ describe('governance policy', () => {
         governance_reenable_guidance:
           'wf-budget-hold (Branch Budget Template Canonical) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
       },
+    );
+  });
+
+  it('describes session-dispatch packet waiting-area lines from shared payload waiting-task state', () => {
+    const payloadTask = buildSessionDispatchPayloadWaitingTask(
+      {
+        task_id: ' task-docs ',
+        task_name: ' Governed docs delivery ',
+        task_type: ' documentation ',
+        milestone_id: ' ms-governance ',
+        task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+        workflow_template_id: ' wf-selected ',
+        workflow_name: ' Selected Workflow ',
+        governance_selection_context: {
+          basis: ' governance_prefer_effective_force ',
+          preferred: {
+            workflow_id: ' wf-selected ',
+            workflow_name: ' Selected Workflow ',
+            policy: ' branch_budget=1 ',
+            governance_pressure_score: 1220,
+            effective_force_score: 19,
+          },
+          compared: {
+            workflow_id: ' wf-compared ',
+            workflow_name: ' Compared Workflow ',
+            policy: ' branch_budget=1 ',
+            governance_pressure_score: 1220,
+            effective_force_score: 13,
+          },
+        },
+        governance_blocked_reuse: [
+          {
+            id: ' wf-budget-hold ',
+            name: ' Branch Budget Template ',
+            reason: ' checkpoint_branch_budget_exhausted ',
+            checkpoint_id: ' cp-budget-hold ',
+            adoption_status: ' mainline ',
+            branch_budget: 0,
+            workflow_tightness: ' tight ',
+            oversight_strength: ' strong ',
+          },
+        ],
+        canonical_workflow_name_overrides: {
+          ' wf-selected ': ' Selected Workflow Canonical ',
+          ' wf-compared ': ' Compared Workflow Canonical ',
+          ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+        },
+      },
+      {
+        replanning_handoff: {
+          parent_task_id: ' t-parent-governed-docs ',
+          parent_decision_note: ' Retry only the governed documentation path before another launch. ',
+        },
+      },
+    );
+
+    assert.equal(
+      describeSessionDispatchPayloadWaitingTask(payloadTask),
+      '- task-docs: Governed docs delivery -> wf-selected'
+        + ' | governance: wf-budget-hold (Branch Budget Template Canonical) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint'
+        + ' | governance_selection_context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13'
+        + ' | replanning_handoff: parent_task_id: t-parent-governed-docs | parent_decision_note: Retry only the governed documentation path before another launch.',
     );
   });
 

@@ -15,9 +15,7 @@ import {
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
-  describeGovernanceSelectionContext,
-  describeWaitingTaskGovernance,
-  describeWaitingTaskReplanningHandoff,
+  describeSessionDispatchPayloadWaitingTask,
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
@@ -1675,17 +1673,14 @@ function buildSessionBatchPacket(
       .map((item) => [trimString(item?.task_id), item])
       .filter(([taskId]) => Boolean(taskId)),
   );
-  const taskLines = waitingTasks.length > 0
-    ? waitingTasks
-        .map((item) => {
-          const governance = describeWaitingTaskGovernance(item);
-          const governanceSelectionContext = describeGovernanceSelectionContext(
-            item?.governance_selection_context ?? null,
-          );
-          const replanningHandoff = describeWaitingTaskReplanningHandoff(item);
-          return `- ${item.task_id}: ${item.task_name} -> ${item.workflow_template_id}${governance !== 'none' ? ` | governance: ${governance}` : ''}${governanceSelectionContext !== 'none' ? ` | governance_selection_context: ${governanceSelectionContext}` : ''}${replanningHandoff !== 'none' ? ` | replanning_handoff: ${replanningHandoff}` : ''}`;
-        })
-        .join('\n')
+  const payloadWaitingTasks = waitingTasks.map((item) =>
+    sessionDispatchPayloadWaitingTask(
+      item,
+      workflowPreparationPayloadWaitingTaskById.get(trimString(item?.task_id)) ?? null,
+    )
+  );
+  const taskLines = payloadWaitingTasks.length > 0
+    ? payloadWaitingTasks.map((item) => describeSessionDispatchPayloadWaitingTask(item)).join('\n')
     : '- no waiting tasks';
 
   return {
@@ -1713,12 +1708,7 @@ function buildSessionBatchPacket(
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: job.workflow_preparation.document.path,
       source_document_path: job.post_milestone.task_dispatch.document.path,
-      waiting_tasks: waitingTasks.map((item) =>
-        sessionDispatchPayloadWaitingTask(
-          item,
-          workflowPreparationPayloadWaitingTaskById.get(trimString(item?.task_id)) ?? null,
-        )
-      ),
+      waiting_tasks: payloadWaitingTasks,
     },
   };
 }
