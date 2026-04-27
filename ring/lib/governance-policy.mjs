@@ -1047,6 +1047,37 @@ export function canonicalizeWaitingTaskGovernanceLabels(
   });
 }
 
+export function buildWorkflowPreparationPayloadWaitingTask(task = {}, recommendation = null) {
+  const taskId = trimString(task?.id);
+  const taskName = trimString(task?.data?.name) || null;
+  const taskType = trimString(task?.data?.task_type) || null;
+  const milestoneId = trimString(task?.data?.milestone_id) || null;
+  const replanningHandoff = waitingTaskReplanningHandoff(task?.data?.replanning ?? null);
+  const governanceSelectionContext = recommendation?.recommended?.selection_context
+    ? structuredClone(recommendation.recommended.selection_context)
+    : null;
+  const governanceBlockedReuse = Array.isArray(recommendation?.governance_blocked_candidates)
+    ? recommendation.governance_blocked_candidates
+        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
+        .filter((item) => item.id && item.name && item.reason)
+    : [];
+  const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
+    governanceBlockedReuse,
+  );
+
+  return {
+    task_id: taskId,
+    task_name: taskName,
+    task_type: taskType,
+    milestone_id: milestoneId,
+    task_document_path: taskId ? `docs/tasks/${taskId}/${taskId}.md` : null,
+    replanning_handoff: replanningHandoff,
+    governance_selection_context: governanceSelectionContext,
+    governance_blocked_reuse: governanceBlockedReuse,
+    governance_reenable_guidance: governanceReenableGuidance,
+  };
+}
+
 export function buildSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   workflowPreparationPayloadTask = null,

@@ -9,6 +9,7 @@ import {
   buildSessionDispatchPayloadWaitingTask as sessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPayloadWaitingTask as workflowPreparationPayloadWaitingTask,
   canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
@@ -21,7 +22,6 @@ import {
   describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
-  normalizeWorkflowReuseGovernanceBlock,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -1514,42 +1514,6 @@ function summarizeWorkflowRecommendation(recommendation) {
   } = recommendation.recommended;
   const summary = `${workflow.id} (${workflow.data.name}) rank ${rank ?? '--'} via ${mode ?? 'direct selection'}.`;
   return note ? `${summary} ${note}` : summary;
-}
-
-function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
-  const taskId = trimString(task?.id);
-  const taskName = trimString(task?.data?.name) || null;
-  const taskType = trimString(task?.data?.task_type) || null;
-  const milestoneId = trimString(task?.data?.milestone_id) || null;
-  const parentTaskId = trimString(task?.data?.replanning?.parent_task_id);
-  const parentDecisionNote = trimString(task?.data?.replanning?.parent_decision_note);
-  const governanceSelectionContext = recommendation?.recommended?.selection_context
-    ? clone(recommendation.recommended.selection_context)
-    : null;
-  const governanceBlockedReuse = Array.isArray(recommendation?.governance_blocked_candidates)
-    ? recommendation.governance_blocked_candidates
-        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
-        .filter((item) => item.id && item.name && item.reason)
-    : [];
-  const governanceReenableGuidance = describeWorkflowGovernanceReenableGuidanceList(
-    governanceBlockedReuse,
-  );
-  return {
-    task_id: taskId,
-    task_name: taskName,
-    task_type: taskType,
-    milestone_id: milestoneId,
-    task_document_path: `docs/tasks/${taskId}/${taskId}.md`,
-    replanning_handoff: parentTaskId && parentDecisionNote
-      ? {
-          parent_task_id: parentTaskId,
-          parent_decision_note: parentDecisionNote,
-        }
-      : null,
-    governance_selection_context: governanceSelectionContext,
-    governance_blocked_reuse: governanceBlockedReuse,
-    governance_reenable_guidance: governanceReenableGuidance,
-  };
 }
 
 function mergeSessionDispatchPayloadIntoWaitingTask(waitingTask, sessionDispatchPayloadTask = null) {

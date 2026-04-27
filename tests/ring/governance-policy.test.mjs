@@ -7,6 +7,7 @@ import {
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPayloadWaitingTask,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -882,6 +883,102 @@ describe('governance policy', () => {
         }],
         governance_reenable_guidance:
           'wf-budget-hold (Branch Budget Template Canonical) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+      },
+    );
+  });
+
+  it('builds workflow-preparation payload waiting-task records from shared governance inputs', () => {
+    assert.deepEqual(
+      buildWorkflowPreparationPayloadWaitingTask(
+        {
+          id: ' task-docs ',
+          data: {
+            name: ' Governed docs delivery ',
+            task_type: ' documentation ',
+            milestone_id: ' ms-governance ',
+            replanning: {
+              parent_task_id: ' t-parent-docs ',
+              parent_decision_note: ' Narrow the retry to the publication-only files. ',
+            },
+          },
+        },
+        {
+          recommended: {
+            selection_context: {
+              basis: ' governance_prefer_effective_force ',
+              preferred: {
+                workflow_id: ' wf-selected ',
+                workflow_name: ' Selected Workflow ',
+                policy: ' branch_budget=1 ',
+                governance_pressure_score: 1220,
+                effective_force_score: 19,
+              },
+              compared: {
+                workflow_id: ' wf-compared ',
+                workflow_name: ' Compared Workflow ',
+                policy: ' branch_budget=1 ',
+                governance_pressure_score: 1220,
+                effective_force_score: 13,
+              },
+            },
+          },
+          governance_blocked_candidates: [
+            {
+              id: ' wf-budget-hold ',
+              name: ' Branch Budget Template ',
+              reason: ' checkpoint_branch_budget_exhausted ',
+              checkpoint_id: ' cp-budget-hold ',
+              adoption_status: ' mainline ',
+              branch_budget: 0,
+              workflow_tightness: ' tight ',
+              oversight_strength: ' strong ',
+            },
+            {
+              id: ' wf-missing-reason ',
+              name: ' Missing Reason ',
+            },
+          ],
+        },
+      ),
+      {
+        task_id: 'task-docs',
+        task_name: 'Governed docs delivery',
+        task_type: 'documentation',
+        milestone_id: 'ms-governance',
+        task_document_path: 'docs/tasks/task-docs/task-docs.md',
+        replanning_handoff: {
+          parent_task_id: 't-parent-docs',
+          parent_decision_note: 'Narrow the retry to the publication-only files.',
+        },
+        governance_selection_context: {
+          basis: ' governance_prefer_effective_force ',
+          preferred: {
+            workflow_id: ' wf-selected ',
+            workflow_name: ' Selected Workflow ',
+            policy: ' branch_budget=1 ',
+            governance_pressure_score: 1220,
+            effective_force_score: 19,
+          },
+          compared: {
+            workflow_id: ' wf-compared ',
+            workflow_name: ' Compared Workflow ',
+            policy: ' branch_budget=1 ',
+            governance_pressure_score: 1220,
+            effective_force_score: 13,
+          },
+        },
+        governance_blocked_reuse: [{
+          id: 'wf-budget-hold',
+          name: 'Branch Budget Template',
+          reason: 'checkpoint_branch_budget_exhausted',
+          checkpoint_id: 'cp-budget-hold',
+          adoption_status: 'mainline',
+          branch_budget: 0,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+        }],
+        governance_reenable_guidance:
+          'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
       },
     );
   });
