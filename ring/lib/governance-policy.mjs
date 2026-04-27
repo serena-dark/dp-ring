@@ -426,8 +426,9 @@ export async function hydrateWaitingTaskGovernanceLabels(
 }
 
 function waitingTaskReplanningHandoff(replanning) {
-  const parentTaskId = trimString(replanning?.parent_task_id);
-  const parentDecisionNote = trimString(replanning?.parent_decision_note);
+  const replanningSource = replanning?.replanning_handoff ?? replanning;
+  const parentTaskId = trimString(replanningSource?.parent_task_id);
+  const parentDecisionNote = trimString(replanningSource?.parent_decision_note);
   if (!parentTaskId || !parentDecisionNote) {
     return null;
   }

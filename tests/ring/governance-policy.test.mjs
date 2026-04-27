@@ -1408,7 +1408,49 @@ describe('governance policy', () => {
       }),
       'parent_task_id: t-parent-docs | parent_decision_note: Narrow the governed retry to publication-root artifacts only.',
     );
+    assert.equal(
+      describeWaitingTaskReplanningHandoff({
+        replanning_handoff: {
+          parent_task_id: ' t-parent-payload ',
+          parent_decision_note: ' Reuse the persisted launch-time handoff. ',
+        },
+      }),
+      'parent_task_id: t-parent-payload | parent_decision_note: Reuse the persisted launch-time handoff.',
+    );
     assert.equal(describeWaitingTaskReplanningHandoff({ parent_task_id: 't-parent-docs' }), 'none');
+  });
+
+  it('hydrates nested replanning_handoff payloads into stable session handoffs when only the persisted payload shape is available', async () => {
+    const [hydrated] = await hydrateWaitingTaskGovernanceLabels([
+      {
+        task_id: ' task-docs ',
+        task_name: ' Documentation Refresh ',
+        workflow_template_id: ' wf-roomier-template ',
+        workflow_name: ' Roomier Template ',
+        replanning_handoff: {
+          parent_task_id: ' t-parent-docs ',
+          parent_decision_note: ' Narrow the governed retry to publication-root artifacts only. ',
+        },
+      },
+    ], async () => null);
+
+    assert.equal(hydrated.parent_task_id, 't-parent-docs');
+    assert.equal(
+      hydrated.parent_decision_note,
+      'Narrow the governed retry to publication-root artifacts only.',
+    );
+    assert.deepEqual(buildSessionContextInjected([hydrated]), {
+      workflow_template: 'wf-roomier-template',
+      distillations_applied: [],
+      registry_rank_at_selection: null,
+      governance_selection_contexts: [],
+      replanning_handoffs: [{
+        task_id: 'task-docs',
+        task_name: 'Documentation Refresh',
+        parent_task_id: 't-parent-docs',
+        parent_decision_note: 'Narrow the governed retry to publication-root artifacts only.',
+      }],
+    });
   });
 
   it('fingerprints batch signatures from blocked lineage identity, not only the coarse reason', () => {
