@@ -3556,6 +3556,21 @@ Split milestone prerequisites into ready and blocked sets.
             parent_task_id: replanningParentTaskId,
             parent_decision_note: replanningDecisionNote,
           },
+          workflow_action: 'reuse',
+          workflow_template_id: 'wf-guidance-docs-high-force-policy-carryover',
+          workflow_name: 'Guidance Docs High Force Policy Carryover',
+          preferred_reuse:
+            'wf-guidance-docs-high-force-policy-carryover (Guidance Docs High Force Policy Carryover) rank 2 via governance_prefer_effective_force. Automatic reuse preferred wf-guidance-docs-high-force-policy-carryover before wf-guidance-docs-low-force-policy-carryover because both reusable templates carry equivalent inherited checkpoint policy, and wf-guidance-docs-high-force-policy-carryover retains stronger checkpoint effective force (25) than wf-guidance-docs-low-force-policy-carryover (0).',
+          reusable_candidates: [
+            {
+              id: 'wf-guidance-docs-high-force-policy-carryover',
+              name: 'Guidance Docs High Force Policy Carryover',
+            },
+            {
+              id: 'wf-guidance-docs-low-force-policy-carryover',
+              name: 'Guidance Docs Low Force Policy Carryover',
+            },
+          ],
           governance_selection_context: effectiveForceSelectionContext,
           governance_blocked_reuse: [],
           governance_reenable_guidance: 'none',

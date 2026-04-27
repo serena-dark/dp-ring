@@ -1047,12 +1047,82 @@ export function canonicalizeWaitingTaskGovernanceLabels(
   });
 }
 
+function summarizeWorkflowPreparationRecommendation(recommendation) {
+  if (!recommendation?.recommended) {
+    const blockedSummary = describeWorkflowReuseGovernanceBlockList(
+      recommendation?.governance_blocked_candidates ?? [],
+    );
+    if (blockedSummary !== 'none') {
+      return `Automatic reuse is withheld because ${blockedSummary}.`;
+    }
+    return 'No ranked workflow recommendation yet.';
+  }
+
+  const workflowId = trimString(recommendation?.recommended?.workflow?.id) ?? 'unknown-workflow';
+  const workflowName = trimString(recommendation?.recommended?.workflow?.data?.name) ?? workflowId;
+  const rank = Number.isFinite(recommendation?.recommended?.rank)
+    ? recommendation.recommended.rank
+    : '--';
+  const mode = trimString(recommendation?.recommended?.mode) ?? 'direct selection';
+  const note = trimString(recommendation?.recommended?.note);
+  const summary = `${workflowId} (${workflowName}) rank ${rank} via ${mode}.`;
+  return note ? `${summary} ${note}` : summary;
+}
+
+function workflowPreparationReusableCandidates(recommendation) {
+  if (!Array.isArray(recommendation?.candidates)) {
+    return [];
+  }
+  return recommendation.candidates
+    .map((item) => {
+      const id = trimString(item?.id);
+      if (!id) {
+        return null;
+      }
+      return {
+        id,
+        name: trimString(item?.name) ?? trimString(item?.data?.name) ?? id,
+      };
+    })
+    .filter(Boolean);
+}
+
+function describeWorkflowPreparationReusableCandidates(waitingTask, includeNames = true) {
+  if (!Array.isArray(waitingTask?.reusable_candidates) || waitingTask.reusable_candidates.length === 0) {
+    return 'none';
+  }
+  return waitingTask.reusable_candidates
+    .map((item) => {
+      const workflowId = trimString(item?.id);
+      const workflowName = trimString(item?.name) ?? workflowId;
+      if (!workflowId) {
+        return null;
+      }
+      return includeNames ? `${workflowId} (${workflowName})` : workflowId;
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+function workflowPreparationSuggestedWorkflowName(taskName, taskId) {
+  if (taskName) {
+    return `${taskName} Delivery Flow`;
+  }
+  if (taskId) {
+    return `${taskId} Delivery Flow`;
+  }
+  return 'Waiting workflow';
+}
+
 export function buildWorkflowPreparationPayloadWaitingTask(task = {}, recommendation = null) {
   const taskId = trimString(task?.id);
   const taskName = trimString(task?.data?.name) || null;
   const taskType = trimString(task?.data?.task_type) || null;
   const milestoneId = trimString(task?.data?.milestone_id) || null;
   const replanningHandoff = waitingTaskReplanningHandoff(task?.data?.replanning ?? null);
+  const recommendedWorkflow = recommendation?.recommended?.workflow ?? null;
+  const workflowTemplateId = trimString(recommendedWorkflow?.id) || null;
+  const workflowAction = workflowTemplateId ? 'reuse' : 'create';
   const governanceSelectionContext = recommendation?.recommended?.selection_context
     ? structuredClone(recommendation.recommended.selection_context)
     : null;
@@ -1072,10 +1142,93 @@ export function buildWorkflowPreparationPayloadWaitingTask(task = {}, recommenda
     milestone_id: milestoneId,
     task_document_path: taskId ? `docs/tasks/${taskId}/${taskId}.md` : null,
     replanning_handoff: replanningHandoff,
+    workflow_action: workflowAction,
+    workflow_template_id: workflowTemplateId,
+    workflow_name: workflowTemplateId
+      ? trimString(recommendedWorkflow?.data?.name) ?? workflowTemplateId
+      : workflowPreparationSuggestedWorkflowName(taskName, taskId),
+    preferred_reuse: summarizeWorkflowPreparationRecommendation(recommendation),
+    reusable_candidates: workflowPreparationReusableCandidates(recommendation),
     governance_selection_context: governanceSelectionContext,
     governance_blocked_reuse: governanceBlockedReuse,
     governance_reenable_guidance: governanceReenableGuidance,
   };
+}
+
+export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
+  return [
+    `- ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
+    `  task_type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
+    `  milestone: ${trimString(waitingTask?.milestone_id) ?? 'unknown'}`,
+    `  task_document: ${trimString(waitingTask?.task_document_path) ?? 'none'}`,
+    `  replanning_handoff: ${describeWaitingTaskReplanningHandoff(waitingTask)}`,
+    `  preferred_reuse: ${trimString(waitingTask?.preferred_reuse) ?? 'No ranked workflow recommendation yet.'}`,
+    `  governance_selection_context: ${describeGovernanceSelectionContext(waitingTask?.governance_selection_context ?? null)}`,
+    `  reusable_candidates: ${describeWorkflowPreparationReusableCandidates(waitingTask, true)}`,
+    `  governance_blocked_reuse: ${describeWaitingTaskGovernance(waitingTask)}`,
+    `  governance_reenable_guidance: ${trimString(waitingTask?.governance_reenable_guidance) ?? 'none'}`,
+  ].join('\n');
+}
+
+export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
+  const workflowAction = trimString(waitingTask?.workflow_action) ?? 'create';
+  const replanningHandoff = describeWaitingTaskReplanningHandoff(waitingTask);
+  const governanceSelectionContext = describeGovernanceSelectionContext(
+    waitingTask?.governance_selection_context ?? null,
+  );
+  const governanceBlockedReuse = describeWaitingTaskGovernance(waitingTask);
+  const governanceReenableGuidance = trimString(waitingTask?.governance_reenable_guidance) ?? 'none';
+  const headerLines = [
+    `## Task ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
+    `Task Type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
+    `Milestone: ${trimString(waitingTask?.milestone_id) ?? 'unknown'}`,
+    `Task Document: ${trimString(waitingTask?.task_document_path) ?? 'none'}`,
+    `Workflow Action: ${workflowAction}`,
+  ];
+  if (replanningHandoff !== 'none') {
+    headerLines.push(`Replanning handoff: ${replanningHandoff}`);
+  }
+
+  if (workflowAction === 'reuse' && trimString(waitingTask?.workflow_template_id)) {
+    headerLines.push(`Workflow ID: ${trimString(waitingTask?.workflow_template_id)}`);
+    headerLines.push('');
+    headerLines.push(
+      `Preferred reuse: ${trimString(waitingTask?.preferred_reuse) ?? 'No ranked workflow recommendation yet.'}`,
+    );
+    headerLines.push(`Governance selection context: ${governanceSelectionContext}`);
+    headerLines.push(
+      `Other candidates: ${describeWorkflowPreparationReusableCandidates(waitingTask, false)}`,
+    );
+    headerLines.push(`Governance-blocked reuse: ${governanceBlockedReuse}`);
+    headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
+    return headerLines.join('\n');
+  }
+
+  headerLines.push(`Workflow Name: ${trimString(waitingTask?.workflow_name) ?? 'Waiting workflow'}`);
+  headerLines.push('');
+  if (governanceBlockedReuse !== 'none') {
+    headerLines.push(`Governance note: ${governanceBlockedReuse}.`);
+    headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
+    headerLines.push('');
+  }
+  headerLines.push('### Workflow Description');
+  headerLines.push('');
+  headerLines.push(
+    `Describe the custom workflow that should execute task ${trimString(waitingTask?.task_id) ?? 'unknown-task'} once the session starts.`,
+  );
+  headerLines.push('');
+  headerLines.push('### Steps');
+  headerLines.push('');
+  headerLines.push(
+    '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
+  );
+  headerLines.push(
+    '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
+  );
+  headerLines.push(
+    '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
+  );
+  return headerLines.join('\n');
 }
 
 export function buildSessionDispatchPayloadWaitingTask(

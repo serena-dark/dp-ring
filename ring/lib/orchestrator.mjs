@@ -18,8 +18,8 @@ import {
   describeGovernanceSelectionContext,
   describeWaitingTaskGovernance,
   describeWaitingTaskReplanningHandoff,
-  describeWorkflowReuseGovernanceBlockList,
-  describeWorkflowReuseGovernanceReenableGuidanceList as describeWorkflowGovernanceReenableGuidanceList,
+  describeWorkflowPreparationPayloadWaitingTask,
+  describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
   waitingTaskGovernanceBlockedReuse,
@@ -1495,27 +1495,6 @@ Split milestone prerequisites into "ready now" and "blocked / missing" so the di
 ${milestoneSections}`;
 }
 
-function summarizeWorkflowRecommendation(recommendation) {
-  if (!recommendation?.recommended) {
-    const blockedSummary = describeWorkflowReuseGovernanceBlockList(
-      recommendation?.governance_blocked_candidates ?? [],
-    );
-    if (blockedSummary !== 'none') {
-      return `Automatic reuse is withheld because ${blockedSummary}.`;
-    }
-    return 'No ranked workflow recommendation yet.';
-  }
-
-  const {
-    workflow,
-    rank,
-    mode,
-    note,
-  } = recommendation.recommended;
-  const summary = `${workflow.id} (${workflow.data.name}) rank ${rank ?? '--'} via ${mode ?? 'direct selection'}.`;
-  return note ? `${summary} ${note}` : summary;
-}
-
 function mergeSessionDispatchPayloadIntoWaitingTask(waitingTask, sessionDispatchPayloadTask = null) {
   if (!sessionDispatchPayloadTask) {
     return waitingTask;
@@ -1590,38 +1569,11 @@ function buildWorkflowPreparationPacket(
   jobId,
   config,
 ) {
-  const taskLines = tasks.length > 0
-    ? tasks
-        .map((task) => {
-          const recommendation = recommendationsByTaskId.get(task.id);
-          const blockedCandidateItems = recommendation?.governance_blocked_candidates ?? [];
-          const candidates = recommendation?.candidates?.length
-            ? recommendation.candidates
-                .map((item) => `${item.id} (${item.name})`)
-                .join(', ')
-            : 'none';
-          const blockedCandidates = describeWorkflowReuseGovernanceBlockList(
-            blockedCandidateItems,
-          );
-          const governanceReenableGuidance =
-            describeWorkflowGovernanceReenableGuidanceList(blockedCandidateItems);
-          const governanceSelectionContext =
-            describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
-          const replanningHandoff = describeWaitingTaskReplanningHandoff(task?.data?.replanning ?? null);
-          return [
-            `- ${task.id}: ${task.data.name}`,
-            `  task_type: ${task.data.task_type}`,
-            `  milestone: ${task.data.milestone_id}`,
-            `  task_document: docs/tasks/${task.id}/${task.id}.md`,
-            `  replanning_handoff: ${replanningHandoff}`,
-            `  preferred_reuse: ${summarizeWorkflowRecommendation(recommendation)}`,
-            `  governance_selection_context: ${governanceSelectionContext}`,
-            `  reusable_candidates: ${candidates}`,
-            `  governance_blocked_reuse: ${blockedCandidates}`,
-            `  governance_reenable_guidance: ${governanceReenableGuidance}`,
-          ].join('\n');
-        })
-        .join('\n')
+  const payloadWaitingTasks = tasks.map((task) =>
+    workflowPreparationPayloadWaitingTask(task, recommendationsByTaskId.get(task.id) ?? null)
+  );
+  const taskLines = payloadWaitingTasks.length > 0
+    ? payloadWaitingTasks.map((item) => describeWorkflowPreparationPayloadWaitingTask(item)).join('\n')
     : '- no dispatchable tasks are waiting';
 
   return {
@@ -1663,9 +1615,7 @@ function buildWorkflowPreparationPacket(
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: workflowDocumentPath,
       source_document_path: null,
-      waiting_tasks: tasks.map((task) =>
-        workflowPreparationPayloadWaitingTask(task, recommendationsByTaskId.get(task.id) ?? null)
-      ),
+      waiting_tasks: payloadWaitingTasks,
     },
   };
 }
@@ -1676,74 +1626,11 @@ function buildWorkflowPreparationScaffold(
   recommendationsByTaskId,
   taskDispatchDocumentPath,
 ) {
-  const taskSections = tasks.length > 0
-    ? tasks.map((task) => {
-        const recommendation = recommendationsByTaskId.get(task.id);
-        const preferred = recommendation?.recommended?.workflow ?? null;
-        const blockedCandidates = recommendation?.governance_blocked_candidates ?? [];
-        const blockedCandidateSummary = describeWorkflowReuseGovernanceBlockList(blockedCandidates);
-        const governanceReenableGuidance =
-          describeWorkflowGovernanceReenableGuidanceList(blockedCandidates);
-        const governanceSelectionContext =
-          describeGovernanceSelectionContext(recommendation?.recommended?.selection_context ?? null);
-        const replanningHandoff = describeWaitingTaskReplanningHandoff(task?.data?.replanning ?? null);
-        const action = preferred ? 'reuse' : 'create';
-        const headerLines = [
-          `## Task ${task.id}: ${task.data.name}`,
-          `Task Type: ${task.data.task_type}`,
-          `Milestone: ${task.data.milestone_id}`,
-          `Task Document: docs/tasks/${task.id}/${task.id}.md`,
-          `Workflow Action: ${action}`,
-        ];
-        if (replanningHandoff !== 'none') {
-          headerLines.push(`Replanning handoff: ${replanningHandoff}`);
-        }
-
-        if (preferred) {
-          headerLines.push(`Workflow ID: ${preferred.id}`);
-          headerLines.push('');
-          headerLines.push(`Preferred reuse: ${summarizeWorkflowRecommendation(recommendation)}`);
-          headerLines.push(`Governance selection context: ${governanceSelectionContext}`);
-          headerLines.push(
-            recommendation?.candidates?.length
-              ? `Other candidates: ${recommendation.candidates.map((item) => item.id).join(', ')}`
-              : 'Other candidates: none',
-          );
-          headerLines.push(
-            `Governance-blocked reuse: ${blockedCandidateSummary}`,
-          );
-          headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
-          return headerLines.join('\n');
-        }
-
-        headerLines.push(`Workflow Name: ${task.data.name} Delivery Flow`);
-        headerLines.push('');
-        if (blockedCandidateSummary !== 'none') {
-          headerLines.push(
-            `Governance note: ${blockedCandidateSummary}.`,
-          );
-          headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
-          headerLines.push('');
-        }
-        headerLines.push('### Workflow Description');
-        headerLines.push('');
-        headerLines.push(
-          `Describe the custom workflow that should execute task ${task.id} once the session starts.`,
-        );
-        headerLines.push('');
-        headerLines.push('### Steps');
-        headerLines.push('');
-        headerLines.push(
-          '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
-        );
-        headerLines.push(
-          '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
-        );
-        headerLines.push(
-          '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
-        );
-        return headerLines.join('\n');
-      }).join('\n\n')
+  const payloadWaitingTasks = tasks.map((task) =>
+    workflowPreparationPayloadWaitingTask(task, recommendationsByTaskId.get(task.id) ?? null)
+  );
+  const taskSections = payloadWaitingTasks.length > 0
+    ? payloadWaitingTasks.map((item) => describeWorkflowPreparationScaffoldTask(item)).join('\n\n')
     : `## Task pending: No tasks yet
 Workflow Action: create
 Workflow Name: Waiting workflow
