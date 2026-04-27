@@ -7244,6 +7244,528 @@ Split milestone prerequisites into ready and blocked sets.
     }
   });
 
+  it('canonicalizes effective-force governed session labels from live task/workflow records and falls back cleanly when best-effort reads fail during batched launch', async () => {
+    const isolated = await createIsolatedOrchestratorRing();
+
+    try {
+      const { ring: isolatedRing, repoRoot } = isolated;
+      const requirementId = await isolatedRing.newId('requirement', {
+        name: 'Governed Effective-Force Batch Requirement',
+      });
+      const milestoneId = await isolatedRing.newId('milestone', {
+        name: 'Governed Effective-Force Batch Execution',
+        parentId: requirementId,
+      });
+
+      const requirementResult = await isolatedRing.create('requirement', {
+        id: requirementId,
+        status: 'ready',
+        created_by: 'test',
+        data: {
+          name: 'Governed Effective-Force Batch Requirement',
+          description:
+            'Batch-launch two governed effective-force automatic-reuse selections into one session and preserve both comparison contexts.',
+          acceptance_criteria: [],
+          milestone_ids: [milestoneId],
+          priority: 'high',
+        },
+      });
+      assert.equal(requirementResult.ok, true, JSON.stringify(requirementResult.errors));
+
+      const milestoneResult = await isolatedRing.create('milestone', {
+        id: milestoneId,
+        status: 'active',
+        created_by: 'test',
+        data: {
+          name: 'Governed Effective-Force Batch Execution',
+          requirement_id: requirementId,
+          description: 'Launch shared batch work with two governed effective-force registry-reuse comparisons.',
+          acceptance_checks: [],
+          prerequisites: [],
+        },
+      });
+      assert.equal(milestoneResult.ok, true, JSON.stringify(milestoneResult.errors));
+
+      async function seedEffectiveForceWorkflow({
+        taskType,
+        workflowId,
+        workflowName,
+        description,
+        registryScore,
+        runId,
+        nodeId,
+        workerId,
+        activeCheckpoint,
+        checkpoints,
+        reportNote,
+      }) {
+        const workflowResult = await isolatedRing.create('workflow', {
+          id: workflowId,
+          status: 'active',
+          created_by: 'test',
+          data: {
+            name: workflowName,
+            description,
+            applicable_to: [taskType],
+            steps: [
+              { id: 'inspect', name: 'inspect', description: `Inspect the ${taskType} task.` },
+              { id: 'verify', name: 'verify', description: `Verify the governed ${taskType} path.` },
+              { id: 'report', name: 'report', description: 'Summarize the governed result.' },
+            ],
+          },
+        });
+        assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+        await isolatedRing.registry.recordScore(taskType, workflowId, registryScore);
+
+        for (const checkpoint of checkpoints) {
+          const checkpointResult = await isolatedRing.create('checkpoint', {
+            id: checkpoint.id,
+            status: checkpoint.status,
+            created_by: checkpoint.created_by,
+            session_id: checkpoint.session_id,
+            data: checkpoint.data,
+          });
+          assert.equal(checkpointResult.ok, true, JSON.stringify(checkpointResult.errors));
+        }
+
+        const workflowRun = await isolatedRing.create('workflow-run', {
+          id: runId,
+          status: 'completed',
+          created_by: 'session-runner',
+          session_id: `session-${runId}`,
+          data: {
+            workflow_template_id: workflowId,
+            workflow_template_version: 1,
+            task_id: `task-${runId}`,
+            current_step_index: 2,
+            callback: {
+              auth_scheme: 'bearer',
+              report_url: `http://127.0.0.1:3100/api/workflow-run/${runId}/report`,
+              token: `token-${runId}`,
+              signing_secret: `signing-secret-${runId}`,
+              signature_algorithm: 'hmac-sha256',
+              key_version: 1,
+              status: 'completed',
+              issued_at: '2026-04-21T10:20:00Z',
+              prepared_at: '2026-04-21T10:20:05Z',
+              last_report_at: '2026-04-21T10:20:40Z',
+              last_retry_at: null,
+              last_rotated_at: null,
+              next_retry_at: null,
+              report_timeout_ms: 300000,
+              max_retries: 0,
+              retry_count: 0,
+              retry_backoff_ms: 1000,
+              signature_ttl_ms: 60000,
+              timeout_at: '2026-04-21T10:25:00Z',
+              packet_path: `.ring/orchestrator/runner/sessions/session-${runId}/${runId}.json`,
+              allowed_worker_ids: [workerId],
+              accepted_protocols: ['ring.workflow-run-report.v1'],
+              last_worker_id: workerId,
+              last_protocol: 'ring.workflow-run-report.v1',
+              last_error: null,
+            },
+            reports: [
+              {
+                at: '2026-04-21T10:20:40Z',
+                status: 'completed',
+                actor: workerId,
+                step_id: 'report',
+                note: reportNote,
+                commit_sha: null,
+                worker_id: workerId,
+                protocol: 'ring.workflow-run-report.v1',
+                authenticated: true,
+                outputs: {
+                  summary: `${workflowId} completed under equal inherited mainline checkpoint policy.`,
+                },
+              },
+            ],
+            node_execution: {
+              node_id: nodeId,
+              branch_id: activeCheckpoint.data.branch_id,
+              active_checkpoint_id: activeCheckpoint.id,
+              checkpoint_ids: checkpoints.map((checkpoint) => checkpoint.id),
+              branch_event_ids: [`be-${runId}-1`],
+              capsule_state: createEmptyCapsuleState({
+                node_id: nodeId,
+                runtime_status: 'completed',
+                current_checkpoint_id: activeCheckpoint.id,
+              }),
+            },
+            steps: [
+              {
+                step_id: 'inspect',
+                status: 'completed',
+                started_at: '2026-04-21T10:20:10Z',
+                ended_at: '2026-04-21T10:20:20Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'verify',
+                status: 'completed',
+                started_at: '2026-04-21T10:20:21Z',
+                ended_at: '2026-04-21T10:20:30Z',
+                outputs: {},
+                notes: null,
+              },
+              {
+                step_id: 'report',
+                status: 'completed',
+                started_at: '2026-04-21T10:20:31Z',
+                ended_at: '2026-04-21T10:20:40Z',
+                outputs: {},
+                notes: reportNote,
+              },
+            ],
+          },
+        });
+        assert.equal(workflowRun.ok, true, JSON.stringify(workflowRun.errors));
+      }
+
+      async function seedEffectiveForcePair({
+        taskType,
+        slug,
+        label,
+        lowWorkflowId,
+        lowWorkflowName,
+        highWorkflowId,
+        highWorkflowName,
+      }) {
+        const policySnapshot = {
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          notes: `Equivalent governed reuse policy should let checkpoint force break ties for ${label}.`,
+        };
+
+        const lowForceCheckpoint = createWorkflowRunCheckpoint({
+          id: `cp-${slug}-low-force-active`,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: `n-${slug}-low-force`,
+          scope_ref: { kind: 'workflow-run', id: `run-${slug}-low-force`, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: policySnapshot,
+          evidence_refs: [],
+        });
+        await seedEffectiveForceWorkflow({
+          taskType,
+          workflowId: lowWorkflowId,
+          workflowName: lowWorkflowName,
+          description:
+            `${lowWorkflowName} should lose to a stronger-force governed reusable workflow when inherited policy cost is equal.`,
+          registryScore: 0.97,
+          runId: `run-${slug}-low-force`,
+          nodeId: `n-${slug}-low-force`,
+          workerId: `worker-${slug}-low-force`,
+          activeCheckpoint: lowForceCheckpoint,
+          checkpoints: [lowForceCheckpoint],
+          reportNote: `${lowWorkflowName} completed under the shared constrained policy without extra branch evidence.`,
+        });
+
+        const highForceRoot = createWorkflowRunCheckpoint({
+          id: `cp-${slug}-high-force-root`,
+          status: 'mainline',
+          created_by: 'session-runner',
+          node_id: `n-${slug}-high-force`,
+          scope_ref: { kind: 'workflow-run', id: `run-${slug}-high-force`, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'inspect', ordinal: 0 },
+          adoption_status: 'mainline',
+          policy_snapshot: policySnapshot,
+        });
+        const highForceLeft = forkCheckpoint(highForceRoot, {
+          id: `cp-${slug}-high-force-left`,
+          created_by: `worker-${slug}-left`,
+          branch_id: `${slug}.left`,
+          evidence_refs: [
+            { kind: 'report', ref: `reports/${slug}-left-progress.json`, digest: `sha256:${slug}-left-progress` },
+          ],
+          policy_snapshot: policySnapshot,
+        });
+        const highForceLeftContinued = continueFromCheckpoint(highForceLeft, {
+          id: `cp-${slug}-high-force-left-continued`,
+          created_by: `worker-${slug}-left`,
+          execution_cursor: { phase: 'completed', step_id: 'verify', ordinal: 1 },
+          evidence_refs: [
+            { kind: 'report', ref: `reports/${slug}-left-progress.json`, digest: `sha256:${slug}-left-progress` },
+            { kind: 'report', ref: `reports/${slug}-left-verify.json`, digest: `sha256:${slug}-left-verify` },
+          ],
+          policy_snapshot: policySnapshot,
+        });
+        const highForceRight = forkCheckpoint(highForceRoot, {
+          id: `cp-${slug}-high-force-right`,
+          created_by: `worker-${slug}-right`,
+          branch_id: `${slug}.right`,
+          evidence_refs: [
+            { kind: 'report', ref: `reports/${slug}-right-review.json`, digest: `sha256:${slug}-right-review` },
+          ],
+          policy_snapshot: policySnapshot,
+        });
+        const highForceCheckpoint = synthesizeCheckpoint([highForceLeftContinued, highForceRight], {
+          id: `cp-${slug}-high-force-active`,
+          status: 'mainline',
+          created_by: 'session-runner',
+          branch_id: `main.${slug}.force`,
+          scope_ref: { kind: 'workflow-run', id: `run-${slug}-high-force`, path: null },
+          execution_cursor: { phase: 'completed', step_id: 'report', ordinal: 2 },
+          adoption_status: 'mainline',
+          policy_snapshot: policySnapshot,
+          evidence_refs: [
+            { kind: 'report', ref: `reports/${slug}-force-summary.json`, digest: `sha256:${slug}-force-summary` },
+            { kind: 'report', ref: `reports/${slug}-force-summary.json`, digest: `sha256:${slug}-force-summary` },
+            { kind: 'artifact', ref: `artifacts/${slug}-force-proof.json`, digest: `sha256:${slug}-force-proof` },
+          ],
+        });
+        await seedEffectiveForceWorkflow({
+          taskType,
+          workflowId: highWorkflowId,
+          workflowName: highWorkflowName,
+          description:
+            `${highWorkflowName} should win the governed reuse choice because it carries stronger checkpoint effective force under equal inherited policy cost.`,
+          registryScore: 0.92,
+          runId: `run-${slug}-high-force`,
+          nodeId: `n-${slug}-high-force`,
+          workerId: `worker-${slug}-high-force`,
+          activeCheckpoint: highForceCheckpoint,
+          checkpoints: [
+            highForceRoot,
+            highForceLeft,
+            highForceLeftContinued,
+            highForceRight,
+            highForceCheckpoint,
+          ],
+          reportNote: `${highWorkflowName} completed under the same constrained policy after collecting stronger synthesized branch evidence.`,
+        });
+      }
+
+      const governedWorkflowSpecs = [
+        {
+          taskType: 'documentation',
+          slug: 'docs-effective-force-batch',
+          label: 'documentation batch launch selection context',
+          lowWorkflowId: 'wf-docs-low-force-policy-carryover-batch',
+          lowWorkflowName: 'Docs Low Force Policy Carryover Batch',
+          highWorkflowId: 'wf-docs-high-force-policy-carryover-batch',
+          highWorkflowName: 'Docs High Force Policy Carryover Batch',
+        },
+        {
+          taskType: 'testing',
+          slug: 'testing-effective-force-batch-shared',
+          label: 'testing batch launch selection context',
+          lowWorkflowId: 'wf-testing-low-force-policy-carryover-batch-shared',
+          lowWorkflowName: 'Testing Low Force Policy Carryover Batch Shared',
+          highWorkflowId: 'wf-testing-high-force-policy-carryover-batch-shared',
+          highWorkflowName: 'Testing High Force Policy Carryover Batch Shared',
+        },
+      ];
+      for (const spec of governedWorkflowSpecs) {
+        await seedEffectiveForcePair(spec);
+      }
+
+      const submitSharedBundle = ({ title, description, includePath, materialId, inlineData }) =>
+        isolatedRing.orchestrator.submitDispatchBundle({
+          bundle_protocol: 'ring.goal.v1',
+          bundle_version: '1',
+          artifact_transport: 'inline',
+          submitted_by: 'bundle-test',
+          payload: {
+            goal: {
+              title,
+              description,
+              acceptance_criteria: ['One governed task is created and shared batch launch preserves its selection context.'],
+            },
+            environment: {
+              project_id: 'governed-effective-force-batch-project',
+              repo_root: repoRoot,
+              target_scope: {
+                level: 'file',
+                include_paths: [includePath],
+                exclude_paths: [],
+              },
+              constraints: {
+                must_build: false,
+                must_cleanup: false,
+                merge_policy: 'judge_then_merge',
+                session_group_key: 'governed-effective-force-batch',
+              },
+            },
+            materials: [
+              {
+                material_id: materialId,
+                kind: 'preparation_package',
+                uri: null,
+                format: 'json',
+                mount_to: 'workspace/shared',
+                required: true,
+                inline_data: inlineData,
+              },
+            ],
+            context: {
+              artifact_refs: [],
+              brief_ref: null,
+              requirement_id: requirementId,
+              milestone_id: milestoneId,
+            },
+          },
+        });
+
+      const docsBundle = await submitSharedBundle({
+        title: 'Update governed effective-force guide',
+        description: 'Document how automatic reuse prefers the stronger checkpoint effective force when a guide task is dispatched in a shared batch.',
+        includePath: 'docs/governed-effective-force-batch.md',
+        materialId: 'mat-governed-effective-force-docs-batch',
+        inlineData: '{"docs":true}',
+      });
+      const testingBundle = await submitSharedBundle({
+        title: 'Verify governed effective-force batch coverage',
+        description: 'Verify the shared batch keeps both testing and documentation effective-force reuse comparisons visible after launch.',
+        includePath: 'tests/governed-effective-force-batch.test.mjs',
+        materialId: 'mat-governed-effective-force-testing-batch',
+        inlineData: '{"testing":true}',
+      });
+
+      assert.equal(docsBundle.status, 'ready_queued');
+      assert.equal(testingBundle.status, 'ready_queued');
+      assert.equal(docsBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(testingBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(
+        docsBundle.workflows.waiting_tasks[0].governance_selection_context?.basis,
+        'governance_prefer_effective_force',
+      );
+      assert.equal(
+        testingBundle.workflows.waiting_tasks[0].governance_selection_context?.basis,
+        'governance_prefer_effective_force',
+      );
+      assert.equal(docsBundle.workflows.waiting_tasks[0].workflow_template_id, 'wf-docs-high-force-policy-carryover-batch');
+      assert.equal(
+        testingBundle.workflows.waiting_tasks[0].workflow_template_id,
+        'wf-testing-high-force-policy-carryover-batch-shared',
+      );
+      assert.equal(docsBundle.workflows.waiting_tasks[0].registry_mode, 'governance_prefer_effective_force');
+      assert.equal(testingBundle.workflows.waiting_tasks[0].registry_mode, 'governance_prefer_effective_force');
+      assert.ok(
+        (docsBundle.workflows.waiting_tasks[0].governance_selection_context?.preferred?.effective_force_score ?? 0)
+          > (docsBundle.workflows.waiting_tasks[0].governance_selection_context?.compared?.effective_force_score ?? 0),
+      );
+      assert.ok(
+        (testingBundle.workflows.waiting_tasks[0].governance_selection_context?.preferred?.effective_force_score ?? 0)
+          > (testingBundle.workflows.waiting_tasks[0].governance_selection_context?.compared?.effective_force_score ?? 0),
+      );
+
+      const docsWaitingTask = docsBundle.workflows.waiting_tasks[0];
+      const testingWaitingTask = testingBundle.workflows.waiting_tasks[0];
+      const renamedDocsTaskName = 'Update governed effective-force guide (renamed before launch)';
+      const renamedDocsWorkflowName = 'Docs High Force Policy Carryover Batch Renamed';
+      const renamedDocsComparedWorkflowName = 'Docs Low Force Policy Carryover Batch Renamed';
+
+      const docsTaskRecord = await isolatedRing.read('task', docsWaitingTask.task_id);
+      const docsTaskUpdate = await isolatedRing.update('task', docsWaitingTask.task_id, {
+        data: {
+          ...docsTaskRecord.data,
+          name: renamedDocsTaskName,
+        },
+      });
+      assert.equal(docsTaskUpdate.ok, true, JSON.stringify(docsTaskUpdate.errors));
+
+      const docsWorkflowRecord = await isolatedRing.read('workflow', docsWaitingTask.workflow_template_id);
+      const docsWorkflowUpdate = await isolatedRing.update('workflow', docsWaitingTask.workflow_template_id, {
+        data: {
+          ...docsWorkflowRecord.data,
+          name: renamedDocsWorkflowName,
+        },
+      });
+      assert.equal(docsWorkflowUpdate.ok, true, JSON.stringify(docsWorkflowUpdate.errors));
+
+      const docsComparedWorkflowRecord = await isolatedRing.read(
+        'workflow',
+        docsWaitingTask.governance_selection_context.compared.workflow_id,
+      );
+      const docsComparedWorkflowUpdate = await isolatedRing.update(
+        'workflow',
+        docsWaitingTask.governance_selection_context.compared.workflow_id,
+        {
+          data: {
+            ...docsComparedWorkflowRecord.data,
+            name: renamedDocsComparedWorkflowName,
+          },
+        },
+      );
+      assert.equal(docsComparedWorkflowUpdate.ok, true, JSON.stringify(docsComparedWorkflowUpdate.errors));
+
+      const originalStoreRead = isolatedRing.store.read.bind(isolatedRing.store);
+      const injectedBestEffortFailures = new Set();
+      isolatedRing.store.read = async (type, id, ...rest) => {
+        const key = `${type}:${id}`;
+        if (
+          (key === `task:${testingWaitingTask.task_id}`
+            || key === `workflow:${testingWaitingTask.workflow_template_id}`)
+          && !injectedBestEffortFailures.has(key)
+        ) {
+          injectedBestEffortFailures.add(key);
+          throw new Error(`Injected best-effort session-label read failure for ${key}`);
+        }
+        return originalStoreRead(type, id, ...rest);
+      };
+
+      try {
+        await isolatedRing.orchestrator.tick();
+      } finally {
+        isolatedRing.store.read = originalStoreRead;
+      }
+
+      const launchedDocsBundle = await isolatedRing.orchestrator.readDispatchBundle(docsBundle.id);
+      const launchedTestingBundle = await isolatedRing.orchestrator.readDispatchBundle(testingBundle.id);
+      assert.equal(launchedDocsBundle.status, 'session_launched');
+      assert.equal(launchedTestingBundle.status, 'session_launched');
+      assert.ok(launchedDocsBundle.batching.session_id);
+      assert.equal(launchedDocsBundle.batching.session_id, launchedTestingBundle.batching.session_id);
+      assert.deepEqual(
+        new Set(injectedBestEffortFailures),
+        new Set([
+          `task:${testingWaitingTask.task_id}`,
+          `workflow:${testingWaitingTask.workflow_template_id}`,
+        ]),
+      );
+
+      const launchedSession = await isolatedRing.read('session', launchedDocsBundle.batching.session_id);
+      assert.deepEqual(
+        new Set(launchedSession.data.task_ids),
+        new Set([
+          launchedDocsBundle.workflows.waiting_tasks[0].task_id,
+          launchedTestingBundle.workflows.waiting_tasks[0].task_id,
+        ]),
+      );
+      assert.equal(launchedSession.data.context_injected.workflow_template, null);
+      assert.equal(launchedSession.data.context_injected.governance_selection_contexts.length, 2);
+
+      const launchedSelectionContexts = new Map(
+        launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
+      );
+      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
+      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
+      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
+      assert.deepEqual(launchedSelectionContexts.get(docsWaitingTask.task_id), {
+        task_id: docsWaitingTask.task_id,
+        task_name: renamedDocsTaskName,
+        workflow_template_id: docsWaitingTask.workflow_template_id,
+        workflow_name: renamedDocsWorkflowName,
+        selection_context: expectedDocsSelectionContext,
+      });
+      assert.deepEqual(launchedSelectionContexts.get(testingWaitingTask.task_id), {
+        task_id: testingWaitingTask.task_id,
+        task_name: testingWaitingTask.task_name,
+        workflow_template_id: testingWaitingTask.workflow_template_id,
+        workflow_name: testingWaitingTask.workflow_name,
+        selection_context: testingWaitingTask.governance_selection_context,
+      });
+    } finally {
+      await isolated.cleanup();
+    }
+  });
+
   it('isolates governance-forced fallback bundles into their own batch session groups', async () => {
     const requirementId = await ring.newId('requirement', {
       name: 'Shared Governance Batch Requirement',
