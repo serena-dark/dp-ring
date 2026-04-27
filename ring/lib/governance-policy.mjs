@@ -1047,6 +1047,96 @@ export function canonicalizeWaitingTaskGovernanceLabels(
   });
 }
 
+export function buildWaitingTaskRecord(waitingTask = {}) {
+  const taskId = trimString(waitingTask?.task_id);
+  const workflowTemplateId = trimString(waitingTask?.workflow_template_id);
+  if (!taskId || !workflowTemplateId) {
+    return null;
+  }
+
+  const canonicalTaskName = trimString(waitingTask?.canonical_task_name);
+  const canonicalWorkflowName = trimString(waitingTask?.canonical_workflow_name);
+  const canonicalSelectionContextWorkflowNames = normalizeCanonicalWorkflowNameMap(
+    waitingTask?.canonical_selection_context_workflow_names,
+  );
+  const canonicalBlockedReuseWorkflowNames = normalizeCanonicalWorkflowNameMap(
+    waitingTask?.canonical_governance_blocked_reuse_workflow_names,
+  );
+  const explicitWorkflowNameOverrides = normalizeCanonicalWorkflowNameMap(
+    waitingTask?.canonical_workflow_name_overrides,
+  );
+  const labelCarrier = {
+    ...waitingTask,
+    task_id: taskId,
+    workflow_template_id: workflowTemplateId,
+    ...(canonicalTaskName ? { canonical_task_name: canonicalTaskName } : {}),
+    ...(canonicalWorkflowName ? { canonical_workflow_name: canonicalWorkflowName } : {}),
+    ...(Object.keys(canonicalSelectionContextWorkflowNames).length > 0
+      ? { canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames }
+      : {}),
+    ...(Object.keys(canonicalBlockedReuseWorkflowNames).length > 0
+      ? { canonical_governance_blocked_reuse_workflow_names: canonicalBlockedReuseWorkflowNames }
+      : {}),
+    ...(Object.keys(explicitWorkflowNameOverrides).length > 0
+      ? { canonical_workflow_name_overrides: explicitWorkflowNameOverrides }
+      : {}),
+  };
+  const workflowNameOverrides = canonicalWorkflowNameOverrides(labelCarrier);
+  const governanceSelectionContext = canonicalizeSelectionContextWorkflowLabels(
+    normalizeGovernanceSelectionContext(waitingTask?.governance_selection_context),
+    workflowNameOverrides,
+  );
+  const governanceBlockedReuse = canonicalizeWaitingTaskGovernanceBlockedReuse(labelCarrier);
+  const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
+    governanceBlockedReuse,
+  );
+  const replanningHandoff = waitingTaskReplanningHandoff(waitingTask);
+  const workflowName = selectionContextWorkflowDisplayName({
+    workflow_template_id: workflowTemplateId,
+    workflow_name: waitingTask?.workflow_name,
+    canonical_workflow_name: canonicalWorkflowName,
+    selection_context: governanceSelectionContext,
+  }) || workflowTemplateId;
+
+  return {
+    task_id: taskId,
+    task_name: canonicalTaskName || trimString(waitingTask?.task_name) || null,
+    task_type: trimString(waitingTask?.task_type) || null,
+    milestone_id: trimString(waitingTask?.milestone_id) || null,
+    task_document_path: trimString(waitingTask?.task_document_path) || null,
+    task_document_ready: waitingTask?.task_document_ready === true,
+    prerequisites_ready: waitingTask?.prerequisites_ready === true,
+    workflow_ready: waitingTask?.workflow_ready === true,
+    workflow_template_id: workflowTemplateId,
+    workflow_name: workflowName,
+    workflow_source: trimString(waitingTask?.workflow_source) || null,
+    registry_rank: Number.isInteger(waitingTask?.registry_rank) ? waitingTask.registry_rank : null,
+    registry_mode: trimString(waitingTask?.registry_mode) || null,
+    selection_note: trimString(waitingTask?.selection_note) || null,
+    governance_selection_context: governanceSelectionContext
+      ? structuredClone(governanceSelectionContext)
+      : null,
+    governance_blocked_reuse: governanceBlockedReuse,
+    ...(governanceBlockedReuse.length > 0 || trimString(waitingTask?.governance_reenable_guidance)
+      ? { governance_reenable_guidance: governanceReenableGuidance }
+      : {}),
+    ...(replanningHandoff ?? {}),
+    ...(canonicalTaskName ? { canonical_task_name: canonicalTaskName } : {}),
+    ...(canonicalWorkflowName ? { canonical_workflow_name: canonicalWorkflowName } : {}),
+    ...(Object.keys(explicitWorkflowNameOverrides).length > 0
+      ? { canonical_workflow_name_overrides: explicitWorkflowNameOverrides }
+      : {}),
+    ...(Object.keys(canonicalSelectionContextWorkflowNames).length > 0
+      ? { canonical_selection_context_workflow_names: canonicalSelectionContextWorkflowNames }
+      : {}),
+    ...(Object.keys(canonicalBlockedReuseWorkflowNames).length > 0
+      ? { canonical_governance_blocked_reuse_workflow_names: canonicalBlockedReuseWorkflowNames }
+      : {}),
+    ready_at: trimString(waitingTask?.ready_at) || null,
+    dispatched_at: trimString(waitingTask?.dispatched_at) || null,
+  };
+}
+
 export function buildSessionContextInjected(readyTasks = []) {
   const workflowTemplateIds = [...new Set(
     readyTasks

@@ -5,6 +5,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionGovernanceContext,
+  buildWaitingTaskRecord,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -579,6 +580,113 @@ describe('governance policy', () => {
         },
       },
     );
+  });
+
+  it('builds normalized waiting-task records with shared governance metadata', () => {
+    assert.deepEqual(buildWaitingTaskRecord({
+      task_id: ' task-docs ',
+      task_name: ' Documentation ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-alpha ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      task_document_ready: true,
+      prerequisites_ready: true,
+      workflow_ready: true,
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template ',
+      workflow_source: ' custom_generated ',
+      registry_rank: 7,
+      registry_mode: ' governance_prefer_effective_force ',
+      selection_note: ' prefer the stronger checkpoint lineage ',
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: Number.NaN,
+        },
+      },
+      governance_blocked_reuse: [
+        {
+          id: ' wf-blocked-template ',
+          name: ' Blocked Template ',
+          reason: ' warm_semantic_lineage ',
+          checkpoint_id: ' cp-blocked ',
+          adoption_status: ' synthesized ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+      ],
+      canonical_workflow_name_overrides: {
+        ' wf-blocked-template ': ' Blocked Template Canonical ',
+      },
+      canonical_selection_context_workflow_names: {
+        ' wf-tight-template ': ' Tight Template Canonical ',
+      },
+      ready_at: ' 2026-04-27T13:03:25Z ',
+      dispatched_at: ' ',
+    }), {
+      task_id: 'task-docs',
+      task_name: 'Documentation',
+      task_type: 'documentation',
+      milestone_id: 'ms-alpha',
+      task_document_path: 'docs/tasks/task-docs/task-docs.md',
+      task_document_ready: true,
+      prerequisites_ready: true,
+      workflow_ready: true,
+      workflow_template_id: 'wf-roomier-template',
+      workflow_name: 'Roomier Template',
+      workflow_source: 'custom_generated',
+      registry_rank: 7,
+      registry_mode: 'governance_prefer_effective_force',
+      selection_note: 'prefer the stronger checkpoint lineage',
+      governance_selection_context: {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template Canonical',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 0,
+        },
+      },
+      governance_blocked_reuse: [{
+        id: 'wf-blocked-template',
+        name: 'Blocked Template Canonical',
+        reason: 'warm_semantic_lineage',
+        checkpoint_id: 'cp-blocked',
+        adoption_status: 'synthesized',
+        branch_budget: 0,
+        workflow_tightness: 'tight',
+        oversight_strength: 'strong',
+      }],
+      governance_reenable_guidance: 'wf-blocked-template (Blocked Template Canonical) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+      canonical_workflow_name_overrides: {
+        'wf-blocked-template': 'Blocked Template Canonical',
+      },
+      canonical_selection_context_workflow_names: {
+        'wf-tight-template': 'Tight Template Canonical',
+      },
+      ready_at: '2026-04-27T13:03:25Z',
+      dispatched_at: null,
+    });
   });
 
   it('builds normalized session governance selection context injection from waiting-task state', () => {

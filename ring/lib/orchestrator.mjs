@@ -7,6 +7,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionGovernanceContext,
+  buildWaitingTaskRecord,
   canonicalizeWaitingTaskGovernanceBlockedReuse,
   canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
@@ -4070,7 +4071,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         workflowSource,
       );
 
-      waitingTasks.push({
+      const waitingTask = buildWaitingTaskRecord({
         task_id: task.id,
         task_name: task.data.name,
         task_type: task.data.task_type,
@@ -4090,6 +4091,13 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         ready_at: nowIso(),
         dispatched_at: null,
       });
+      if (!waitingTask) {
+        throw new DispatchBundleError(
+          `Waiting-task assembly failed for ${task.id}.`,
+          { code: 'bundle_waiting_task_assembly_failed' },
+        );
+      }
+      waitingTasks.push(waitingTask);
     }
 
     return {
@@ -5336,7 +5344,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           workflowSource,
         );
 
-        waitingTasks.push({
+        const waitingTask = buildWaitingTaskRecord({
           task_id: task.id,
           task_name: task.data.name,
           task_type: task.data.task_type,
@@ -5356,6 +5364,10 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           ready_at: nowIso(),
           dispatched_at: null,
         });
+        if (!waitingTask) {
+          throw new Error(`Waiting-task assembly failed for ${task.id}.`);
+        }
+        waitingTasks.push(waitingTask);
       }
 
       const {
