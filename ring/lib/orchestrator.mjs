@@ -6,9 +6,9 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPayloadWaitingTask as sessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
-  canonicalizeWaitingTaskGovernanceBlockedReuse,
   canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
@@ -1540,96 +1540,6 @@ function workflowPreparationPayloadWaitingTask(task, recommendation = null) {
     task_type: taskType,
     milestone_id: milestoneId,
     task_document_path: `docs/tasks/${taskId}/${taskId}.md`,
-    replanning_handoff: parentTaskId && parentDecisionNote
-      ? {
-          parent_task_id: parentTaskId,
-          parent_decision_note: parentDecisionNote,
-        }
-      : null,
-    governance_selection_context: governanceSelectionContext,
-    governance_blocked_reuse: governanceBlockedReuse,
-    governance_reenable_guidance: governanceReenableGuidance,
-  };
-}
-
-function sessionDispatchPacketGovernanceBlockedReuse(waitingTask, workflowPreparationPayloadTask = null) {
-  const chosenWorkflowId = trimString(waitingTask?.workflow_template_id);
-  const currentCandidates = Array.isArray(waitingTask?.governance_blocked_reuse)
-    ? waitingTask.governance_blocked_reuse
-    : [];
-  const fallbackCandidates = currentCandidates.length === 0
-    && Array.isArray(workflowPreparationPayloadTask?.governance_blocked_reuse)
-      ? workflowPreparationPayloadTask.governance_blocked_reuse
-      : [];
-  const labelCarrier = {
-    ...workflowPreparationPayloadTask,
-    ...waitingTask,
-    canonical_workflow_name_overrides: {
-      ...(workflowPreparationPayloadTask?.canonical_workflow_name_overrides ?? {}),
-      ...(waitingTask?.canonical_workflow_name_overrides ?? {}),
-    },
-    canonical_selection_context_workflow_names: {
-      ...(workflowPreparationPayloadTask?.canonical_selection_context_workflow_names ?? {}),
-      ...(waitingTask?.canonical_selection_context_workflow_names ?? {}),
-    },
-    canonical_governance_blocked_reuse_workflow_names: {
-      ...(workflowPreparationPayloadTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
-      ...(waitingTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
-    },
-  };
-  const seen = new Set();
-  const candidates = [];
-  const canonicalCandidates = canonicalizeWaitingTaskGovernanceBlockedReuse(
-    labelCarrier,
-    fallbackCandidates,
-  );
-  for (const candidate of canonicalCandidates) {
-    if (!candidate.id || !candidate.name || !candidate.reason || candidate.id === chosenWorkflowId) {
-      continue;
-    }
-    const dedupeKey = [
-      candidate.id,
-      candidate.reason,
-      candidate.checkpoint_id ?? '',
-      candidate.adoption_status ?? '',
-      candidate.branch_budget ?? '',
-      candidate.workflow_tightness ?? '',
-      candidate.oversight_strength ?? '',
-    ].join('|');
-    if (seen.has(dedupeKey)) {
-      continue;
-    }
-    seen.add(dedupeKey);
-    candidates.push(candidate);
-  }
-  return candidates;
-}
-
-function sessionDispatchPayloadWaitingTask(waitingTask, workflowPreparationPayloadTask = null) {
-  const taskId = trimString(waitingTask?.task_id);
-  const taskName = trimString(waitingTask?.task_name) || null;
-  const taskType = trimString(waitingTask?.task_type) || null;
-  const milestoneId = trimString(waitingTask?.milestone_id) || null;
-  const taskDocumentPath = trimString(waitingTask?.task_document_path)
-    || (taskId ? `docs/tasks/${taskId}/${taskId}.md` : null);
-  const parentTaskId = trimString(waitingTask?.parent_task_id);
-  const parentDecisionNote = trimString(waitingTask?.parent_decision_note);
-  const governanceSelectionContext = waitingTask?.governance_selection_context
-    ? clone(waitingTask.governance_selection_context)
-    : null;
-  const governanceBlockedReuse = sessionDispatchPacketGovernanceBlockedReuse(
-    waitingTask,
-    workflowPreparationPayloadTask,
-  );
-  const governanceReenableGuidance = describeWorkflowGovernanceReenableGuidanceList(
-    governanceBlockedReuse,
-  );
-  return {
-    task_id: taskId,
-    task_name: taskName,
-    task_type: taskType,
-    milestone_id: milestoneId,
-    task_document_path: taskDocumentPath,
     replanning_handoff: parentTaskId && parentDecisionNote
       ? {
           parent_task_id: parentTaskId,

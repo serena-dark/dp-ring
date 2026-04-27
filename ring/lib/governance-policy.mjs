@@ -1047,6 +1047,111 @@ export function canonicalizeWaitingTaskGovernanceLabels(
   });
 }
 
+export function buildSessionDispatchPayloadWaitingTask(
+  waitingTask = {},
+  workflowPreparationPayloadTask = null,
+) {
+  const taskId = trimString(waitingTask?.task_id)
+    || trimString(workflowPreparationPayloadTask?.task_id)
+    || null;
+  const taskDocumentPath = trimString(waitingTask?.task_document_path)
+    || trimString(workflowPreparationPayloadTask?.task_document_path)
+    || (taskId ? `docs/tasks/${taskId}/${taskId}.md` : null);
+  const replanningHandoff = waitingTaskReplanningHandoff(waitingTask)
+    || waitingTaskReplanningHandoff(workflowPreparationPayloadTask)
+    || null;
+  const currentGovernanceBlockedReuse = Array.isArray(waitingTask?.governance_blocked_reuse)
+    ? waitingTask.governance_blocked_reuse
+    : [];
+  const mergedWaitingTask = {
+    ...workflowPreparationPayloadTask,
+    ...waitingTask,
+    task_id: taskId,
+    task_name: trimString(waitingTask?.task_name)
+      || trimString(workflowPreparationPayloadTask?.task_name)
+      || null,
+    task_type: trimString(waitingTask?.task_type)
+      || trimString(workflowPreparationPayloadTask?.task_type)
+      || null,
+    milestone_id: trimString(waitingTask?.milestone_id)
+      || trimString(workflowPreparationPayloadTask?.milestone_id)
+      || null,
+    task_document_path: taskDocumentPath,
+    workflow_template_id: trimString(waitingTask?.workflow_template_id)
+      || trimString(workflowPreparationPayloadTask?.workflow_template_id)
+      || null,
+    workflow_name: trimString(waitingTask?.workflow_name)
+      || trimString(workflowPreparationPayloadTask?.workflow_name)
+      || null,
+    governance_selection_context:
+      waitingTask?.governance_selection_context
+      ?? workflowPreparationPayloadTask?.governance_selection_context
+      ?? null,
+    governance_blocked_reuse: currentGovernanceBlockedReuse.length > 0
+      ? currentGovernanceBlockedReuse
+      : Array.isArray(workflowPreparationPayloadTask?.governance_blocked_reuse)
+        ? workflowPreparationPayloadTask.governance_blocked_reuse
+        : [],
+    canonical_workflow_name_overrides: {
+      ...(workflowPreparationPayloadTask?.canonical_workflow_name_overrides ?? {}),
+      ...(waitingTask?.canonical_workflow_name_overrides ?? {}),
+    },
+    canonical_selection_context_workflow_names: {
+      ...(workflowPreparationPayloadTask?.canonical_selection_context_workflow_names ?? {}),
+      ...(waitingTask?.canonical_selection_context_workflow_names ?? {}),
+    },
+    canonical_governance_blocked_reuse_workflow_names: {
+      ...(workflowPreparationPayloadTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+      ...(waitingTask?.canonical_governance_blocked_reuse_workflow_names ?? {}),
+    },
+    ...(replanningHandoff ? { replanning_handoff: replanningHandoff } : {}),
+  };
+  const waitingTaskRecord = buildWaitingTaskRecord(mergedWaitingTask);
+  const selectedWorkflowTemplateId = waitingTaskRecord?.workflow_template_id
+    || trimString(mergedWaitingTask.workflow_template_id)
+    || null;
+  const seenGovernanceBlockedReuse = new Set();
+  const governanceBlockedReuse = (waitingTaskRecord?.governance_blocked_reuse ?? []).filter((candidate) => {
+    if (!candidate?.id || !candidate?.name || !candidate?.reason || candidate.id === selectedWorkflowTemplateId) {
+      return false;
+    }
+    const dedupeKey = [
+      candidate.id,
+      candidate.reason,
+      candidate.checkpoint_id ?? '',
+      candidate.adoption_status ?? '',
+      candidate.branch_budget ?? '',
+      candidate.workflow_tightness ?? '',
+      candidate.oversight_strength ?? '',
+    ].join('|');
+    if (seenGovernanceBlockedReuse.has(dedupeKey)) {
+      return false;
+    }
+    seenGovernanceBlockedReuse.add(dedupeKey);
+    return true;
+  });
+  const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
+    governanceBlockedReuse,
+  );
+
+  return {
+    task_id: waitingTaskRecord?.task_id || taskId,
+    task_name: waitingTaskRecord?.task_name || trimString(mergedWaitingTask.task_name) || null,
+    task_type: waitingTaskRecord?.task_type || trimString(mergedWaitingTask.task_type) || null,
+    milestone_id: waitingTaskRecord?.milestone_id || trimString(mergedWaitingTask.milestone_id) || null,
+    task_document_path: waitingTaskRecord?.task_document_path || taskDocumentPath,
+    replanning_handoff: waitingTaskRecord?.parent_task_id && waitingTaskRecord?.parent_decision_note
+      ? {
+          parent_task_id: waitingTaskRecord.parent_task_id,
+          parent_decision_note: waitingTaskRecord.parent_decision_note,
+        }
+      : replanningHandoff,
+    governance_selection_context: waitingTaskRecord?.governance_selection_context ?? null,
+    governance_blocked_reuse: governanceBlockedReuse,
+    governance_reenable_guidance: governanceReenableGuidance,
+  };
+}
+
 export function buildWaitingTaskRecord(waitingTask = {}) {
   const taskId = trimString(waitingTask?.task_id);
   const workflowTemplateId = trimString(waitingTask?.workflow_template_id);
