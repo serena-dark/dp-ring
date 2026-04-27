@@ -7208,6 +7208,42 @@ Split milestone prerequisites into ready and blocked sets.
         ]),
       );
 
+      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
+      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
+      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
+
+      assert.equal(launchedDocsBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(launchedTestingBundle.workflows.waiting_tasks.length, 1);
+
+      const launchedDocsWaitingTask = launchedDocsBundle.workflows.waiting_tasks[0];
+      assert.equal(launchedDocsWaitingTask.task_id, docsWaitingTask.task_id);
+      assert.equal(launchedDocsWaitingTask.task_name, renamedDocsTaskName);
+      assert.equal(launchedDocsWaitingTask.task_type, docsWaitingTask.task_type);
+      assert.equal(launchedDocsWaitingTask.milestone_id, docsWaitingTask.milestone_id);
+      assert.equal(launchedDocsWaitingTask.task_document_path, docsWaitingTask.task_document_path);
+      assert.equal(launchedDocsWaitingTask.workflow_template_id, docsWaitingTask.workflow_template_id);
+      assert.equal(launchedDocsWaitingTask.workflow_name, renamedDocsWorkflowName);
+      assert.deepEqual(launchedDocsWaitingTask.governance_selection_context, expectedDocsSelectionContext);
+      assert.deepEqual(launchedDocsWaitingTask.governance_blocked_reuse ?? [], []);
+      assert.equal(launchedDocsWaitingTask.governance_reenable_guidance ?? 'none', 'none');
+      assert.ok(launchedDocsWaitingTask.dispatched_at);
+
+      const launchedTestingWaitingTask = launchedTestingBundle.workflows.waiting_tasks[0];
+      assert.equal(launchedTestingWaitingTask.task_id, testingWaitingTask.task_id);
+      assert.equal(launchedTestingWaitingTask.task_name, testingWaitingTask.task_name);
+      assert.equal(launchedTestingWaitingTask.task_type, testingWaitingTask.task_type);
+      assert.equal(launchedTestingWaitingTask.milestone_id, testingWaitingTask.milestone_id);
+      assert.equal(launchedTestingWaitingTask.task_document_path, testingWaitingTask.task_document_path);
+      assert.equal(launchedTestingWaitingTask.workflow_template_id, testingWaitingTask.workflow_template_id);
+      assert.equal(launchedTestingWaitingTask.workflow_name, testingWaitingTask.workflow_name);
+      assert.deepEqual(
+        launchedTestingWaitingTask.governance_selection_context,
+        testingWaitingTask.governance_selection_context,
+      );
+      assert.deepEqual(launchedTestingWaitingTask.governance_blocked_reuse ?? [], []);
+      assert.equal(launchedTestingWaitingTask.governance_reenable_guidance ?? 'none', 'none');
+      assert.ok(launchedTestingWaitingTask.dispatched_at);
+
       const launchedSession = await isolatedRing.read('session', launchedDocsBundle.batching.session_id);
       assert.deepEqual(
         new Set(launchedSession.data.task_ids),
@@ -7222,9 +7258,6 @@ Split milestone prerequisites into ready and blocked sets.
       const launchedSelectionContexts = new Map(
         launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
       );
-      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
-      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
-      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
       assert.deepEqual(launchedSelectionContexts.get(docsWaitingTask.task_id), {
         task_id: docsWaitingTask.task_id,
         task_name: renamedDocsTaskName,
@@ -7730,6 +7763,42 @@ Split milestone prerequisites into ready and blocked sets.
         ]),
       );
 
+      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
+      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
+      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
+
+      assert.equal(launchedDocsBundle.workflows.waiting_tasks.length, 1);
+      assert.equal(launchedTestingBundle.workflows.waiting_tasks.length, 1);
+
+      const launchedDocsWaitingTask = launchedDocsBundle.workflows.waiting_tasks[0];
+      assert.equal(launchedDocsWaitingTask.task_id, docsWaitingTask.task_id);
+      assert.equal(launchedDocsWaitingTask.task_name, renamedDocsTaskName);
+      assert.equal(launchedDocsWaitingTask.task_type, docsWaitingTask.task_type);
+      assert.equal(launchedDocsWaitingTask.milestone_id, docsWaitingTask.milestone_id);
+      assert.equal(launchedDocsWaitingTask.task_document_path, docsWaitingTask.task_document_path);
+      assert.equal(launchedDocsWaitingTask.workflow_template_id, docsWaitingTask.workflow_template_id);
+      assert.equal(launchedDocsWaitingTask.workflow_name, renamedDocsWorkflowName);
+      assert.deepEqual(launchedDocsWaitingTask.governance_selection_context, expectedDocsSelectionContext);
+      assert.deepEqual(launchedDocsWaitingTask.governance_blocked_reuse ?? [], []);
+      assert.equal(launchedDocsWaitingTask.governance_reenable_guidance ?? 'none', 'none');
+      assert.ok(launchedDocsWaitingTask.dispatched_at);
+
+      const launchedTestingWaitingTask = launchedTestingBundle.workflows.waiting_tasks[0];
+      assert.equal(launchedTestingWaitingTask.task_id, testingWaitingTask.task_id);
+      assert.equal(launchedTestingWaitingTask.task_name, testingWaitingTask.task_name);
+      assert.equal(launchedTestingWaitingTask.task_type, testingWaitingTask.task_type);
+      assert.equal(launchedTestingWaitingTask.milestone_id, testingWaitingTask.milestone_id);
+      assert.equal(launchedTestingWaitingTask.task_document_path, testingWaitingTask.task_document_path);
+      assert.equal(launchedTestingWaitingTask.workflow_template_id, testingWaitingTask.workflow_template_id);
+      assert.equal(launchedTestingWaitingTask.workflow_name, testingWaitingTask.workflow_name);
+      assert.deepEqual(
+        launchedTestingWaitingTask.governance_selection_context,
+        testingWaitingTask.governance_selection_context,
+      );
+      assert.deepEqual(launchedTestingWaitingTask.governance_blocked_reuse ?? [], []);
+      assert.equal(launchedTestingWaitingTask.governance_reenable_guidance ?? 'none', 'none');
+      assert.ok(launchedTestingWaitingTask.dispatched_at);
+
       const launchedSession = await isolatedRing.read('session', launchedDocsBundle.batching.session_id);
       assert.deepEqual(
         new Set(launchedSession.data.task_ids),
@@ -7744,9 +7813,6 @@ Split milestone prerequisites into ready and blocked sets.
       const launchedSelectionContexts = new Map(
         launchedSession.data.context_injected.governance_selection_contexts.map((entry) => [entry.task_id, entry]),
       );
-      const expectedDocsSelectionContext = structuredClone(docsWaitingTask.governance_selection_context);
-      expectedDocsSelectionContext.preferred.workflow_name = renamedDocsWorkflowName;
-      expectedDocsSelectionContext.compared.workflow_name = renamedDocsComparedWorkflowName;
       assert.deepEqual(launchedSelectionContexts.get(docsWaitingTask.task_id), {
         task_id: docsWaitingTask.task_id,
         task_name: renamedDocsTaskName,

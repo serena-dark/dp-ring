@@ -5740,6 +5740,15 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         readyTasks,
         (kind, id) => ring.read(kind, id),
       );
+      const readyTasksForBundleStorage = readyTasksWithCanonicalDispatchLabels(
+        readyTasksForSessionContext,
+        readyTasks,
+      );
+      const readyTaskForBundleStorageById = new Map(
+        readyTasksForBundleStorage
+          .map((item) => [trimString(item?.task_id), item])
+          .filter(([taskId]) => Boolean(taskId)),
+      );
       const governanceContext = buildSessionGovernanceContext(readyTasksForSessionContext);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
 
@@ -5858,17 +5867,24 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const updatedBundles = [];
       for (const bundle of readyBundles) {
         const next = await readDispatchBundle(bundle.id);
+        const dispatchedAt = nowIso();
         next.batching.status = 'launched';
         next.batching.session_id = sessionId;
         next.batching.workflow_run_ids = workflowRunIds.filter((runId, index) =>
           readyTasks[index] != null,
         );
-        next.batching.launched_at = nowIso();
-        next.workflows.waiting_tasks = next.workflows.waiting_tasks.map((item) =>
-          readyTasks.some((readyItem) => readyItem.task_id === item.task_id)
-            ? { ...item, dispatched_at: nowIso() }
-            : item,
-        );
+        next.batching.launched_at = dispatchedAt;
+        next.workflows.waiting_tasks = next.workflows.waiting_tasks.map((item) => {
+          const refreshedReadyTask = readyTaskForBundleStorageById.get(trimString(item?.task_id));
+          if (!refreshedReadyTask) {
+            return item;
+          }
+          return {
+            ...item,
+            ...refreshedReadyTask,
+            dispatched_at: dispatchedAt,
+          };
+        });
         appendDispatchBundleHistory(
           next,
           'session_launched',
