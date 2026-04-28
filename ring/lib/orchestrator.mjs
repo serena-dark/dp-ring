@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPacketWaitingArea as sessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
-  buildSessionDispatchPayloadWaitingTask as sessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask as workflowPreparationPayloadWaitingTask,
@@ -16,7 +16,6 @@ import {
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
   describeAutomaticReusePolicy,
-  describeSessionDispatchPayloadWaitingTask,
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
@@ -1604,20 +1603,10 @@ function buildSessionBatchPacket(
     : Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
       ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
       : [];
-  const workflowPreparationPayloadWaitingTaskById = new Map(
-    workflowPreparationPayloadWaitingTasksSource
-      .map((item) => [trimString(item?.task_id), item])
-      .filter(([taskId]) => Boolean(taskId)),
+  const { payloadWaitingTasks, taskLines } = sessionDispatchPacketWaitingArea(
+    waitingTasks,
+    workflowPreparationPayloadWaitingTasksSource,
   );
-  const payloadWaitingTasks = waitingTasks.map((item) =>
-    sessionDispatchPayloadWaitingTask(
-      item,
-      workflowPreparationPayloadWaitingTaskById.get(trimString(item?.task_id)) ?? null,
-    )
-  );
-  const taskLines = payloadWaitingTasks.length > 0
-    ? payloadWaitingTasks.map((item) => describeSessionDispatchPayloadWaitingTask(item)).join('\n')
-    : '- no waiting tasks';
 
   return {
     id: `pkt-${job.id}-session-batch`,

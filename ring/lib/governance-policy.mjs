@@ -1378,6 +1378,29 @@ export function buildSessionDispatchPayloadWaitingTask(
   };
 }
 
+export function buildSessionDispatchPacketWaitingArea(
+  waitingTasks = [],
+  workflowPreparationPayloadWaitingTasks = [],
+) {
+  const waitingTasksSource = Array.isArray(waitingTasks) ? waitingTasks : [];
+  const workflowPreparationPayloadWaitingTaskById = waitingTaskLookup(
+    workflowPreparationPayloadWaitingTasks,
+  );
+  const payloadWaitingTasks = waitingTasksSource.map((item) =>
+    buildSessionDispatchPayloadWaitingTask(
+      item,
+      workflowPreparationPayloadWaitingTaskById.get(trimString(item?.task_id)) ?? null,
+    )
+  );
+
+  return {
+    payloadWaitingTasks,
+    taskLines: payloadWaitingTasks.length > 0
+      ? payloadWaitingTasks.map((item) => describeSessionDispatchPayloadWaitingTask(item)).join('\n')
+      : '- no waiting tasks',
+  };
+}
+
 export function mergeSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   sessionDispatchPayloadTask = null,

@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
@@ -1258,6 +1259,78 @@ describe('governance policy', () => {
         + ' | governance: wf-budget-hold (Branch Budget Template Canonical) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint'
         + ' | governance_selection_context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13'
         + ' | replanning_handoff: parent_task_id: t-parent-governed-docs | parent_decision_note: Retry only the governed documentation path before another launch.',
+    );
+  });
+
+  it('builds session-dispatch packet waiting-area payload/body state from shared waiting-task helpers', () => {
+    const readyWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      governance_blocked_reuse: [],
+      canonical_workflow_name_overrides: {
+        ' wf-selected ': ' Selected Workflow Canonical ',
+        ' wf-compared ': ' Compared Workflow Canonical ',
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const workflowPreparationPayloadTask = {
+      task_id: ' task-docs ',
+      replanning_handoff: {
+        parent_task_id: ' t-parent-governed-docs ',
+        parent_decision_note: ' Retry only the governed documentation path before another launch. ',
+      },
+      governance_blocked_reuse: [
+        {
+          id: ' wf-budget-hold ',
+          name: ' Branch Budget Template ',
+          reason: ' checkpoint_branch_budget_exhausted ',
+          checkpoint_id: ' cp-budget-hold ',
+          adoption_status: ' mainline ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+      ],
+      canonical_governance_blocked_reuse_workflow_names: {
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const expectedPayloadTask = buildSessionDispatchPayloadWaitingTask(
+      readyWaitingTask,
+      workflowPreparationPayloadTask,
+    );
+
+    assert.deepEqual(
+      buildSessionDispatchPacketWaitingArea(
+        [readyWaitingTask],
+        [workflowPreparationPayloadTask],
+      ),
+      {
+        payloadWaitingTasks: [expectedPayloadTask],
+        taskLines: describeSessionDispatchPayloadWaitingTask(expectedPayloadTask),
+      },
     );
   });
 
