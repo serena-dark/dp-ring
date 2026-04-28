@@ -6,6 +6,7 @@ import {
   buildSessionContextInjected,
   buildSessionDispatchArtifacts,
   buildSessionDispatchMessageEnvelope,
+  buildSessionDispatchMessageEnvelopeOptions,
   buildSessionDispatchPacket,
   buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
@@ -1570,6 +1571,45 @@ describe('governance policy', () => {
       routing,
     });
     assert.notEqual(result.routing, routing);
+  });
+
+  it('builds session-dispatch message-envelope options from config, job, and recipient card', () => {
+    const routing = {
+      mode: 'strict',
+      workflow_strategy: 'reuse_strict',
+    };
+    const recipientCard = {
+      id: 'dispatcher',
+      role: 'dispatcher',
+    };
+    const result = buildSessionDispatchMessageEnvelopeOptions({
+      config: {
+        message_protocol_version: ' ring.orchestrator.v1 ',
+      },
+      job: {
+        id: ' job-session-dispatch ',
+        trace: {
+          trace_id: ' trace-session-dispatch ',
+        },
+        routing,
+      },
+      senderId: ' dispatch-center ',
+      senderRole: ' orchestrator ',
+      recipientCard,
+      recipient: ' dispatcher ',
+    });
+
+    assert.deepEqual(result, {
+      protocolVersion: 'ring.orchestrator.v1',
+      traceId: 'trace-session-dispatch',
+      senderId: 'dispatch-center',
+      senderRole: 'orchestrator',
+      recipientCard,
+      callbackPath: '/api/orchestrator/jobs/job-session-dispatch/agent-report',
+      routing,
+      recipient: 'dispatcher',
+    });
+    assert.equal(result.routing, routing);
   });
 
   it('builds a session-dispatch packet from shared waiting-area state and workflow-preparation payload fallbacks', () => {

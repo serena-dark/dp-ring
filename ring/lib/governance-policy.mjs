@@ -1470,6 +1470,27 @@ export function buildSessionDispatchArtifacts(job = null) {
   ];
 }
 
+export function buildSessionDispatchMessageEnvelopeOptions({
+  config = null,
+  job = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  recipient = null,
+} = {}) {
+  const jobId = trimString(job?.id);
+  return {
+    protocolVersion: trimString(config?.message_protocol_version) || null,
+    traceId: trimString(job?.trace?.trace_id) || null,
+    senderId: trimString(senderId) || null,
+    senderRole: trimString(senderRole) || null,
+    recipientCard: recipientCard ?? null,
+    callbackPath: jobId ? `/api/orchestrator/jobs/${jobId}/agent-report` : null,
+    routing: job?.routing ?? null,
+    recipient: trimString(recipient) || null,
+  };
+}
+
 export function buildSessionDispatchMessageEnvelope({
   job = null,
   requirement = null,

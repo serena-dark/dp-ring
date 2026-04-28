@@ -7,6 +7,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionDispatchMessageEnvelope as sessionDispatchMessageEnvelope,
+  buildSessionDispatchMessageEnvelopeOptions as sessionDispatchMessageEnvelopeCallOptions,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -780,6 +781,17 @@ function buildMessageEnvelope(job, packet, config, agentCards, artifacts = []) {
     artifacts,
     routing: clone(job.routing),
   };
+}
+
+function sessionDispatchEnvelopeOptions(job, config, agentCards) {
+  return sessionDispatchMessageEnvelopeCallOptions({
+    config,
+    job,
+    senderId: DISPATCH_CENTER_ID,
+    senderRole: 'orchestrator',
+    recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
+    recipient: SESSION_DISPATCHER_ID,
+  });
 }
 
 function fallbackRoutingPolicy(job) {
@@ -4120,14 +4132,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           requirement,
           waitingTasks: canonicalWaitingTasks,
           workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-          protocolVersion: config.message_protocol_version,
-          traceId: job.trace.trace_id,
-          senderId: DISPATCH_CENTER_ID,
-          senderRole: 'orchestrator',
-          recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
-          callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
-          routing: job.routing,
-          recipient: SESSION_DISPATCHER_ID,
+          ...sessionDispatchEnvelopeOptions(job, config, agentCards),
           dispatchedAt: nowIso(),
         });
         next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
@@ -4981,14 +4986,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         requirement,
         waitingTasks: waitingTasksForDispatchPacket,
         workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        protocolVersion: config.message_protocol_version,
-        traceId: job.trace.trace_id,
-        senderId: DISPATCH_CENTER_ID,
-        senderRole: 'orchestrator',
-        recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
-        callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
-        routing: job.routing,
-        recipient: SESSION_DISPATCHER_ID,
+        ...sessionDispatchEnvelopeOptions(job, config, agentCards),
         dispatchedAt: nowIso(),
       });
       let next = clone(job);
@@ -5229,14 +5227,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         requirement,
         waitingTasks: readyTasksForDispatchPacket,
         workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        protocolVersion: config.message_protocol_version,
-        traceId: job.trace.trace_id,
-        senderId: DISPATCH_CENTER_ID,
-        senderRole: 'orchestrator',
-        recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
-        callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
-        routing: job.routing,
-        recipient: SESSION_DISPATCHER_ID,
+        ...sessionDispatchEnvelopeOptions(job, config, agentCards),
         dispatchedAt: nowIso(),
       });
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
