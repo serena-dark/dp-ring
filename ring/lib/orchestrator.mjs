@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchArtifacts as sessionDispatchArtifacts,
   buildSessionDispatchPacket as sessionDispatchPacket,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionGovernanceContext,
@@ -1624,20 +1625,7 @@ function buildSessionDispatchMessageEnvelope(
     ),
     config,
     agentCards,
-    [
-      {
-        kind: 'workflow_plan',
-        id: null,
-        path: job.workflow_preparation.document.path,
-        role: 'source',
-      },
-      {
-        kind: 'session_batch',
-        id: null,
-        path: null,
-        role: 'target',
-      },
-    ],
+    sessionDispatchArtifacts(job),
   );
 }
 

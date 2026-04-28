@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchArtifacts,
   buildSessionDispatchPacket,
   buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
@@ -1417,6 +1418,31 @@ describe('governance policy', () => {
         taskLines: describeSessionDispatchPayloadWaitingTask(expectedPayloadTask),
       },
     );
+  });
+
+  it('builds session-dispatch artifact descriptors from the workflow-preparation source and session-batch target', () => {
+    const job = {
+      workflow_preparation: {
+        document: {
+          path: ' docs/plans/session-dispatch/workflow-preparation.md ',
+        },
+      },
+    };
+
+    assert.deepEqual(buildSessionDispatchArtifacts(job), [
+      {
+        kind: 'workflow_plan',
+        id: null,
+        path: 'docs/plans/session-dispatch/workflow-preparation.md',
+        role: 'source',
+      },
+      {
+        kind: 'session_batch',
+        id: null,
+        path: null,
+        role: 'target',
+      },
+    ]);
   });
 
   it('builds a session-dispatch packet from shared waiting-area state and workflow-preparation payload fallbacks', () => {

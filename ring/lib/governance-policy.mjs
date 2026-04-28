@@ -1453,6 +1453,23 @@ export function buildSessionDispatchPacket({
   };
 }
 
+export function buildSessionDispatchArtifacts(job = null) {
+  return [
+    {
+      kind: 'workflow_plan',
+      id: null,
+      path: trimString(job?.workflow_preparation?.document?.path) || null,
+      role: 'source',
+    },
+    {
+      kind: 'session_batch',
+      id: null,
+      path: null,
+      role: 'target',
+    },
+  ];
+}
+
 export function mergeSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   sessionDispatchPayloadTask = null,
