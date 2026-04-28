@@ -20,6 +20,7 @@ import {
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
+  mergeSessionDispatchPayloadWaitingTask as mergeSessionDispatchPayloadIntoWaitingTask,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -1491,35 +1492,6 @@ ${prerequisites}
 Split milestone prerequisites into "ready now" and "blocked / missing" so the dispatcher can identify safe early tasks.
 
 ${milestoneSections}`;
-}
-
-function mergeSessionDispatchPayloadIntoWaitingTask(waitingTask, sessionDispatchPayloadTask = null) {
-  if (!sessionDispatchPayloadTask) {
-    return waitingTask;
-  }
-
-  return {
-    ...waitingTask,
-    task_name: sessionDispatchPayloadTask.task_name ?? waitingTask.task_name ?? null,
-    task_type: sessionDispatchPayloadTask.task_type ?? waitingTask.task_type ?? null,
-    milestone_id: sessionDispatchPayloadTask.milestone_id ?? waitingTask.milestone_id ?? null,
-    task_document_path:
-      sessionDispatchPayloadTask.task_document_path ?? waitingTask.task_document_path ?? null,
-    replanning_handoff:
-      sessionDispatchPayloadTask.replanning_handoff ?? waitingTask.replanning_handoff ?? null,
-    governance_selection_context:
-      sessionDispatchPayloadTask.governance_selection_context
-      ?? waitingTask.governance_selection_context
-      ?? null,
-    governance_blocked_reuse:
-      sessionDispatchPayloadTask.governance_blocked_reuse
-      ?? waitingTask.governance_blocked_reuse
-      ?? [],
-    governance_reenable_guidance:
-      sessionDispatchPayloadTask.governance_reenable_guidance
-      ?? waitingTask.governance_reenable_guidance
-      ?? 'none',
-  };
 }
 
 function sessionDispatchPayloadWaitingTaskLookup(packet) {

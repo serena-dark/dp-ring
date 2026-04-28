@@ -1345,6 +1345,52 @@ export function buildSessionDispatchPayloadWaitingTask(
   };
 }
 
+export function mergeSessionDispatchPayloadWaitingTask(
+  waitingTask = {},
+  sessionDispatchPayloadTask = null,
+) {
+  if (!sessionDispatchPayloadTask) {
+    return waitingTask;
+  }
+
+  const mergedPayloadWaitingTask = buildSessionDispatchPayloadWaitingTask(
+    sessionDispatchPayloadTask,
+    waitingTask,
+  );
+
+  return {
+    ...waitingTask,
+    task_name: mergedPayloadWaitingTask?.task_name ?? waitingTask?.task_name ?? null,
+    task_type: mergedPayloadWaitingTask?.task_type ?? waitingTask?.task_type ?? null,
+    milestone_id: mergedPayloadWaitingTask?.milestone_id ?? waitingTask?.milestone_id ?? null,
+    task_document_path:
+      mergedPayloadWaitingTask?.task_document_path
+      ?? waitingTask?.task_document_path
+      ?? null,
+    workflow_template_id:
+      mergedPayloadWaitingTask?.workflow_template_id
+      ?? waitingTask?.workflow_template_id
+      ?? null,
+    workflow_name: mergedPayloadWaitingTask?.workflow_name ?? waitingTask?.workflow_name ?? null,
+    replanning_handoff:
+      mergedPayloadWaitingTask?.replanning_handoff
+      ?? waitingTask?.replanning_handoff
+      ?? null,
+    governance_selection_context:
+      mergedPayloadWaitingTask?.governance_selection_context
+      ?? waitingTask?.governance_selection_context
+      ?? null,
+    governance_blocked_reuse:
+      mergedPayloadWaitingTask?.governance_blocked_reuse
+      ?? waitingTask?.governance_blocked_reuse
+      ?? [],
+    governance_reenable_guidance:
+      mergedPayloadWaitingTask?.governance_reenable_guidance
+      ?? waitingTask?.governance_reenable_guidance
+      ?? 'none',
+  };
+}
+
 export function describeSessionDispatchPayloadWaitingTask(waitingTask = {}) {
   const taskId = trimString(waitingTask?.task_id) ?? 'unknown-task';
   const taskName = trimString(waitingTask?.task_name) ?? 'Unnamed task';
