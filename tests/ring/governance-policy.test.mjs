@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPacket,
   buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
   buildSessionDispatchPayloadWaitingTask,
@@ -1414,6 +1415,142 @@ describe('governance policy', () => {
       {
         payloadWaitingTasks: [expectedPayloadTask],
         taskLines: describeSessionDispatchPayloadWaitingTask(expectedPayloadTask),
+      },
+    );
+  });
+
+  it('builds a session-dispatch packet from shared waiting-area state and workflow-preparation payload fallbacks', () => {
+    const readyWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      governance_blocked_reuse: [],
+      canonical_workflow_name_overrides: {
+        ' wf-selected ': ' Selected Workflow Canonical ',
+        ' wf-compared ': ' Compared Workflow Canonical ',
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const workflowPreparationPayloadTask = {
+      task_id: ' task-docs ',
+      replanning_handoff: {
+        parent_task_id: ' t-parent-governed-docs ',
+        parent_decision_note: ' Retry only the governed documentation path before another launch. ',
+      },
+      governance_blocked_reuse: [
+        {
+          id: ' wf-budget-hold ',
+          name: ' Branch Budget Template ',
+          reason: ' checkpoint_branch_budget_exhausted ',
+          checkpoint_id: ' cp-budget-hold ',
+          adoption_status: ' mainline ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+      ],
+      canonical_governance_blocked_reuse_workflow_names: {
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const job = {
+      id: 'job-session-dispatch',
+      workflow_preparation: {
+        document: {
+          path: 'docs/plans/session-dispatch/workflow-preparation.md',
+        },
+        dispatch: {
+          packet: {
+            payload: {
+              waiting_tasks: [workflowPreparationPayloadTask],
+            },
+          },
+        },
+      },
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: 'docs/plans/session-dispatch/task-dispatch.md',
+          },
+        },
+      },
+    };
+    const requirement = {
+      id: 'req-governed-docs',
+      data: {
+        name: 'Governed docs delivery',
+        description: 'Deliver the governed documentation batch safely.',
+        acceptance_criteria: [
+          'Keep the session-dispatch packet aligned with shared governance-policy helpers.',
+          'Carry waiting-task governance fallbacks into the dispatch payload.',
+        ],
+      },
+    };
+    const expectedPayloadTask = buildSessionDispatchPayloadWaitingTask(
+      readyWaitingTask,
+      workflowPreparationPayloadTask,
+    );
+
+    assert.deepEqual(
+      buildSessionDispatchPacket({
+        job,
+        requirement,
+        waitingTasks: [readyWaitingTask],
+        workflowPreparationPayloadWaitingTasks: null,
+        recipient: 'session-dispatcher',
+        dispatchedAt: '2026-04-28T16:49:25Z',
+      }),
+      {
+        id: 'pkt-job-session-dispatch-session-batch',
+        recipient: 'session-dispatcher',
+        kind: 'batch_session_launch',
+        subject: 'Launch a batch session for 1 ready tasks',
+        dispatched_at: '2026-04-28T16:49:25Z',
+        body: [
+          'Requirement req-governed-docs: Governed docs delivery',
+          '',
+          'Waiting area:',
+          describeSessionDispatchPayloadWaitingTask(expectedPayloadTask),
+          '',
+          'Dispatcher launch rule:',
+          '- Start every task that is currently in the waiting area.',
+          '- One batch launch creates exactly one session.',
+          '- Each launched task keeps exactly one workflow template.',
+          '- Keep governance-sensitive fallback tasks in their own batch group instead of merging them into a normal healthy-reuse launch.',
+        ].join('\n'),
+        payload: {
+          requirement_id: 'req-governed-docs',
+          requirement_name: 'Governed docs delivery',
+          description: 'Deliver the governed documentation batch safely.',
+          acceptance_criteria: [
+            'Keep the session-dispatch packet aligned with shared governance-policy helpers.',
+            'Carry waiting-task governance fallbacks into the dispatch payload.',
+          ],
+          document_path: 'docs/plans/session-dispatch/workflow-preparation.md',
+          source_document_path: 'docs/plans/session-dispatch/task-dispatch.md',
+          waiting_tasks: [expectedPayloadTask],
+        },
       },
     );
   });

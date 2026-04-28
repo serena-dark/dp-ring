@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
-  buildSessionDispatchPacketWaitingArea as sessionDispatchPacketWaitingArea,
+  buildSessionDispatchPacket as sessionDispatchPacket,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -1596,40 +1596,14 @@ function buildSessionBatchPacket(
   waitingTasks,
   workflowPreparationPayloadWaitingTasks = null,
 ) {
-  const { payloadWaitingTasks, taskLines } = sessionDispatchPacketWaitingArea(
+  return sessionDispatchPacket({
+    job,
+    requirement,
     waitingTasks,
     workflowPreparationPayloadWaitingTasks,
-    job,
-  );
-
-  return {
-    id: `pkt-${job.id}-session-batch`,
     recipient: SESSION_DISPATCHER_ID,
-    kind: 'batch_session_launch',
-    subject: `Launch a batch session for ${waitingTasks.length} ready tasks`,
-    dispatched_at: nowIso(),
-    body: [
-      `Requirement ${requirement.id}: ${requirement.data.name}`,
-      '',
-      'Waiting area:',
-      taskLines,
-      '',
-      'Dispatcher launch rule:',
-      '- Start every task that is currently in the waiting area.',
-      '- One batch launch creates exactly one session.',
-      '- Each launched task keeps exactly one workflow template.',
-      '- Keep governance-sensitive fallback tasks in their own batch group instead of merging them into a normal healthy-reuse launch.',
-    ].join('\n'),
-    payload: {
-      requirement_id: requirement.id,
-      requirement_name: requirement.data.name,
-      description: requirement.data.description,
-      acceptance_criteria: requirement.data.acceptance_criteria,
-      document_path: job.workflow_preparation.document.path,
-      source_document_path: job.post_milestone.task_dispatch.document.path,
-      waiting_tasks: payloadWaitingTasks,
-    },
-  };
+    dispatchedAt: nowIso(),
+  });
 }
 
 function buildSessionDispatchMessageEnvelope(

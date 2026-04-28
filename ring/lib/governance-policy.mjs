@@ -1404,6 +1404,55 @@ export function buildSessionDispatchPacketWaitingArea(
   };
 }
 
+export function buildSessionDispatchPacket({
+  job = null,
+  requirement = null,
+  waitingTasks = [],
+  workflowPreparationPayloadWaitingTasks = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const { payloadWaitingTasks, taskLines } = buildSessionDispatchPacketWaitingArea(
+    waitingTasks,
+    workflowPreparationPayloadWaitingTasks,
+    job,
+  );
+  const requirementId = trimString(requirement?.id) || null;
+  const requirementName = trimString(requirement?.data?.name) || null;
+  const readyTaskCount = Array.isArray(waitingTasks)
+    ? waitingTasks.length
+    : payloadWaitingTasks.length;
+
+  return {
+    id: `pkt-${trimString(job?.id) || 'unknown-job'}-session-batch`,
+    recipient: trimString(recipient) || null,
+    kind: 'batch_session_launch',
+    subject: `Launch a batch session for ${readyTaskCount} ready tasks`,
+    dispatched_at: trimString(dispatchedAt) || null,
+    body: [
+      `Requirement ${requirementId}: ${requirementName}`,
+      '',
+      'Waiting area:',
+      taskLines,
+      '',
+      'Dispatcher launch rule:',
+      '- Start every task that is currently in the waiting area.',
+      '- One batch launch creates exactly one session.',
+      '- Each launched task keeps exactly one workflow template.',
+      '- Keep governance-sensitive fallback tasks in their own batch group instead of merging them into a normal healthy-reuse launch.',
+    ].join('\n'),
+    payload: {
+      requirement_id: requirementId,
+      requirement_name: requirementName,
+      description: requirement?.data?.description,
+      acceptance_criteria: requirement?.data?.acceptance_criteria,
+      document_path: trimString(job?.workflow_preparation?.document?.path) || null,
+      source_document_path: trimString(job?.post_milestone?.task_dispatch?.document?.path) || null,
+      waiting_tasks: payloadWaitingTasks,
+    },
+  };
+}
+
 export function mergeSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   sessionDispatchPayloadTask = null,
