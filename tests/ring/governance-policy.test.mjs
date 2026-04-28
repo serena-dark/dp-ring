@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPacketWaitingTaskViews,
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -1258,6 +1259,205 @@ describe('governance policy', () => {
         + ' | governance_selection_context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow Canonical) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13'
         + ' | replanning_handoff: parent_task_id: t-parent-governed-docs | parent_decision_note: Retry only the governed documentation path before another launch.',
     );
+  });
+
+  it('builds session-dispatch waiting-task view variants from workflow-preparation payload state', async () => {
+    const result = await buildSessionDispatchPacketWaitingTaskViews(
+      {
+        workflow_preparation: {
+          dispatch: {
+            packet: {
+              payload: {
+                waiting_tasks: [
+                  {
+                    task_id: ' task-docs ',
+                    task_name: ' Governed docs delivery legacy ',
+                    task_type: ' documentation ',
+                    milestone_id: ' ms-governance ',
+                    task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+                    workflow_template_id: ' wf-selected ',
+                    workflow_name: ' Selected Workflow Legacy ',
+                    governance_selection_context: {
+                      basis: ' governance_prefer_effective_force ',
+                      preferred: {
+                        workflow_id: ' wf-selected ',
+                        workflow_name: ' Selected Workflow Legacy ',
+                        policy: ' branch_budget=1 ',
+                        governance_pressure_score: 1220,
+                        effective_force_score: 19,
+                      },
+                      compared: {
+                        workflow_id: ' wf-compared ',
+                        workflow_name: ' Compared Workflow Legacy ',
+                        policy: ' branch_budget=1 ',
+                        governance_pressure_score: 1220,
+                        effective_force_score: 13,
+                      },
+                    },
+                    governance_blocked_reuse: [
+                      {
+                        id: ' wf-budget-hold ',
+                        name: ' Branch Budget Template Legacy ',
+                        reason: ' checkpoint_branch_budget_exhausted ',
+                        checkpoint_id: ' cp-budget-hold ',
+                        adoption_status: ' mainline ',
+                        branch_budget: 0,
+                        workflow_tightness: ' tight ',
+                        oversight_strength: ' strong ',
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+      [
+        {
+          task_id: ' task-docs ',
+          task_name: ' Governed docs delivery ready ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+          task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+          workflow_template_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow Ready ',
+          governance_selection_context: {
+            basis: ' governance_prefer_effective_force ',
+            preferred: {
+              workflow_id: ' wf-selected ',
+              workflow_name: ' Selected Workflow Ready ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 19,
+            },
+            compared: {
+              workflow_id: ' wf-compared ',
+              workflow_name: ' Compared Workflow Ready ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 13,
+            },
+          },
+          governance_blocked_reuse: [
+            {
+              id: ' wf-budget-hold ',
+              name: ' Branch Budget Template Ready ',
+              reason: ' checkpoint_branch_budget_exhausted ',
+              checkpoint_id: ' cp-budget-hold ',
+              adoption_status: ' mainline ',
+              branch_budget: 0,
+              workflow_tightness: ' tight ',
+              oversight_strength: ' strong ',
+            },
+          ],
+          task_document_ready: true,
+          prerequisites_ready: true,
+          workflow_ready: true,
+          ready_at: '2026-04-28T02:00:00Z',
+        },
+      ],
+      async (kind, id) => {
+        if (kind === 'task' && id === 'task-docs') {
+          return {
+            id: 'task-docs',
+            data: {
+              name: 'Governed docs delivery canonical',
+            },
+          };
+        }
+        if (kind === 'workflow' && id === 'wf-selected') {
+          return {
+            id: 'wf-selected',
+            data: {
+              name: 'Selected Workflow Canonical',
+            },
+          };
+        }
+        if (kind === 'workflow' && id === 'wf-compared') {
+          return {
+            id: 'wf-compared',
+            data: {
+              name: 'Compared Workflow Canonical',
+            },
+          };
+        }
+        if (kind === 'workflow' && id === 'wf-budget-hold') {
+          return {
+            id: 'wf-budget-hold',
+            data: {
+              name: 'Branch Budget Template Canonical',
+            },
+          };
+        }
+        return null;
+      },
+    );
+
+    assert.equal(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].canonical_task_name, 'Governed docs delivery canonical');
+    assert.equal(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].canonical_workflow_name, 'Selected Workflow Canonical');
+    assert.deepEqual(result.waitingTasksForSessionContext[0].canonical_selection_context_workflow_names, {
+      'wf-selected': 'Selected Workflow Canonical',
+      'wf-compared': 'Compared Workflow Canonical',
+    });
+    assert.deepEqual(result.waitingTasksForDispatchPacket, [
+      {
+        task_id: ' task-docs ',
+        task_name: 'Governed docs delivery canonical',
+        task_type: ' documentation ',
+        milestone_id: ' ms-governance ',
+        task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+        workflow_template_id: ' wf-selected ',
+        workflow_name: 'Selected Workflow Canonical',
+        governance_selection_context: {
+          basis: 'governance_prefer_effective_force',
+          preferred: {
+            workflow_id: 'wf-selected',
+            workflow_name: 'Selected Workflow Canonical',
+            policy: 'branch_budget=1',
+            governance_pressure_score: 1220,
+            effective_force_score: 19,
+          },
+          compared: {
+            workflow_id: 'wf-compared',
+            workflow_name: 'Compared Workflow Canonical',
+            policy: 'branch_budget=1',
+            governance_pressure_score: 1220,
+            effective_force_score: 13,
+          },
+        },
+        governance_blocked_reuse: [{
+          id: 'wf-budget-hold',
+          name: 'Branch Budget Template Canonical',
+          reason: 'checkpoint_branch_budget_exhausted',
+          checkpoint_id: 'cp-budget-hold',
+          adoption_status: 'mainline',
+          branch_budget: 0,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+        }],
+        governance_reenable_guidance:
+          'wf-budget-hold (Branch Budget Template Canonical) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+        task_document_ready: true,
+        prerequisites_ready: true,
+        workflow_ready: true,
+        ready_at: '2026-04-28T02:00:00Z',
+        canonical_task_name: 'Governed docs delivery canonical',
+        canonical_workflow_name: 'Selected Workflow Canonical',
+        canonical_workflow_name_overrides: {
+          'wf-selected': 'Selected Workflow Canonical',
+          'wf-compared': 'Compared Workflow Canonical',
+          'wf-budget-hold': 'Branch Budget Template Canonical',
+        },
+        canonical_selection_context_workflow_names: {
+          'wf-selected': 'Selected Workflow Canonical',
+          'wf-compared': 'Compared Workflow Canonical',
+        },
+        canonical_governance_blocked_reuse_workflow_names: {
+          'wf-budget-hold': 'Branch Budget Template Canonical',
+        },
+      },
+    ]);
   });
 
   it('builds workflow-preparation payload waiting-task records from shared governance inputs', () => {

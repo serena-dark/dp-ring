@@ -1231,6 +1231,39 @@ export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   return headerLines.join('\n');
 }
 
+function workflowPreparationPayloadWaitingTasks(job = null) {
+  return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
+    ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
+    : [];
+}
+
+export async function buildSessionDispatchPacketWaitingTaskViews(
+  job = null,
+  waitingTasks = null,
+  readArtifact = async () => null,
+) {
+  const payloadWaitingTasks = workflowPreparationPayloadWaitingTasks(job);
+  const workflowPreparationPayloadWaitingTasksForDispatchPacket = await hydrateWaitingTaskGovernanceLabels(
+    payloadWaitingTasks,
+    readArtifact,
+  );
+  const waitingTasksForSessionContext = Array.isArray(waitingTasks)
+    ? await hydrateWaitingTaskGovernanceLabels(
+        waitingTasks,
+        readArtifact,
+        payloadWaitingTasks,
+      )
+    : [];
+
+  return {
+    workflowPreparationPayloadWaitingTasksForDispatchPacket,
+    waitingTasksForSessionContext,
+    waitingTasksForDispatchPacket: Array.isArray(waitingTasks)
+      ? canonicalizeWaitingTaskGovernanceLabels(waitingTasksForSessionContext, payloadWaitingTasks)
+      : [],
+  };
+}
+
 export function buildSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   workflowPreparationPayloadTask = null,

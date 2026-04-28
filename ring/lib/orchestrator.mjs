@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionDispatchPayloadWaitingTask as sessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -1492,35 +1493,6 @@ ${prerequisites}
 Split milestone prerequisites into "ready now" and "blocked / missing" so the dispatcher can identify safe early tasks.
 
 ${milestoneSections}`;
-}
-
-function workflowPreparationPayloadWaitingTasks(job) {
-  return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
-    ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-    : [];
-}
-
-async function sessionDispatchPacketWaitingTaskViews(job, waitingTasks = null, readArtifact) {
-  const payloadWaitingTasks = workflowPreparationPayloadWaitingTasks(job);
-  const payloadWaitingTasksForDispatchPacket = await readyTasksWithCanonicalSessionLabels(
-    payloadWaitingTasks,
-    readArtifact,
-  );
-  const waitingTasksForSessionContext = Array.isArray(waitingTasks)
-    ? await readyTasksWithCanonicalSessionLabels(
-        waitingTasks,
-        readArtifact,
-        payloadWaitingTasks,
-      )
-    : [];
-
-  return {
-    workflowPreparationPayloadWaitingTasksForDispatchPacket: payloadWaitingTasksForDispatchPacket,
-    waitingTasksForSessionContext,
-    waitingTasksForDispatchPacket: Array.isArray(waitingTasks)
-      ? readyTasksWithCanonicalDispatchLabels(waitingTasksForSessionContext, payloadWaitingTasks)
-      : [],
-  };
 }
 
 function buildWorkflowPreparationPacket(
