@@ -1391,6 +1391,44 @@ export function mergeSessionDispatchPayloadWaitingTask(
   };
 }
 
+export function refreshSessionDispatchWaitingTasks(
+  waitingTasks = [],
+  sessionDispatchPacket = null,
+  {
+    refreshedWaitingTasks = [],
+    dispatchedAt = null,
+  } = {},
+) {
+  if (!Array.isArray(waitingTasks)) {
+    return [];
+  }
+
+  const payloadWaitingTaskById = waitingTaskLookup(
+    Array.isArray(sessionDispatchPacket?.payload?.waiting_tasks)
+      ? sessionDispatchPacket.payload.waiting_tasks
+      : [],
+  );
+  const refreshedWaitingTaskById = waitingTaskLookup(refreshedWaitingTasks);
+  const normalizedDispatchedAt = trimString(dispatchedAt);
+
+  return waitingTasks.map((item) => {
+    const taskId = trimString(item?.task_id);
+    const refreshedWaitingTask = taskId ? refreshedWaitingTaskById.get(taskId) ?? null : null;
+    const payloadWaitingTask = taskId ? payloadWaitingTaskById.get(taskId) ?? null : null;
+    if (!refreshedWaitingTask && !payloadWaitingTask) {
+      return item;
+    }
+
+    const mergedWaitingTask = mergeSessionDispatchPayloadWaitingTask(
+      refreshedWaitingTask ? { ...item, ...refreshedWaitingTask } : item,
+      payloadWaitingTask,
+    );
+    return normalizedDispatchedAt
+      ? { ...mergedWaitingTask, dispatched_at: normalizedDispatchedAt }
+      : mergedWaitingTask;
+  });
+}
+
 export function describeSessionDispatchPayloadWaitingTask(waitingTask = {}) {
   const taskId = trimString(waitingTask?.task_id) ?? 'unknown-task';
   const taskName = trimString(waitingTask?.task_name) ?? 'Unnamed task';

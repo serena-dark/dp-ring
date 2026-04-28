@@ -20,7 +20,7 @@ import {
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
-  mergeSessionDispatchPayloadWaitingTask as mergeSessionDispatchPayloadIntoWaitingTask,
+  refreshSessionDispatchWaitingTasks,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -1492,14 +1492,6 @@ ${prerequisites}
 Split milestone prerequisites into "ready now" and "blocked / missing" so the dispatcher can identify safe early tasks.
 
 ${milestoneSections}`;
-}
-
-function sessionDispatchPayloadWaitingTaskLookup(packet) {
-  return new Map(
-    (Array.isArray(packet?.payload?.waiting_tasks) ? packet.payload.waiting_tasks : [])
-      .map((item) => [trimString(item?.task_id), item])
-      .filter(([taskId]) => Boolean(taskId)),
-  );
 }
 
 function workflowPreparationPayloadWaitingTasks(job) {
@@ -4252,14 +4244,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           config,
           mapAgentCards(await getAgents(config)),
         );
-        const sessionDispatchPayloadTaskById = sessionDispatchPayloadWaitingTaskLookup(
+        next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
+          canonicalWaitingTasks,
           next.session_dispatch.dispatch.packet,
-        );
-        next.workflow_preparation.waiting_tasks = canonicalWaitingTasks.map((item) =>
-          mergeSessionDispatchPayloadIntoWaitingTask(
-            item,
-            sessionDispatchPayloadTaskById.get(trimString(item?.task_id)) ?? null,
-          )
         );
       }
     }
@@ -5110,14 +5097,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         config,
         mapAgentCards(await getAgents(config)),
       );
-      const batchPacketWaitingTaskById = sessionDispatchPayloadWaitingTaskLookup(batchPacket);
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
-      next.workflow_preparation.waiting_tasks = waitingTasksForDispatchPacket.map((item) =>
-        mergeSessionDispatchPayloadIntoWaitingTask(
-          item,
-          batchPacketWaitingTaskById.get(trimString(item?.task_id)) ?? null,
-        )
+      next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
+        waitingTasksForDispatchPacket,
+        batchPacket,
       );
       next.workflow_preparation.generated_workflow_ids = generatedWorkflowIds;
       next.workflow_preparation.reused_workflow_ids = reusedWorkflowIds;
@@ -5355,25 +5339,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       );
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
       const dispatchedAt = nowIso();
-      const readyTaskById = new Map(
-        readyTasksForDispatchPacket.map((item) => [item.task_id, item]),
-      );
-      const sessionDispatchPayloadTaskById = sessionDispatchPayloadWaitingTaskLookup(
+      next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
+        next.workflow_preparation.waiting_tasks,
         next.session_dispatch.dispatch.packet,
-      );
-      next.workflow_preparation.waiting_tasks = next.workflow_preparation.waiting_tasks.map(
-        (item) => {
-          const refreshedReadyTask = readyTaskById.get(item.task_id);
-          if (!refreshedReadyTask) {
-            return item;
-          }
-          return {
-            ...mergeSessionDispatchPayloadIntoWaitingTask(
-              { ...item, ...refreshedReadyTask },
-              sessionDispatchPayloadTaskById.get(item.task_id) ?? null,
-            ),
-            dispatched_at: dispatchedAt,
-          };
+        {
+          refreshedWaitingTasks: readyTasksForDispatchPacket,
+          dispatchedAt,
         },
       );
       closeTraceStage(
