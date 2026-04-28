@@ -5,6 +5,7 @@ import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionDispatchArtifacts,
+  buildSessionDispatchMessageEnvelope,
   buildSessionDispatchPacket,
   buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
@@ -1443,6 +1444,132 @@ describe('governance policy', () => {
         role: 'target',
       },
     ]);
+  });
+
+  it('builds a session-dispatch message envelope from shared packet/artifact helpers', () => {
+    const readyWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      governance_blocked_reuse: [],
+      canonical_workflow_name_overrides: {
+        ' wf-selected ': ' Selected Workflow Canonical ',
+        ' wf-compared ': ' Compared Workflow Canonical ',
+      },
+    };
+    const workflowPreparationPayloadTask = {
+      task_id: ' task-docs ',
+      replanning_handoff: {
+        parent_task_id: ' t-parent-governed-docs ',
+        parent_decision_note: ' Retry only the governed documentation path before another launch. ',
+      },
+    };
+    const job = {
+      id: 'job-session-dispatch',
+      workflow_preparation: {
+        document: {
+          path: 'docs/plans/session-dispatch/workflow-preparation.md',
+        },
+        dispatch: {
+          packet: {
+            payload: {
+              waiting_tasks: [workflowPreparationPayloadTask],
+            },
+          },
+        },
+      },
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: 'docs/plans/session-dispatch/task-dispatch.md',
+          },
+        },
+      },
+    };
+    const requirement = {
+      id: 'req-governed-docs',
+      data: {
+        name: 'Governed docs delivery',
+        description: 'Deliver the governed documentation batch safely.',
+        acceptance_criteria: [
+          'Keep the session-dispatch packet aligned with shared governance-policy helpers.',
+          'Carry waiting-task governance fallbacks into the dispatch payload.',
+        ],
+      },
+    };
+    const recipientCard = {
+      id: 'session-dispatcher',
+      role: 'dispatcher',
+      accepts: ['batch_session_launch'],
+    };
+    const routing = {
+      policy: 'strict',
+      priority: 'high',
+    };
+    const expectedPacket = buildSessionDispatchPacket({
+      job,
+      requirement,
+      waitingTasks: [readyWaitingTask],
+      workflowPreparationPayloadWaitingTasks: null,
+      recipient: 'session-dispatcher',
+      dispatchedAt: '2026-04-28T16:49:25Z',
+    });
+
+    const result = buildSessionDispatchMessageEnvelope({
+      job,
+      requirement,
+      waitingTasks: [readyWaitingTask],
+      workflowPreparationPayloadWaitingTasks: null,
+      recipient: 'session-dispatcher',
+      dispatchedAt: '2026-04-28T16:49:25Z',
+      protocolVersion: 'ring.orchestrator.v1',
+      traceId: 'trace-session-dispatch',
+      senderId: 'dispatch-center',
+      senderRole: 'orchestrator',
+      recipientCard,
+      callbackPath: '/api/orchestrator/jobs/job-session-dispatch/agent-report',
+      routing,
+    });
+
+    assert.deepEqual(result, {
+      ...expectedPacket,
+      protocol_version: 'ring.orchestrator.v1',
+      trace_id: 'trace-session-dispatch',
+      sender: {
+        id: 'dispatch-center',
+        role: 'orchestrator',
+      },
+      recipient_card: recipientCard,
+      callback: {
+        kind: 'orchestrator_agent_report',
+        method: 'POST',
+        path: '/api/orchestrator/jobs/job-session-dispatch/agent-report',
+      },
+      artifacts: buildSessionDispatchArtifacts(job),
+      routing,
+    });
+    assert.notEqual(result.routing, routing);
   });
 
   it('builds a session-dispatch packet from shared waiting-area state and workflow-preparation payload fallbacks', () => {

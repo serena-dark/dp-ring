@@ -6,8 +6,7 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
-  buildSessionDispatchArtifacts as sessionDispatchArtifacts,
-  buildSessionDispatchPacket as sessionDispatchPacket,
+  buildSessionDispatchMessageEnvelope as sessionDispatchMessageEnvelope,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -1589,44 +1588,6 @@ Assign exactly one workflow to each waiting task. Reuse ranked templates when po
 
 ${taskSections}
 `;
-}
-
-function buildSessionBatchPacket(
-  job,
-  requirement,
-  waitingTasks,
-  workflowPreparationPayloadWaitingTasks = null,
-) {
-  return sessionDispatchPacket({
-    job,
-    requirement,
-    waitingTasks,
-    workflowPreparationPayloadWaitingTasks,
-    recipient: SESSION_DISPATCHER_ID,
-    dispatchedAt: nowIso(),
-  });
-}
-
-function buildSessionDispatchMessageEnvelope(
-  job,
-  requirement,
-  waitingTasks,
-  workflowPreparationPayloadWaitingTasks,
-  config,
-  agentCards,
-) {
-  return buildMessageEnvelope(
-    job,
-    buildSessionBatchPacket(
-      job,
-      requirement,
-      waitingTasks,
-      workflowPreparationPayloadWaitingTasks,
-    ),
-    config,
-    agentCards,
-    sessionDispatchArtifacts(job),
-  );
 }
 
 function parseTaskScopedSections(documentText) {
@@ -4153,14 +4114,22 @@ function inferTaskTypeFromContext(goal, contextText = '') {
             (kind, id) => ring.read(kind, id),
           );
         const config = await getConfig();
-        next.session_dispatch.dispatch.packet = buildSessionDispatchMessageEnvelope(
+        const agentCards = mapAgentCards(await getAgents(config));
+        next.session_dispatch.dispatch.packet = sessionDispatchMessageEnvelope({
           job,
           requirement,
-          canonicalWaitingTasks,
-          workflowPreparationPayloadWaitingTasksForDispatchPacket,
-          config,
-          mapAgentCards(await getAgents(config)),
-        );
+          waitingTasks: canonicalWaitingTasks,
+          workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
+          protocolVersion: config.message_protocol_version,
+          traceId: job.trace.trace_id,
+          senderId: DISPATCH_CENTER_ID,
+          senderRole: 'orchestrator',
+          recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
+          callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
+          routing: job.routing,
+          recipient: SESSION_DISPATCHER_ID,
+          dispatchedAt: nowIso(),
+        });
         next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
           canonicalWaitingTasks,
           next.session_dispatch.dispatch.packet,
@@ -5006,14 +4975,22 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         (kind, id) => ring.read(kind, id),
       );
 
-      const batchPacket = buildSessionDispatchMessageEnvelope(
+      const agentCards = mapAgentCards(await getAgents(config));
+      const batchPacket = sessionDispatchMessageEnvelope({
         job,
         requirement,
-        waitingTasksForDispatchPacket,
-        workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        config,
-        mapAgentCards(await getAgents(config)),
-      );
+        waitingTasks: waitingTasksForDispatchPacket,
+        workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        protocolVersion: config.message_protocol_version,
+        traceId: job.trace.trace_id,
+        senderId: DISPATCH_CENTER_ID,
+        senderRole: 'orchestrator',
+        recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
+        callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
+        routing: job.routing,
+        recipient: SESSION_DISPATCHER_ID,
+        dispatchedAt: nowIso(),
+      });
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
       next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
@@ -5246,14 +5223,22 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.workflow_run_ids = workflowRunIds;
       next.session_dispatch.launched_at = nowIso();
       const config = await getConfig();
-      next.session_dispatch.dispatch.packet = buildSessionDispatchMessageEnvelope(
+      const agentCards = mapAgentCards(await getAgents(config));
+      next.session_dispatch.dispatch.packet = sessionDispatchMessageEnvelope({
         job,
         requirement,
-        readyTasksForDispatchPacket,
-        workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        config,
-        mapAgentCards(await getAgents(config)),
-      );
+        waitingTasks: readyTasksForDispatchPacket,
+        workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
+        protocolVersion: config.message_protocol_version,
+        traceId: job.trace.trace_id,
+        senderId: DISPATCH_CENTER_ID,
+        senderRole: 'orchestrator',
+        recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
+        callbackPath: `/api/orchestrator/jobs/${job.id}/agent-report`,
+        routing: job.routing,
+        recipient: SESSION_DISPATCHER_ID,
+        dispatchedAt: nowIso(),
+      });
       next.session_dispatch.dispatch.last_dispatched_at = nowIso();
       const dispatchedAt = nowIso();
       next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(

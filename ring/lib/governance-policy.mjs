@@ -1470,6 +1470,52 @@ export function buildSessionDispatchArtifacts(job = null) {
   ];
 }
 
+export function buildSessionDispatchMessageEnvelope({
+  job = null,
+  requirement = null,
+  waitingTasks = [],
+  workflowPreparationPayloadWaitingTasks = null,
+  protocolVersion = null,
+  traceId = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  callbackPath = null,
+  routing = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const packet = buildSessionDispatchPacket({
+    job,
+    requirement,
+    waitingTasks,
+    workflowPreparationPayloadWaitingTasks,
+    recipient,
+    dispatchedAt,
+  });
+
+  return {
+    ...packet,
+    protocol_version: trimString(protocolVersion) || null,
+    trace_id: trimString(traceId) || null,
+    sender: {
+      id: trimString(senderId) || null,
+      role: trimString(senderRole) || null,
+    },
+    recipient_card: recipientCard ?? null,
+    callback: {
+      kind: 'orchestrator_agent_report',
+      method: 'POST',
+      path: trimString(callbackPath) || null,
+    },
+    artifacts: buildSessionDispatchArtifacts(job),
+    routing:
+      typeof routing === 'object' && routing !== null
+        ? structuredClone(routing)
+        : routing ?? null,
+  };
+}
+
 export function mergeSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   sessionDispatchPayloadTask = null,
