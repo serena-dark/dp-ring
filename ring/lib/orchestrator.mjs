@@ -1596,16 +1596,10 @@ function buildSessionBatchPacket(
   waitingTasks,
   workflowPreparationPayloadWaitingTasks = null,
 ) {
-  const workflowPreparationPayloadWaitingTasksSource = Array.isArray(
-    workflowPreparationPayloadWaitingTasks,
-  )
-    ? workflowPreparationPayloadWaitingTasks
-    : Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
-      ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
-      : [];
   const { payloadWaitingTasks, taskLines } = sessionDispatchPacketWaitingArea(
     waitingTasks,
-    workflowPreparationPayloadWaitingTasksSource,
+    workflowPreparationPayloadWaitingTasks,
+    job,
   );
 
   return {

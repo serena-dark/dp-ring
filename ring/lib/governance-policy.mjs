@@ -1231,7 +1231,7 @@ export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   return headerLines.join('\n');
 }
 
-function workflowPreparationPayloadWaitingTasks(job = null) {
+function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
     : [];
@@ -1242,7 +1242,7 @@ export async function buildSessionDispatchPacketWaitingTaskViews(
   waitingTasks = null,
   readArtifact = async () => null,
 ) {
-  const payloadWaitingTasks = workflowPreparationPayloadWaitingTasks(job);
+  const payloadWaitingTasks = workflowPreparationPayloadWaitingTasksFromJob(job);
   const workflowPreparationPayloadWaitingTasksForDispatchPacket = await hydrateWaitingTaskGovernanceLabels(
     payloadWaitingTasks,
     readArtifact,
@@ -1381,10 +1381,13 @@ export function buildSessionDispatchPayloadWaitingTask(
 export function buildSessionDispatchPacketWaitingArea(
   waitingTasks = [],
   workflowPreparationPayloadWaitingTasks = [],
+  job = null,
 ) {
   const waitingTasksSource = Array.isArray(waitingTasks) ? waitingTasks : [];
   const workflowPreparationPayloadWaitingTaskById = waitingTaskLookup(
-    workflowPreparationPayloadWaitingTasks,
+    Array.isArray(workflowPreparationPayloadWaitingTasks)
+      ? workflowPreparationPayloadWaitingTasks
+      : workflowPreparationPayloadWaitingTasksFromJob(job),
   );
   const payloadWaitingTasks = waitingTasksSource.map((item) =>
     buildSessionDispatchPayloadWaitingTask(

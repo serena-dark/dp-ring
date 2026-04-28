@@ -1334,6 +1334,90 @@ describe('governance policy', () => {
     );
   });
 
+  it('falls back to workflow-preparation packet waiting tasks when no explicit waiting-task source array is provided', () => {
+    const readyWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      governance_blocked_reuse: [],
+      canonical_workflow_name_overrides: {
+        ' wf-selected ': ' Selected Workflow Canonical ',
+        ' wf-compared ': ' Compared Workflow Canonical ',
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const workflowPreparationPayloadTask = {
+      task_id: ' task-docs ',
+      replanning_handoff: {
+        parent_task_id: ' t-parent-governed-docs ',
+        parent_decision_note: ' Retry only the governed documentation path before another launch. ',
+      },
+      governance_blocked_reuse: [
+        {
+          id: ' wf-budget-hold ',
+          name: ' Branch Budget Template ',
+          reason: ' checkpoint_branch_budget_exhausted ',
+          checkpoint_id: ' cp-budget-hold ',
+          adoption_status: ' mainline ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+      ],
+      canonical_governance_blocked_reuse_workflow_names: {
+        ' wf-budget-hold ': ' Branch Budget Template Canonical ',
+      },
+    };
+    const job = {
+      workflow_preparation: {
+        dispatch: {
+          packet: {
+            payload: {
+              waiting_tasks: [workflowPreparationPayloadTask],
+            },
+          },
+        },
+      },
+    };
+    const expectedPayloadTask = buildSessionDispatchPayloadWaitingTask(
+      readyWaitingTask,
+      workflowPreparationPayloadTask,
+    );
+
+    assert.deepEqual(
+      buildSessionDispatchPacketWaitingArea(
+        [readyWaitingTask],
+        null,
+        job,
+      ),
+      {
+        payloadWaitingTasks: [expectedPayloadTask],
+        taskLines: describeSessionDispatchPayloadWaitingTask(expectedPayloadTask),
+      },
+    );
+  });
+
   it('builds session-dispatch waiting-task view variants from workflow-preparation payload state', async () => {
     const result = await buildSessionDispatchPacketWaitingTaskViews(
       {
