@@ -1237,30 +1237,52 @@ function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
     : [];
 }
 
+export async function buildWaitingTaskGovernanceViewState(
+  waitingTasks = [],
+  readArtifact = async () => null,
+  fallbackWaitingTasks = [],
+) {
+  const waitingTasksForSessionContext = await hydrateWaitingTaskGovernanceLabels(
+    waitingTasks,
+    readArtifact,
+    fallbackWaitingTasks,
+  );
+
+  return {
+    waitingTasksForSessionContext,
+    waitingTasksForDispatchPacket: canonicalizeWaitingTaskGovernanceLabels(
+      waitingTasksForSessionContext,
+      fallbackWaitingTasks,
+    ),
+  };
+}
+
 export async function buildSessionDispatchPacketWaitingTaskViews(
   job = null,
   waitingTasks = null,
   readArtifact = async () => null,
 ) {
   const payloadWaitingTasks = workflowPreparationPayloadWaitingTasksFromJob(job);
-  const workflowPreparationPayloadWaitingTasksForDispatchPacket = await hydrateWaitingTaskGovernanceLabels(
+  const workflowPreparationPayloadWaitingTaskViews = await buildWaitingTaskGovernanceViewState(
     payloadWaitingTasks,
     readArtifact,
   );
-  const waitingTasksForSessionContext = Array.isArray(waitingTasks)
-    ? await hydrateWaitingTaskGovernanceLabels(
+  const waitingTaskViews = Array.isArray(waitingTasks)
+    ? await buildWaitingTaskGovernanceViewState(
         waitingTasks,
         readArtifact,
         payloadWaitingTasks,
       )
-    : [];
+    : {
+        waitingTasksForSessionContext: [],
+        waitingTasksForDispatchPacket: [],
+      };
 
   return {
-    workflowPreparationPayloadWaitingTasksForDispatchPacket,
-    waitingTasksForSessionContext,
-    waitingTasksForDispatchPacket: Array.isArray(waitingTasks)
-      ? canonicalizeWaitingTaskGovernanceLabels(waitingTasksForSessionContext, payloadWaitingTasks)
-      : [],
+    workflowPreparationPayloadWaitingTasksForDispatchPacket:
+      workflowPreparationPayloadWaitingTaskViews.waitingTasksForSessionContext,
+    waitingTasksForSessionContext: waitingTaskViews.waitingTasksForSessionContext,
+    waitingTasksForDispatchPacket: waitingTaskViews.waitingTasksForDispatchPacket,
   };
 }
 

@@ -9,10 +9,10 @@ import {
   buildSessionDispatchMessageEnvelopeOptions as sessionDispatchMessageEnvelopeCallOptions,
   buildSessionDispatchMessageEnvelopeState as sessionDispatchMessageEnvelopeState,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
+  buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask as workflowPreparationPayloadWaitingTask,
-  canonicalizeWaitingTaskGovernanceLabels as readyTasksWithCanonicalDispatchLabels,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   compareAutomaticReusePolicies,
@@ -20,7 +20,6 @@ import {
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
-  hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -2089,6 +2088,22 @@ export async function createOrchestrator(repoRoot, ring) {
     }
   }
 
+  async function readRingArtifact(kind, id) {
+    return ring.read(kind, id);
+  }
+
+  async function waitingTaskGovernanceViewState(waitingTasks, fallbackWaitingTasks = []) {
+    return buildWaitingTaskGovernanceViewState(
+      waitingTasks,
+      readRingArtifact,
+      fallbackWaitingTasks,
+    );
+  }
+
+  async function sessionDispatchWaitingTaskViews(job, waitingTasks = null) {
+    return sessionDispatchPacketWaitingTaskViews(job, waitingTasks, readRingArtifact);
+  }
+
   async function nextJobId() {
     await ensureDirs();
     const files = await readdir(jobsDir).catch(() => []);
@@ -4072,12 +4087,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       ? bundle.workflows.waiting_tasks
       : [];
     const canonicalWaitingTasks = rawWaitingTasks.length > 0
-      ? readyTasksWithCanonicalDispatchLabels(
-          await readyTasksWithCanonicalSessionLabels(
-            rawWaitingTasks,
-            (kind, id) => ring.read(kind, id),
-          ),
-        )
+      ? (await waitingTaskGovernanceViewState(rawWaitingTasks)).waitingTasksForDispatchPacket
       : rawWaitingTasks;
     next.adaptive_dispatch = {
       bundle_id: bundle.id,
@@ -4142,10 +4152,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
       if (requirement) {
         const { workflowPreparationPayloadWaitingTasksForDispatchPacket } =
-          await sessionDispatchPacketWaitingTaskViews(
+          await sessionDispatchWaitingTaskViews(
             job,
             null,
-            (kind, id) => ring.read(kind, id),
           );
         const config = await getConfig();
         const agentCards = mapAgentCards(await getAgents(config));
@@ -4999,10 +5008,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const {
         workflowPreparationPayloadWaitingTasksForDispatchPacket,
         waitingTasksForDispatchPacket,
-      } = await sessionDispatchPacketWaitingTaskViews(
+      } = await sessionDispatchWaitingTaskViews(
         job,
         waitingTasks,
-        (kind, id) => ring.read(kind, id),
       );
 
       const agentCards = mapAgentCards(await getAgents(config));
@@ -5116,10 +5124,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         workflowPreparationPayloadWaitingTasksForDispatchPacket,
         waitingTasksForSessionContext: readyTasksForSessionContext,
         waitingTasksForDispatchPacket: readyTasksForDispatchPacket,
-      } = await sessionDispatchPacketWaitingTaskViews(
+      } = await sessionDispatchWaitingTaskViews(
         job,
         readyTasks,
-        (kind, id) => ring.read(kind, id),
       );
       const governanceContext = buildSessionGovernanceContext(readyTasksForSessionContext);
       const sessionContextInjected = buildSessionContextInjected(readyTasksForSessionContext);
@@ -5362,12 +5369,11 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         name: `${requirement.data.name} bundle batch`,
       });
       const workflowRunIds = [];
-      const readyTasksForSessionContext = await readyTasksWithCanonicalSessionLabels(
+      const {
+        waitingTasksForSessionContext: readyTasksForSessionContext,
+        waitingTasksForDispatchPacket: readyTasksForBundleStorage,
+      } = await waitingTaskGovernanceViewState(
         readyTasks,
-        (kind, id) => ring.read(kind, id),
-      );
-      const readyTasksForBundleStorage = readyTasksWithCanonicalDispatchLabels(
-        readyTasksForSessionContext,
         readyTasks,
       );
       const readyTaskForBundleStorageById = new Map(
