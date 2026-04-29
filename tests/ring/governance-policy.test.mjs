@@ -17,6 +17,7 @@ import {
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask,
+  buildWorkflowPreparationTaskRenderView,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
   checkpointBranchMetricsState,
@@ -2535,6 +2536,142 @@ describe('governance policy', () => {
         taskDocumentPath: 'docs/tasks/task-docs/task-docs.md',
         replanningHandoff:
           'parent_task_id: t-parent-docs | parent_decision_note: Narrow the retry to the publication-only files.',
+      },
+    );
+  });
+
+  it('assembles a shared workflow-preparation task render view for packet and scaffold renderers', () => {
+    const reusePayloadTask = buildWorkflowPreparationPayloadWaitingTask(
+      {
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+          replanning: {
+            parent_task_id: ' t-parent-docs ',
+            parent_decision_note: ' Narrow the retry to the publication-only files. ',
+          },
+        },
+      },
+      {
+        recommended: {
+          workflow: {
+            id: ' wf-selected ',
+            data: {
+              name: ' Selected Workflow ',
+            },
+          },
+          rank: 7,
+          mode: ' governance_prefer_effective_force ',
+          note: ' Preferred because stronger checkpoint force carried less policy risk. ',
+          selection_context: {
+            basis: ' governance_prefer_effective_force ',
+            preferred: {
+              workflow_id: ' wf-selected ',
+              workflow_name: ' Selected Workflow ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 19,
+            },
+            compared: {
+              workflow_id: ' wf-compared ',
+              workflow_name: ' Compared Workflow ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 13,
+            },
+          },
+        },
+        candidates: [
+          {
+            id: ' wf-selected ',
+            name: ' Selected Workflow ',
+          },
+          {
+            id: ' wf-roomier ',
+            name: ' Roomier Template ',
+          },
+        ],
+        governance_blocked_candidates: [
+          {
+            id: ' wf-budget-hold ',
+            name: ' Branch Budget Template ',
+            reason: ' checkpoint_branch_budget_exhausted ',
+            checkpoint_id: ' cp-budget-hold ',
+            adoption_status: ' mainline ',
+            branch_budget: 0,
+            workflow_tightness: ' tight ',
+            oversight_strength: ' strong ',
+          },
+        ],
+      },
+    );
+
+    assert.deepEqual(
+      buildWorkflowPreparationTaskRenderView(reusePayloadTask),
+      {
+        taskHeaderView: {
+          taskId: 'task-docs',
+          taskName: 'Governed docs delivery',
+          taskLabel: 'task-docs: Governed docs delivery',
+          taskType: 'documentation',
+          milestoneId: 'ms-governance',
+          taskDocumentPath: 'docs/tasks/task-docs/task-docs.md',
+          replanningHandoff:
+            'parent_task_id: t-parent-docs | parent_decision_note: Narrow the retry to the publication-only files.',
+        },
+        reuseGuidanceView: {
+          preferredReuse:
+            'wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+          governanceSelectionContext:
+            'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+          reusableCandidatesWithNames: 'wf-selected (Selected Workflow), wf-roomier (Roomier Template)',
+          reusableCandidatesWithoutNames: 'wf-selected, wf-roomier',
+          governanceBlockedReuse:
+            'wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+          governanceReenableGuidance:
+            'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+        },
+        actionView: {
+          workflowAction: 'reuse',
+          bodyLines: [
+            'Workflow ID: wf-selected',
+            '',
+            'Preferred reuse: wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+            'Governance selection context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+            'Other candidates: wf-selected, wf-roomier',
+            'Governance-blocked reuse: wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+            'Governance re-enable guidance: wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+          ],
+        },
+        payloadLines: [
+          '- task-docs: Governed docs delivery',
+          '  task_type: documentation',
+          '  milestone: ms-governance',
+          '  task_document: docs/tasks/task-docs/task-docs.md',
+          '  replanning_handoff: parent_task_id: t-parent-docs | parent_decision_note: Narrow the retry to the publication-only files.',
+          '  preferred_reuse: wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+          '  governance_selection_context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+          '  reusable_candidates: wf-selected (Selected Workflow), wf-roomier (Roomier Template)',
+          '  governance_blocked_reuse: wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+          '  governance_reenable_guidance: wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+        ],
+        scaffoldLines: [
+          '## Task task-docs: Governed docs delivery',
+          'Task Type: documentation',
+          'Milestone: ms-governance',
+          'Task Document: docs/tasks/task-docs/task-docs.md',
+          'Workflow Action: reuse',
+          'Replanning handoff: parent_task_id: t-parent-docs | parent_decision_note: Narrow the retry to the publication-only files.',
+          'Workflow ID: wf-selected',
+          '',
+          'Preferred reuse: wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+          'Governance selection context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+          'Other candidates: wf-selected, wf-roomier',
+          'Governance-blocked reuse: wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+          'Governance re-enable guidance: wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+        ],
       },
     );
   });

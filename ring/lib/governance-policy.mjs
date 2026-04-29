@@ -1238,10 +1238,11 @@ export function buildWorkflowPreparationScaffoldActionView(waitingTask = {}) {
   };
 }
 
-export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
+export function buildWorkflowPreparationTaskRenderView(waitingTask = {}) {
   const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
   const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
-  return [
+  const actionView = buildWorkflowPreparationScaffoldActionView(waitingTask);
+  const payloadLines = [
     `- ${taskHeaderView.taskLabel}`,
     `  task_type: ${taskHeaderView.taskType}`,
     `  milestone: ${taskHeaderView.milestoneId}`,
@@ -1252,24 +1253,34 @@ export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) 
     `  reusable_candidates: ${reuseGuidanceView.reusableCandidatesWithNames}`,
     `  governance_blocked_reuse: ${reuseGuidanceView.governanceBlockedReuse}`,
     `  governance_reenable_guidance: ${reuseGuidanceView.governanceReenableGuidance}`,
-  ].join('\n');
-}
-
-export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
-  const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
-  const actionView = buildWorkflowPreparationScaffoldActionView(waitingTask);
-  const headerLines = [
+  ];
+  const scaffoldLines = [
     `## Task ${taskHeaderView.taskLabel}`,
     `Task Type: ${taskHeaderView.taskType}`,
     `Milestone: ${taskHeaderView.milestoneId}`,
     `Task Document: ${taskHeaderView.taskDocumentPath}`,
     `Workflow Action: ${actionView.workflowAction}`,
+    ...(taskHeaderView.replanningHandoff !== 'none'
+      ? [`Replanning handoff: ${taskHeaderView.replanningHandoff}`]
+      : []),
+    ...actionView.bodyLines,
   ];
-  if (taskHeaderView.replanningHandoff !== 'none') {
-    headerLines.push(`Replanning handoff: ${taskHeaderView.replanningHandoff}`);
-  }
 
-  return [...headerLines, ...actionView.bodyLines].join('\n');
+  return {
+    taskHeaderView,
+    reuseGuidanceView,
+    actionView,
+    payloadLines,
+    scaffoldLines,
+  };
+}
+
+export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
+  return buildWorkflowPreparationTaskRenderView(waitingTask).payloadLines.join('\n');
+}
+
+export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
+  return buildWorkflowPreparationTaskRenderView(waitingTask).scaffoldLines.join('\n');
 }
 
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
