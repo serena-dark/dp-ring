@@ -1155,29 +1155,39 @@ export function buildWorkflowPreparationPayloadWaitingTask(task = {}, recommenda
   };
 }
 
+export function buildWorkflowPreparationReuseGuidanceView(waitingTask = {}) {
+  return {
+    preferredReuse: trimString(waitingTask?.preferred_reuse) ?? 'No ranked workflow recommendation yet.',
+    governanceSelectionContext: describeGovernanceSelectionContext(
+      waitingTask?.governance_selection_context ?? null,
+    ),
+    reusableCandidatesWithNames: describeWorkflowPreparationReusableCandidates(waitingTask, true),
+    reusableCandidatesWithoutNames: describeWorkflowPreparationReusableCandidates(waitingTask, false),
+    governanceBlockedReuse: describeWaitingTaskGovernance(waitingTask),
+    governanceReenableGuidance: trimString(waitingTask?.governance_reenable_guidance) ?? 'none',
+  };
+}
+
 export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
+  const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
   return [
     `- ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
     `  task_type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
     `  milestone: ${trimString(waitingTask?.milestone_id) ?? 'unknown'}`,
     `  task_document: ${trimString(waitingTask?.task_document_path) ?? 'none'}`,
     `  replanning_handoff: ${describeWaitingTaskReplanningHandoff(waitingTask)}`,
-    `  preferred_reuse: ${trimString(waitingTask?.preferred_reuse) ?? 'No ranked workflow recommendation yet.'}`,
-    `  governance_selection_context: ${describeGovernanceSelectionContext(waitingTask?.governance_selection_context ?? null)}`,
-    `  reusable_candidates: ${describeWorkflowPreparationReusableCandidates(waitingTask, true)}`,
-    `  governance_blocked_reuse: ${describeWaitingTaskGovernance(waitingTask)}`,
-    `  governance_reenable_guidance: ${trimString(waitingTask?.governance_reenable_guidance) ?? 'none'}`,
+    `  preferred_reuse: ${reuseGuidanceView.preferredReuse}`,
+    `  governance_selection_context: ${reuseGuidanceView.governanceSelectionContext}`,
+    `  reusable_candidates: ${reuseGuidanceView.reusableCandidatesWithNames}`,
+    `  governance_blocked_reuse: ${reuseGuidanceView.governanceBlockedReuse}`,
+    `  governance_reenable_guidance: ${reuseGuidanceView.governanceReenableGuidance}`,
   ].join('\n');
 }
 
 export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   const workflowAction = trimString(waitingTask?.workflow_action) ?? 'create';
   const replanningHandoff = describeWaitingTaskReplanningHandoff(waitingTask);
-  const governanceSelectionContext = describeGovernanceSelectionContext(
-    waitingTask?.governance_selection_context ?? null,
-  );
-  const governanceBlockedReuse = describeWaitingTaskGovernance(waitingTask);
-  const governanceReenableGuidance = trimString(waitingTask?.governance_reenable_guidance) ?? 'none';
+  const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
   const headerLines = [
     `## Task ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
     `Task Type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
@@ -1192,23 +1202,19 @@ export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   if (workflowAction === 'reuse' && trimString(waitingTask?.workflow_template_id)) {
     headerLines.push(`Workflow ID: ${trimString(waitingTask?.workflow_template_id)}`);
     headerLines.push('');
-    headerLines.push(
-      `Preferred reuse: ${trimString(waitingTask?.preferred_reuse) ?? 'No ranked workflow recommendation yet.'}`,
-    );
-    headerLines.push(`Governance selection context: ${governanceSelectionContext}`);
-    headerLines.push(
-      `Other candidates: ${describeWorkflowPreparationReusableCandidates(waitingTask, false)}`,
-    );
-    headerLines.push(`Governance-blocked reuse: ${governanceBlockedReuse}`);
-    headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
+    headerLines.push(`Preferred reuse: ${reuseGuidanceView.preferredReuse}`);
+    headerLines.push(`Governance selection context: ${reuseGuidanceView.governanceSelectionContext}`);
+    headerLines.push(`Other candidates: ${reuseGuidanceView.reusableCandidatesWithoutNames}`);
+    headerLines.push(`Governance-blocked reuse: ${reuseGuidanceView.governanceBlockedReuse}`);
+    headerLines.push(`Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`);
     return headerLines.join('\n');
   }
 
   headerLines.push(`Workflow Name: ${trimString(waitingTask?.workflow_name) ?? 'Waiting workflow'}`);
   headerLines.push('');
-  if (governanceBlockedReuse !== 'none') {
-    headerLines.push(`Governance note: ${governanceBlockedReuse}.`);
-    headerLines.push(`Governance re-enable guidance: ${governanceReenableGuidance}`);
+  if (reuseGuidanceView.governanceBlockedReuse !== 'none') {
+    headerLines.push(`Governance note: ${reuseGuidanceView.governanceBlockedReuse}.`);
+    headerLines.push(`Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`);
     headerLines.push('');
   }
   headerLines.push('### Workflow Description');

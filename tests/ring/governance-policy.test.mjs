@@ -32,6 +32,7 @@ import {
   describeWaitingTaskReplanningHandoff,
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
+  buildWorkflowPreparationReuseGuidanceView,
   describeWorkflowReuseGovernanceBlock,
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidance,
@@ -2573,6 +2574,21 @@ describe('governance policy', () => {
             oversight_strength: ' strong ',
           },
         ],
+      },
+    );
+    assert.deepEqual(
+      buildWorkflowPreparationReuseGuidanceView(reusePayloadTask),
+      {
+        preferredReuse:
+          'wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+        governanceSelectionContext:
+          'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+        reusableCandidatesWithNames: 'wf-selected (Selected Workflow), wf-roomier (Roomier Template)',
+        reusableCandidatesWithoutNames: 'wf-selected, wf-roomier',
+        governanceBlockedReuse:
+          'wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+        governanceReenableGuidance:
+          'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
       },
     );
     assert.equal(
