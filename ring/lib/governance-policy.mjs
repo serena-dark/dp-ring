@@ -1324,6 +1324,36 @@ function workflowPreparationEmptyScaffoldTaskSectionsText() {
   ].join('\n');
 }
 
+export function buildWorkflowPreparationPromptRenderView(
+  requirement = {},
+  workflowDocumentPath = null,
+  taskDispatchDocumentPath = null,
+) {
+  const requirementId = trimString(requirement?.id) ?? 'pending';
+  const requirementName = trimString(requirement?.data?.name) ?? 'Untitled requirement';
+  const normalizedWorkflowDocumentPath = trimString(workflowDocumentPath)
+    ?? 'docs/workflows/plans/pending.md';
+  const normalizedTaskDispatchDocumentPath = trimString(taskDispatchDocumentPath)
+    ?? 'docs/tasks/plans/pending.md';
+  const assignmentGoalText =
+    'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.';
+
+  return {
+    requirementId,
+    requirementName,
+    workflowDocumentPath: normalizedWorkflowDocumentPath,
+    taskDispatchDocumentPath: normalizedTaskDispatchDocumentPath,
+    packetSubject: `Assign reusable or custom workflows for requirement ${requirementId}`,
+    packetRequirementLine: `Requirement ${requirementId}: ${requirementName}`,
+    packetWorkflowPlanLine: `Target workflow plan: ${normalizedWorkflowDocumentPath}`,
+    assignmentGoalText,
+    scaffoldTitle: `${requirementName} Workflow Preparation`,
+    scaffoldRequirementLine: `> Requirement ${requirementId}`,
+    scaffoldTaskDispatchSourceLine:
+      `> Task dispatch source: ${normalizedTaskDispatchDocumentPath}`,
+  };
+}
+
 export function buildWorkflowPreparationWaitingTaskListRenderView(
   workflowPreparationPayloadWaitingTaskList = null,
 ) {

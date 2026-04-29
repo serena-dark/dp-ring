@@ -12,6 +12,7 @@ import {
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
+  buildWorkflowPreparationPromptRenderView as workflowPreparationPromptRenderView,
   buildWorkflowPreparationWaitingTaskListRenderView as workflowPreparationWaitingTaskListRenderView,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
@@ -1535,19 +1536,23 @@ function buildWorkflowPreparationPacket(
     payloadWaitingTasks,
     payloadTaskListText,
   } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
+  const promptRenderView = workflowPreparationPromptRenderView(
+    requirement,
+    workflowDocumentPath,
+  );
 
   return {
     id: `pkt-${jobId}-workflow-plan`,
     recipient: config.workflow_designer_agent_id,
     kind: 'tasks_to_workflows',
-    subject: `Assign reusable or custom workflows for requirement ${requirement.id}`,
+    subject: promptRenderView.packetSubject,
     dispatched_at: nowIso(),
     body: [
-      `Requirement ${requirement.id}: ${requirement.data.name}`,
-      `Target workflow plan: ${workflowDocumentPath}`,
+      promptRenderView.packetRequirementLine,
+      promptRenderView.packetWorkflowPlanLine,
       '',
       'Task:',
-      'Assign exactly one workflow to each ready task. Reuse active templates when possible. Create a custom workflow only when no existing template fits.',
+      promptRenderView.assignmentGoalText,
       '',
       'Tasks waiting for workflow assignment:',
       payloadTaskListText,
@@ -1588,15 +1593,20 @@ function buildWorkflowPreparationScaffold(
   const {
     scaffoldTaskSectionsText,
   } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
+  const promptRenderView = workflowPreparationPromptRenderView(
+    requirement,
+    null,
+    taskDispatchDocumentPath,
+  );
 
-  return `# ${requirement.data.name} Workflow Preparation
+  return `# ${promptRenderView.scaffoldTitle}
 
-> Requirement ${requirement.id}
-> Task dispatch source: ${taskDispatchDocumentPath}
+${promptRenderView.scaffoldRequirementLine}
+${promptRenderView.scaffoldTaskDispatchSourceLine}
 
 ## Goal
 
-Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.
+${promptRenderView.assignmentGoalText}
 
 ${scaffoldTaskSectionsText}
 `;

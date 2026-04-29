@@ -18,6 +18,7 @@ import {
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask,
   buildWorkflowPreparationPayloadWaitingTaskListState,
+  buildWorkflowPreparationPromptRenderView,
   buildWorkflowPreparationWaitingTaskListRenderView,
   buildWorkflowPreparationTaskRenderView,
   checkpointAutomaticReuseSelectionPolicy,
@@ -2610,6 +2611,53 @@ describe('governance policy', () => {
         scaffoldTaskSections: expectedPayloadWaitingTasks.map((item) =>
           describeWorkflowPreparationScaffoldTask(item)
         ),
+      },
+    );
+  });
+
+  it('builds shared workflow-preparation prompt header state for packet and scaffold renderers', () => {
+    assert.deepEqual(
+      buildWorkflowPreparationPromptRenderView(
+        {
+          id: ' req-governed ',
+          data: {
+            name: ' Governed docs delivery ',
+          },
+        },
+        ' docs/workflows/plans/req-governed.md ',
+        ' docs/tasks/plans/req-governed.md ',
+      ),
+      {
+        requirementId: 'req-governed',
+        requirementName: 'Governed docs delivery',
+        workflowDocumentPath: 'docs/workflows/plans/req-governed.md',
+        taskDispatchDocumentPath: 'docs/tasks/plans/req-governed.md',
+        packetSubject: 'Assign reusable or custom workflows for requirement req-governed',
+        packetRequirementLine: 'Requirement req-governed: Governed docs delivery',
+        packetWorkflowPlanLine: 'Target workflow plan: docs/workflows/plans/req-governed.md',
+        assignmentGoalText:
+          'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.',
+        scaffoldTitle: 'Governed docs delivery Workflow Preparation',
+        scaffoldRequirementLine: '> Requirement req-governed',
+        scaffoldTaskDispatchSourceLine: '> Task dispatch source: docs/tasks/plans/req-governed.md',
+      },
+    );
+
+    assert.deepEqual(
+      buildWorkflowPreparationPromptRenderView(),
+      {
+        requirementId: 'pending',
+        requirementName: 'Untitled requirement',
+        workflowDocumentPath: 'docs/workflows/plans/pending.md',
+        taskDispatchDocumentPath: 'docs/tasks/plans/pending.md',
+        packetSubject: 'Assign reusable or custom workflows for requirement pending',
+        packetRequirementLine: 'Requirement pending: Untitled requirement',
+        packetWorkflowPlanLine: 'Target workflow plan: docs/workflows/plans/pending.md',
+        assignmentGoalText:
+          'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.',
+        scaffoldTitle: 'Untitled requirement Workflow Preparation',
+        scaffoldRequirementLine: '> Requirement pending',
+        scaffoldTaskDispatchSourceLine: '> Task dispatch source: docs/tasks/plans/pending.md',
       },
     );
   });
