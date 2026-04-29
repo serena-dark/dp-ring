@@ -1855,6 +1855,197 @@ export function buildGovernanceSelectionContext(
   };
 }
 
+function workflowAutomaticReusePolicy(automaticReusePolicyByTemplate, workflow) {
+  const workflowId = trimString(workflow?.id);
+  if (!workflowId) {
+    return { constrained: false };
+  }
+  return automaticReusePolicyByTemplate.get(workflowId) ?? { constrained: false };
+}
+
+function workflowEffectiveForce(effectiveForceByTemplate, workflow) {
+  const workflowId = trimString(workflow?.id);
+  if (!workflowId) {
+    return 0;
+  }
+  return effectiveForceByTemplate.get(workflowId) ?? 0;
+}
+
+function workflowRegistryRank(registryRanksByWorkflowId, workflow, fallback = null) {
+  const workflowId = trimString(workflow?.id);
+  if (!workflowId) {
+    return fallback;
+  }
+  return registryRanksByWorkflowId.get(workflowId) ?? fallback;
+}
+
+function compareGovernedReusableCandidates(
+  left,
+  right,
+  automaticReusePolicyByTemplate,
+  effectiveForceByTemplate,
+  registryRanksByWorkflowId,
+) {
+  const policyComparison = compareAutomaticReusePolicies(
+    workflowAutomaticReusePolicy(automaticReusePolicyByTemplate, left),
+    workflowAutomaticReusePolicy(automaticReusePolicyByTemplate, right),
+  );
+  if (policyComparison !== 0) {
+    return policyComparison;
+  }
+
+  const leftEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, left);
+  const rightEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, right);
+  if (leftEffectiveForce !== rightEffectiveForce) {
+    return rightEffectiveForce - leftEffectiveForce;
+  }
+
+  const leftRank = workflowRegistryRank(registryRanksByWorkflowId, left, Number.POSITIVE_INFINITY);
+  const rightRank = workflowRegistryRank(registryRanksByWorkflowId, right, Number.POSITIVE_INFINITY);
+  if (leftRank !== rightRank) {
+    return leftRank - rightRank;
+  }
+
+  return trimString(left?.id).localeCompare(trimString(right?.id));
+}
+
+export function governedAutomaticReuseSelectionState({
+  defaultWorkflow = null,
+  defaultRank = null,
+  reusableCandidates = [],
+  automaticReusePolicyByTemplate = new Map(),
+  effectiveForceByTemplate = new Map(),
+  registryRanksByWorkflowId = new Map(),
+} = {}) {
+  if (!defaultWorkflow) {
+    return {
+      recommendedWorkflow: null,
+      recommendedRank: null,
+      recommendedMode: null,
+      recommendedNote: null,
+      recommendedSelectionContext: null,
+    };
+  }
+
+  let recommendedWorkflow = defaultWorkflow;
+  let recommendedRank = defaultRank ?? workflowRegistryRank(
+    registryRanksByWorkflowId,
+    defaultWorkflow,
+    null,
+  );
+  let recommendedMode = null;
+  let recommendedNote = null;
+  let recommendedSelectionContext = null;
+
+  const recommendedPolicy = workflowAutomaticReusePolicy(
+    automaticReusePolicyByTemplate,
+    defaultWorkflow,
+  );
+  const unconstrainedReusableCandidates = reusableCandidates
+    .filter((workflow) => !workflowAutomaticReusePolicy(automaticReusePolicyByTemplate, workflow).constrained)
+    .sort((left, right) => {
+      const leftRank = workflowRegistryRank(registryRanksByWorkflowId, left, Number.POSITIVE_INFINITY);
+      const rightRank = workflowRegistryRank(registryRanksByWorkflowId, right, Number.POSITIVE_INFINITY);
+      return leftRank - rightRank;
+    });
+  const constrainedReusableCandidates = reusableCandidates
+    .filter((workflow) => workflowAutomaticReusePolicy(automaticReusePolicyByTemplate, workflow).constrained)
+    .sort((left, right) => compareGovernedReusableCandidates(
+      left,
+      right,
+      automaticReusePolicyByTemplate,
+      effectiveForceByTemplate,
+      registryRanksByWorkflowId,
+    ));
+
+  if (recommendedPolicy.constrained && unconstrainedReusableCandidates.length > 0) {
+    const preferredWorkflow = unconstrainedReusableCandidates[0];
+    if (trimString(preferredWorkflow?.id) !== trimString(defaultWorkflow?.id)) {
+      recommendedWorkflow = preferredWorkflow;
+      recommendedRank = workflowRegistryRank(registryRanksByWorkflowId, preferredWorkflow, null);
+      recommendedMode = 'governance_prefer_unconstrained';
+      recommendedNote =
+        `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} `
+        + `because ${defaultWorkflow.id} still carries ${describeAutomaticReusePolicy(recommendedPolicy)}.`;
+    }
+
+    return {
+      recommendedWorkflow,
+      recommendedRank,
+      recommendedMode,
+      recommendedNote,
+      recommendedSelectionContext,
+    };
+  }
+
+  if (recommendedPolicy.constrained && constrainedReusableCandidates.length > 0) {
+    const preferredWorkflow = constrainedReusableCandidates[0];
+    const preferredPolicy = workflowAutomaticReusePolicy(
+      automaticReusePolicyByTemplate,
+      preferredWorkflow,
+    );
+    const preferredEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, preferredWorkflow);
+    const comparedWorkflow = trimString(preferredWorkflow?.id) === trimString(defaultWorkflow?.id)
+      ? constrainedReusableCandidates.find((workflow) => trimString(workflow?.id) !== trimString(preferredWorkflow?.id)) ?? null
+      : defaultWorkflow;
+
+    if (comparedWorkflow) {
+      const comparedPolicy = workflowAutomaticReusePolicy(
+        automaticReusePolicyByTemplate,
+        comparedWorkflow,
+      );
+      const comparedEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, comparedWorkflow);
+      const policyComparison = compareAutomaticReusePolicies(preferredPolicy, comparedPolicy);
+      const prefersLowerGovernanceCost = policyComparison < 0;
+      const prefersEffectiveForce = policyComparison === 0
+        && preferredEffectiveForce > comparedEffectiveForce;
+
+      if (trimString(preferredWorkflow?.id) !== trimString(defaultWorkflow?.id)) {
+        recommendedWorkflow = preferredWorkflow;
+        recommendedRank = workflowRegistryRank(registryRanksByWorkflowId, preferredWorkflow, null);
+      }
+
+      if (prefersLowerGovernanceCost) {
+        recommendedMode = 'governance_minimize_policy_carryover';
+        recommendedSelectionContext = buildGovernanceSelectionContext(
+          recommendedMode,
+          preferredWorkflow,
+          preferredPolicy,
+          preferredEffectiveForce,
+          comparedWorkflow,
+          comparedPolicy,
+          comparedEffectiveForce,
+        );
+        recommendedNote =
+          `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
+          + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${comparedWorkflow.id} (${describeAutomaticReusePolicy(comparedPolicy)}).`;
+      } else if (prefersEffectiveForce) {
+        recommendedMode = 'governance_prefer_effective_force';
+        recommendedSelectionContext = buildGovernanceSelectionContext(
+          recommendedMode,
+          preferredWorkflow,
+          preferredPolicy,
+          preferredEffectiveForce,
+          comparedWorkflow,
+          comparedPolicy,
+          comparedEffectiveForce,
+        );
+        recommendedNote =
+          `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
+          + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${comparedWorkflow.id} (${comparedEffectiveForce}).`;
+      }
+    }
+  }
+
+  return {
+    recommendedWorkflow,
+    recommendedRank,
+    recommendedMode,
+    recommendedNote,
+    recommendedSelectionContext,
+  };
+}
+
 function describeGovernanceSelectionBasis(basis) {
   const normalizedBasis = trimString(basis);
   if (normalizedBasis === 'governance_minimize_policy_carryover') {

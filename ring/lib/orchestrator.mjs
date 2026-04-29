@@ -4,7 +4,6 @@ import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
-  buildGovernanceSelectionContext,
   buildSessionContextInjected,
   buildSessionDispatchMessageEnvelopeOptions as sessionDispatchMessageEnvelopeCallOptions,
   buildSessionDispatchMessageEnvelopeState as sessionDispatchMessageEnvelopeState,
@@ -15,11 +14,10 @@ import {
   buildWorkflowPreparationPayloadWaitingTask as workflowPreparationPayloadWaitingTask,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
-  compareAutomaticReusePolicies,
-  describeAutomaticReusePolicy,
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
+  governedAutomaticReuseSelectionState,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -4616,113 +4614,24 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       let recommendedSelectionContext = null;
 
       if (defaultWorkflow) {
-        const recommendedPolicy = automaticReusePolicyByTemplate.get(defaultWorkflow.id) ?? {
-          constrained: false,
-        };
-        const unconstrainedReusableCandidates = reusableCandidates
-          .filter(
-            (workflow) =>
-              !(automaticReusePolicyByTemplate.get(workflow.id)?.constrained ?? false),
-          )
-          .sort((left, right) => {
-            const leftRank = registryRanksByWorkflowId.get(left.id) ?? Number.POSITIVE_INFINITY;
-            const rightRank = registryRanksByWorkflowId.get(right.id) ?? Number.POSITIVE_INFINITY;
-            return leftRank - rightRank;
-          });
-        const constrainedReusableCandidates = reusableCandidates
-          .filter(
-            (workflow) =>
-              automaticReusePolicyByTemplate.get(workflow.id)?.constrained ?? false,
-          )
-          .sort((left, right) => {
-            const policyComparison = compareAutomaticReusePolicies(
-              automaticReusePolicyByTemplate.get(left.id) ?? { constrained: false },
-              automaticReusePolicyByTemplate.get(right.id) ?? { constrained: false },
-            );
-            if (policyComparison !== 0) {
-              return policyComparison;
-            }
-
-            const leftEffectiveForce = effectiveForceByTemplate.get(left.id) ?? 0;
-            const rightEffectiveForce = effectiveForceByTemplate.get(right.id) ?? 0;
-            if (leftEffectiveForce !== rightEffectiveForce) {
-              return rightEffectiveForce - leftEffectiveForce;
-            }
-
-            const leftRank = registryRanksByWorkflowId.get(left.id) ?? Number.POSITIVE_INFINITY;
-            const rightRank = registryRanksByWorkflowId.get(right.id) ?? Number.POSITIVE_INFINITY;
-            if (leftRank !== rightRank) {
-              return leftRank - rightRank;
-            }
-
-            return left.id.localeCompare(right.id);
-          });
-
-        if (recommendedPolicy.constrained && unconstrainedReusableCandidates.length > 0) {
-          const preferredWorkflow = unconstrainedReusableCandidates[0];
-          if (preferredWorkflow.id !== defaultWorkflow.id) {
-            recommendedWorkflow = preferredWorkflow;
-            recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
-            recommendedMode = 'governance_prefer_unconstrained';
-            recommendedNote =
-              `Automatic reuse preferred ${preferredWorkflow.id} before ${defaultWorkflow.id} `
-              + `because ${defaultWorkflow.id} still carries ${describeAutomaticReusePolicy(recommendedPolicy)}.`;
-          }
-        } else if (recommendedPolicy.constrained && constrainedReusableCandidates.length > 0) {
-          const preferredWorkflow = constrainedReusableCandidates[0];
-          const preferredPolicy = automaticReusePolicyByTemplate.get(preferredWorkflow.id) ?? {
-            constrained: false,
-          };
-          const preferredEffectiveForce = effectiveForceByTemplate.get(preferredWorkflow.id) ?? 0;
-          const comparedWorkflow = preferredWorkflow.id === defaultWorkflow.id
-            ? constrainedReusableCandidates.find((workflow) => workflow.id !== preferredWorkflow.id) ?? null
-            : defaultWorkflow;
-
-          if (comparedWorkflow) {
-            const comparedPolicy = automaticReusePolicyByTemplate.get(comparedWorkflow.id) ?? {
-              constrained: false,
-            };
-            const comparedEffectiveForce = effectiveForceByTemplate.get(comparedWorkflow.id) ?? 0;
-            const policyComparison = compareAutomaticReusePolicies(preferredPolicy, comparedPolicy);
-            const prefersLowerGovernanceCost = policyComparison < 0;
-            const prefersEffectiveForce = policyComparison === 0
-              && preferredEffectiveForce > comparedEffectiveForce;
-
-            if (preferredWorkflow.id !== defaultWorkflow.id) {
-              recommendedWorkflow = preferredWorkflow;
-              recommendedRank = registryRanksByWorkflowId.get(preferredWorkflow.id) ?? null;
-            }
-
-            if (prefersLowerGovernanceCost) {
-              recommendedMode = 'governance_minimize_policy_carryover';
-              recommendedSelectionContext = buildGovernanceSelectionContext(
-                recommendedMode,
-                preferredWorkflow,
-                preferredPolicy,
-                preferredEffectiveForce,
-                comparedWorkflow,
-                comparedPolicy,
-                comparedEffectiveForce,
-              );
-              recommendedNote =
-                `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
-                + `and ${preferredWorkflow.id} has the lower governance cost (${describeAutomaticReusePolicy(preferredPolicy)}) compared with ${comparedWorkflow.id} (${describeAutomaticReusePolicy(comparedPolicy)}).`;
-            } else if (prefersEffectiveForce) {
-              recommendedMode = 'governance_prefer_effective_force';
-              recommendedSelectionContext = buildGovernanceSelectionContext(
-                recommendedMode,
-                preferredWorkflow,
-                preferredPolicy,
-                preferredEffectiveForce,
-                comparedWorkflow,
-                comparedPolicy,
-                comparedEffectiveForce,
-              );
-              recommendedNote =
-                `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
-                + `and ${preferredWorkflow.id} retains stronger checkpoint effective force (${preferredEffectiveForce}) than ${comparedWorkflow.id} (${comparedEffectiveForce}).`;
-            }
-          }
+        const governedSelection = governedAutomaticReuseSelectionState({
+          defaultWorkflow,
+          defaultRank: recommendedRank,
+          reusableCandidates,
+          automaticReusePolicyByTemplate,
+          effectiveForceByTemplate,
+          registryRanksByWorkflowId,
+        });
+        recommendedWorkflow = governedSelection.recommendedWorkflow;
+        recommendedRank = governedSelection.recommendedRank;
+        if (governedSelection.recommendedMode !== null) {
+          recommendedMode = governedSelection.recommendedMode;
+        }
+        if (governedSelection.recommendedNote !== null) {
+          recommendedNote = governedSelection.recommendedNote;
+        }
+        if (governedSelection.recommendedSelectionContext !== null) {
+          recommendedSelectionContext = governedSelection.recommendedSelectionContext;
         }
       }
 

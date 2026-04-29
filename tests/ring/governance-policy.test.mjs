@@ -4,6 +4,7 @@ import {
   automaticReusePolicyGovernancePressureScore,
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
+  governedAutomaticReuseSelectionState,
   buildSessionDispatchArtifacts,
   buildSessionDispatchMessageEnvelope,
   buildSessionDispatchMessageEnvelopeOptions,
@@ -595,6 +596,161 @@ describe('governance policy', () => {
         },
       },
     );
+  });
+
+  it('selects an unconstrained reusable workflow before a constrained default workflow', () => {
+    const defaultWorkflow = { id: 'wf-tight-template', data: { name: 'Tight Template' } };
+    const unconstrainedWorkflow = { id: 'wf-roomier-template', data: { name: 'Roomier Template' } };
+
+    const selection = governedAutomaticReuseSelectionState({
+      defaultWorkflow,
+      reusableCandidates: [defaultWorkflow, unconstrainedWorkflow],
+      automaticReusePolicyByTemplate: new Map([
+        ['wf-tight-template', {
+          constrained: true,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          governance_pressure_score: 1228,
+        }],
+        ['wf-roomier-template', { constrained: false, governance_pressure_score: 0 }],
+      ]),
+      effectiveForceByTemplate: new Map([
+        ['wf-tight-template', 13],
+        ['wf-roomier-template', 9],
+      ]),
+      registryRanksByWorkflowId: new Map([
+        ['wf-tight-template', 1],
+        ['wf-roomier-template', 4],
+      ]),
+    });
+
+    assert.equal(selection.recommendedWorkflow?.id, 'wf-roomier-template');
+    assert.equal(selection.recommendedRank, 4);
+    assert.equal(selection.recommendedMode, 'governance_prefer_unconstrained');
+    assert.equal(
+      selection.recommendedNote,
+      'Automatic reuse preferred wf-roomier-template before wf-tight-template because wf-tight-template still carries tight workflow_tightness, strong oversight, branch_budget=1.',
+    );
+    assert.equal(selection.recommendedSelectionContext, null);
+  });
+
+  it('selects the lower-governance-cost constrained reusable workflow and records comparison context', () => {
+    const defaultWorkflow = { id: 'wf-tight-template', data: { name: 'Tight Template' } };
+    const roomierWorkflow = { id: 'wf-roomier-template', data: { name: 'Roomier Template' } };
+
+    const selection = governedAutomaticReuseSelectionState({
+      defaultWorkflow,
+      reusableCandidates: [defaultWorkflow, roomierWorkflow],
+      automaticReusePolicyByTemplate: new Map([
+        ['wf-tight-template', {
+          constrained: true,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          governance_pressure_score: 1228,
+        }],
+        ['wf-roomier-template', {
+          constrained: true,
+          workflow_tightness: 'balanced',
+          oversight_strength: 'normal',
+          branch_budget: 3,
+          governance_pressure_score: 1206,
+        }],
+      ]),
+      effectiveForceByTemplate: new Map([
+        ['wf-tight-template', 13],
+        ['wf-roomier-template', 14],
+      ]),
+      registryRanksByWorkflowId: new Map([
+        ['wf-tight-template', 1],
+        ['wf-roomier-template', 4],
+      ]),
+    });
+
+    assert.equal(selection.recommendedWorkflow?.id, 'wf-roomier-template');
+    assert.equal(selection.recommendedRank, 4);
+    assert.equal(selection.recommendedMode, 'governance_minimize_policy_carryover');
+    assert.equal(
+      selection.recommendedNote,
+      'Automatic reuse preferred wf-roomier-template before wf-tight-template because both reusable templates still carry inherited checkpoint policy, and wf-roomier-template has the lower governance cost (branch_budget=3) compared with wf-tight-template (tight workflow_tightness, strong oversight, branch_budget=1).',
+    );
+    assert.deepEqual(selection.recommendedSelectionContext, {
+      basis: 'governance_minimize_policy_carryover',
+      preferred: {
+        workflow_id: 'wf-roomier-template',
+        workflow_name: 'Roomier Template',
+        policy: 'branch_budget=3',
+        governance_pressure_score: 1206,
+        effective_force_score: 14,
+      },
+      compared: {
+        workflow_id: 'wf-tight-template',
+        workflow_name: 'Tight Template',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 13,
+      },
+    });
+  });
+
+  it('records effective-force governed selection context even when the default constrained workflow remains preferred', () => {
+    const preferredWorkflow = { id: 'wf-strong-force-template', data: { name: 'Strong Force Template' } };
+    const comparedWorkflow = { id: 'wf-weaker-force-template', data: { name: 'Weaker Force Template' } };
+
+    const selection = governedAutomaticReuseSelectionState({
+      defaultWorkflow: preferredWorkflow,
+      reusableCandidates: [preferredWorkflow, comparedWorkflow],
+      automaticReusePolicyByTemplate: new Map([
+        ['wf-strong-force-template', {
+          constrained: true,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          governance_pressure_score: 1228,
+        }],
+        ['wf-weaker-force-template', {
+          constrained: true,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+          branch_budget: 1,
+          governance_pressure_score: 1228,
+        }],
+      ]),
+      effectiveForceByTemplate: new Map([
+        ['wf-strong-force-template', 19],
+        ['wf-weaker-force-template', 13],
+      ]),
+      registryRanksByWorkflowId: new Map([
+        ['wf-strong-force-template', 1],
+        ['wf-weaker-force-template', 2],
+      ]),
+    });
+
+    assert.equal(selection.recommendedWorkflow?.id, 'wf-strong-force-template');
+    assert.equal(selection.recommendedRank, 1);
+    assert.equal(selection.recommendedMode, 'governance_prefer_effective_force');
+    assert.equal(
+      selection.recommendedNote,
+      'Automatic reuse preferred wf-strong-force-template before wf-weaker-force-template because both reusable templates carry equivalent inherited checkpoint policy, and wf-strong-force-template retains stronger checkpoint effective force (19) than wf-weaker-force-template (13).',
+    );
+    assert.deepEqual(selection.recommendedSelectionContext, {
+      basis: 'governance_prefer_effective_force',
+      preferred: {
+        workflow_id: 'wf-strong-force-template',
+        workflow_name: 'Strong Force Template',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 19,
+      },
+      compared: {
+        workflow_id: 'wf-weaker-force-template',
+        workflow_name: 'Weaker Force Template',
+        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+        governance_pressure_score: 1228,
+        effective_force_score: 13,
+      },
+    });
   });
 
   it('builds normalized waiting-task records with shared governance metadata', () => {
