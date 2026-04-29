@@ -33,6 +33,7 @@ import {
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   buildWorkflowPreparationReuseGuidanceView,
+  buildWorkflowPreparationTaskHeaderView,
   describeWorkflowReuseGovernanceBlock,
   describeWorkflowReuseGovernanceBlockList,
   describeWorkflowReuseGovernanceReenableGuidance,
@@ -2505,6 +2506,34 @@ describe('governance policy', () => {
         }],
         governance_reenable_guidance:
           'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+      },
+    );
+  });
+
+  it('builds shared workflow-preparation task header state for packet and scaffold renderers', () => {
+    const workflowPreparationPayloadTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      replanning_handoff: {
+        parent_task_id: ' t-parent-docs ',
+        parent_decision_note: ' Narrow the retry to the publication-only files. ',
+      },
+    };
+
+    assert.deepEqual(
+      buildWorkflowPreparationTaskHeaderView(workflowPreparationPayloadTask),
+      {
+        taskId: 'task-docs',
+        taskName: 'Governed docs delivery',
+        taskLabel: 'task-docs: Governed docs delivery',
+        taskType: 'documentation',
+        milestoneId: 'ms-governance',
+        taskDocumentPath: 'docs/tasks/task-docs/task-docs.md',
+        replanningHandoff:
+          'parent_task_id: t-parent-docs | parent_decision_note: Narrow the retry to the publication-only files.',
       },
     );
   });

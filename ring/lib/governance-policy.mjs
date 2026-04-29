@@ -1168,14 +1168,30 @@ export function buildWorkflowPreparationReuseGuidanceView(waitingTask = {}) {
   };
 }
 
+export function buildWorkflowPreparationTaskHeaderView(waitingTask = {}) {
+  const taskId = trimString(waitingTask?.task_id) ?? 'unknown-task';
+  const taskName = trimString(waitingTask?.task_name) ?? 'Unnamed task';
+
+  return {
+    taskId,
+    taskName,
+    taskLabel: `${taskId}: ${taskName}`,
+    taskType: trimString(waitingTask?.task_type) ?? 'unknown',
+    milestoneId: trimString(waitingTask?.milestone_id) ?? 'unknown',
+    taskDocumentPath: trimString(waitingTask?.task_document_path) ?? 'none',
+    replanningHandoff: describeWaitingTaskReplanningHandoff(waitingTask),
+  };
+}
+
 export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
+  const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
   const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
   return [
-    `- ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
-    `  task_type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
-    `  milestone: ${trimString(waitingTask?.milestone_id) ?? 'unknown'}`,
-    `  task_document: ${trimString(waitingTask?.task_document_path) ?? 'none'}`,
-    `  replanning_handoff: ${describeWaitingTaskReplanningHandoff(waitingTask)}`,
+    `- ${taskHeaderView.taskLabel}`,
+    `  task_type: ${taskHeaderView.taskType}`,
+    `  milestone: ${taskHeaderView.milestoneId}`,
+    `  task_document: ${taskHeaderView.taskDocumentPath}`,
+    `  replanning_handoff: ${taskHeaderView.replanningHandoff}`,
     `  preferred_reuse: ${reuseGuidanceView.preferredReuse}`,
     `  governance_selection_context: ${reuseGuidanceView.governanceSelectionContext}`,
     `  reusable_candidates: ${reuseGuidanceView.reusableCandidatesWithNames}`,
@@ -1186,17 +1202,17 @@ export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) 
 
 export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   const workflowAction = trimString(waitingTask?.workflow_action) ?? 'create';
-  const replanningHandoff = describeWaitingTaskReplanningHandoff(waitingTask);
+  const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
   const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
   const headerLines = [
-    `## Task ${trimString(waitingTask?.task_id) ?? 'unknown-task'}: ${trimString(waitingTask?.task_name) ?? 'Unnamed task'}`,
-    `Task Type: ${trimString(waitingTask?.task_type) ?? 'unknown'}`,
-    `Milestone: ${trimString(waitingTask?.milestone_id) ?? 'unknown'}`,
-    `Task Document: ${trimString(waitingTask?.task_document_path) ?? 'none'}`,
+    `## Task ${taskHeaderView.taskLabel}`,
+    `Task Type: ${taskHeaderView.taskType}`,
+    `Milestone: ${taskHeaderView.milestoneId}`,
+    `Task Document: ${taskHeaderView.taskDocumentPath}`,
     `Workflow Action: ${workflowAction}`,
   ];
-  if (replanningHandoff !== 'none') {
-    headerLines.push(`Replanning handoff: ${replanningHandoff}`);
+  if (taskHeaderView.replanningHandoff !== 'none') {
+    headerLines.push(`Replanning handoff: ${taskHeaderView.replanningHandoff}`);
   }
 
   if (workflowAction === 'reuse' && trimString(waitingTask?.workflow_template_id)) {
@@ -1220,7 +1236,7 @@ export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   headerLines.push('### Workflow Description');
   headerLines.push('');
   headerLines.push(
-    `Describe the custom workflow that should execute task ${trimString(waitingTask?.task_id) ?? 'unknown-task'} once the session starts.`,
+    `Describe the custom workflow that should execute task ${taskHeaderView.taskId} once the session starts.`,
   );
   headerLines.push('');
   headerLines.push('### Steps');
