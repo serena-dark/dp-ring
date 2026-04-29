@@ -18,6 +18,7 @@ import {
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask,
   buildWorkflowPreparationPayloadWaitingTaskListState,
+  buildWorkflowPreparationWaitingTaskListRenderView,
   buildWorkflowPreparationTaskRenderView,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
@@ -2609,6 +2610,53 @@ describe('governance policy', () => {
         scaffoldTaskSections: expectedPayloadWaitingTasks.map((item) =>
           describeWorkflowPreparationScaffoldTask(item)
         ),
+      },
+    );
+  });
+
+  it('builds shared workflow-preparation waiting-task list render state for packet and scaffold fallbacks', () => {
+    const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
+      [{
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      }],
+      new Map(),
+    );
+
+    assert.deepEqual(
+      buildWorkflowPreparationWaitingTaskListRenderView(populatedListState),
+      {
+        payloadWaitingTasks: populatedListState.payloadWaitingTasks,
+        payloadTaskLines: populatedListState.payloadTaskLines,
+        scaffoldTaskSections: populatedListState.scaffoldTaskSections,
+        payloadTaskListText: populatedListState.payloadTaskLines.join('\n'),
+        scaffoldTaskSectionsText: populatedListState.scaffoldTaskSections.join('\n\n'),
+      },
+    );
+
+    assert.deepEqual(
+      buildWorkflowPreparationWaitingTaskListRenderView(),
+      {
+        payloadWaitingTasks: [],
+        payloadTaskLines: [],
+        scaffoldTaskSections: [],
+        payloadTaskListText: '- no dispatchable tasks are waiting',
+        scaffoldTaskSectionsText:
+          '## Task pending: No tasks yet\n'
+          + 'Workflow Action: create\n'
+          + 'Workflow Name: Waiting workflow\n'
+          + '\n'
+          + '### Workflow Description\n'
+          + '\n'
+          + 'Create tasks first, then replace this placeholder.\n'
+          + '\n'
+          + '### Steps\n'
+          + '\n'
+          + '- s1 | inspect | Review the waiting task set | inputs: task-document | outputs: scoped-plan',
       },
     );
   });

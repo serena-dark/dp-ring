@@ -12,6 +12,7 @@ import {
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
+  buildWorkflowPreparationWaitingTaskListRenderView as workflowPreparationWaitingTaskListRenderView,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   governanceBatchSignature,
@@ -1531,12 +1532,9 @@ function buildWorkflowPreparationPacket(
   config,
 ) {
   const {
-    payloadWaitingTasks = [],
-    payloadTaskLines = [],
-  } = workflowPreparationPayloadWaitingTaskList ?? {};
-  const taskLines = payloadTaskLines.length > 0
-    ? payloadTaskLines.join('\n')
-    : '- no dispatchable tasks are waiting';
+    payloadWaitingTasks,
+    payloadTaskListText,
+  } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
 
   return {
     id: `pkt-${jobId}-workflow-plan`,
@@ -1552,7 +1550,7 @@ function buildWorkflowPreparationPacket(
       'Assign exactly one workflow to each ready task. Reuse active templates when possible. Create a custom workflow only when no existing template fits.',
       '',
       'Tasks waiting for workflow assignment:',
-      taskLines,
+      payloadTaskListText,
       '',
       'Output contract:',
       '- Use sections named "## Task <task-id>: <task-name>".',
@@ -1588,22 +1586,8 @@ function buildWorkflowPreparationScaffold(
   taskDispatchDocumentPath,
 ) {
   const {
-    scaffoldTaskSections = [],
-  } = workflowPreparationPayloadWaitingTaskList ?? {};
-  const taskSections = scaffoldTaskSections.length > 0
-    ? scaffoldTaskSections.join('\n\n')
-    : `## Task pending: No tasks yet
-Workflow Action: create
-Workflow Name: Waiting workflow
-
-### Workflow Description
-
-Create tasks first, then replace this placeholder.
-
-### Steps
-
-- s1 | inspect | Review the waiting task set | inputs: task-document | outputs: scoped-plan
-`;
+    scaffoldTaskSectionsText,
+  } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
 
   return `# ${requirement.data.name} Workflow Preparation
 
@@ -1614,7 +1598,7 @@ Create tasks first, then replace this placeholder.
 
 Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.
 
-${taskSections}
+${scaffoldTaskSectionsText}
 `;
 }
 

@@ -1304,6 +1304,54 @@ export function buildWorkflowPreparationPayloadWaitingTaskListState(
   };
 }
 
+function workflowPreparationEmptyPayloadTaskListText() {
+  return '- no dispatchable tasks are waiting';
+}
+
+function workflowPreparationEmptyScaffoldTaskSectionsText() {
+  return [
+    '## Task pending: No tasks yet',
+    'Workflow Action: create',
+    'Workflow Name: Waiting workflow',
+    '',
+    '### Workflow Description',
+    '',
+    'Create tasks first, then replace this placeholder.',
+    '',
+    '### Steps',
+    '',
+    '- s1 | inspect | Review the waiting task set | inputs: task-document | outputs: scoped-plan',
+  ].join('\n');
+}
+
+export function buildWorkflowPreparationWaitingTaskListRenderView(
+  workflowPreparationPayloadWaitingTaskList = null,
+) {
+  const payloadWaitingTasks = Array.isArray(workflowPreparationPayloadWaitingTaskList?.payloadWaitingTasks)
+    ? workflowPreparationPayloadWaitingTaskList.payloadWaitingTasks
+    : [];
+  const payloadTaskLines = Array.isArray(workflowPreparationPayloadWaitingTaskList?.payloadTaskLines)
+    ? workflowPreparationPayloadWaitingTaskList.payloadTaskLines
+    : [];
+  const scaffoldTaskSections = Array.isArray(
+    workflowPreparationPayloadWaitingTaskList?.scaffoldTaskSections,
+  )
+    ? workflowPreparationPayloadWaitingTaskList.scaffoldTaskSections
+    : [];
+
+  return {
+    payloadWaitingTasks,
+    payloadTaskLines,
+    scaffoldTaskSections,
+    payloadTaskListText: payloadTaskLines.length > 0
+      ? payloadTaskLines.join('\n')
+      : workflowPreparationEmptyPayloadTaskListText(),
+    scaffoldTaskSectionsText: scaffoldTaskSections.length > 0
+      ? scaffoldTaskSections.join('\n\n')
+      : workflowPreparationEmptyScaffoldTaskSectionsText(),
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
