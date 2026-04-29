@@ -11,11 +11,9 @@ import {
   buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
-  buildWorkflowPreparationPayloadWaitingTask as workflowPreparationPayloadWaitingTask,
+  buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
-  describeWorkflowPreparationPayloadWaitingTask,
-  describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
   governedAutomaticReuseSelectionState,
   waitingTaskGovernanceBlockedReuse,
@@ -1527,17 +1525,17 @@ ${milestoneSections}`;
 
 function buildWorkflowPreparationPacket(
   requirement,
-  tasks,
-  recommendationsByTaskId,
+  workflowPreparationPayloadWaitingTaskList,
   workflowDocumentPath,
   jobId,
   config,
 ) {
-  const payloadWaitingTasks = tasks.map((task) =>
-    workflowPreparationPayloadWaitingTask(task, recommendationsByTaskId.get(task.id) ?? null)
-  );
-  const taskLines = payloadWaitingTasks.length > 0
-    ? payloadWaitingTasks.map((item) => describeWorkflowPreparationPayloadWaitingTask(item)).join('\n')
+  const {
+    payloadWaitingTasks = [],
+    payloadTaskLines = [],
+  } = workflowPreparationPayloadWaitingTaskList ?? {};
+  const taskLines = payloadTaskLines.length > 0
+    ? payloadTaskLines.join('\n')
     : '- no dispatchable tasks are waiting';
 
   return {
@@ -1586,15 +1584,14 @@ function buildWorkflowPreparationPacket(
 
 function buildWorkflowPreparationScaffold(
   requirement,
-  tasks,
-  recommendationsByTaskId,
+  workflowPreparationPayloadWaitingTaskList,
   taskDispatchDocumentPath,
 ) {
-  const payloadWaitingTasks = tasks.map((task) =>
-    workflowPreparationPayloadWaitingTask(task, recommendationsByTaskId.get(task.id) ?? null)
-  );
-  const taskSections = payloadWaitingTasks.length > 0
-    ? payloadWaitingTasks.map((item) => describeWorkflowPreparationScaffoldTask(item)).join('\n\n')
+  const {
+    scaffoldTaskSections = [],
+  } = workflowPreparationPayloadWaitingTaskList ?? {};
+  const taskSections = scaffoldTaskSections.length > 0
+    ? scaffoldTaskSections.join('\n\n')
     : `## Task pending: No tasks yet
 Workflow Action: create
 Workflow Name: Waiting workflow
@@ -4671,14 +4668,17 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     const requirement = await ring.read('requirement', job.requirement_id);
     const tasks = await loadGeneratedTasks(job);
     const recommendations = await collectWorkflowRecommendations(tasks);
+    const workflowPreparationPayloadWaitingTaskList = workflowPreparationPayloadWaitingTaskListState(
+      tasks,
+      recommendations,
+    );
     const inspection = await ensureDocument(
       job.workflow_preparation.document.path,
       () =>
         Promise.resolve(
           buildWorkflowPreparationScaffold(
             requirement,
-            tasks,
-            recommendations,
+            workflowPreparationPayloadWaitingTaskList,
             job.post_milestone.task_dispatch.document.path,
           ),
         ),
@@ -4687,8 +4687,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       job,
       buildWorkflowPreparationPacket(
         requirement,
-        tasks,
-        recommendations,
+        workflowPreparationPayloadWaitingTaskList,
         job.workflow_preparation.document.path,
         job.id,
         config,

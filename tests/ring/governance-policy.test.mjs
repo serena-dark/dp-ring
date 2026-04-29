@@ -17,6 +17,7 @@ import {
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
   buildWorkflowPreparationPayloadWaitingTask,
+  buildWorkflowPreparationPayloadWaitingTaskListState,
   buildWorkflowPreparationTaskRenderView,
   checkpointAutomaticReuseSelectionPolicy,
   checkpointAutomaticReusePolicyState,
@@ -2508,6 +2509,106 @@ describe('governance policy', () => {
         }],
         governance_reenable_guidance:
           'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+      },
+    );
+  });
+
+  it('builds workflow-preparation payload waiting-task list state from shared per-task helpers', () => {
+    const docsTask = {
+      id: ' task-docs ',
+      data: {
+        name: ' Governed docs delivery ',
+        task_type: ' documentation ',
+        milestone_id: ' ms-governance ',
+        replanning: {
+          parent_task_id: ' t-parent-docs ',
+          parent_decision_note: ' Narrow the retry to the publication-only files. ',
+        },
+      },
+    };
+    const testTask = {
+      id: ' task-tests ',
+      data: {
+        name: ' Tighten validator coverage ',
+        task_type: ' testing ',
+        milestone_id: ' ms-governance ',
+      },
+    };
+    const recommendationsByTaskId = new Map([
+      ['task-docs', {
+        recommended: {
+          workflow: {
+            id: ' wf-selected ',
+            data: {
+              name: ' Selected Workflow ',
+            },
+          },
+          rank: 7,
+          mode: ' governance_prefer_effective_force ',
+          note: ' Preferred because stronger checkpoint force carried less policy risk. ',
+          selection_context: {
+            basis: ' governance_prefer_effective_force ',
+            preferred: {
+              workflow_id: ' wf-selected ',
+              workflow_name: ' Selected Workflow ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 19,
+            },
+            compared: {
+              workflow_id: ' wf-compared ',
+              workflow_name: ' Compared Workflow ',
+              policy: ' branch_budget=1 ',
+              governance_pressure_score: 1220,
+              effective_force_score: 13,
+            },
+          },
+        },
+        candidates: [
+          {
+            id: ' wf-selected ',
+            name: ' Selected Workflow ',
+          },
+          {
+            id: ' wf-roomier ',
+            name: ' Roomier Template ',
+          },
+        ],
+        governance_blocked_candidates: [
+          {
+            id: ' wf-budget-hold ',
+            name: ' Branch Budget Template ',
+            reason: ' checkpoint_branch_budget_exhausted ',
+            checkpoint_id: ' cp-budget-hold ',
+            adoption_status: ' mainline ',
+            branch_budget: 0,
+            workflow_tightness: ' tight ',
+            oversight_strength: ' strong ',
+          },
+        ],
+      }],
+    ]);
+    const expectedPayloadWaitingTasks = [
+      buildWorkflowPreparationPayloadWaitingTask(
+        docsTask,
+        recommendationsByTaskId.get('task-docs'),
+      ),
+      buildWorkflowPreparationPayloadWaitingTask(testTask, null),
+    ];
+
+    assert.deepEqual(
+      buildWorkflowPreparationPayloadWaitingTaskListState(
+        [docsTask, testTask],
+        recommendationsByTaskId,
+      ),
+      {
+        payloadWaitingTasks: expectedPayloadWaitingTasks,
+        payloadTaskLines: expectedPayloadWaitingTasks.map((item) =>
+          describeWorkflowPreparationPayloadWaitingTask(item)
+        ),
+        scaffoldTaskSections: expectedPayloadWaitingTasks.map((item) =>
+          describeWorkflowPreparationScaffoldTask(item)
+        ),
       },
     );
   });

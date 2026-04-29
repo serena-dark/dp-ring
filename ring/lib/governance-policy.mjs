@@ -1283,6 +1283,27 @@ export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
   return buildWorkflowPreparationTaskRenderView(waitingTask).scaffoldLines.join('\n');
 }
 
+export function buildWorkflowPreparationPayloadWaitingTaskListState(
+  tasks = [],
+  recommendationsByTaskId = new Map(),
+) {
+  const taskList = Array.isArray(tasks) ? tasks : [];
+  const payloadWaitingTasks = taskList.map((task) =>
+    buildWorkflowPreparationPayloadWaitingTask(
+      task,
+      recommendationsByTaskId instanceof Map
+        ? recommendationsByTaskId.get(trimString(task?.id)) ?? null
+        : null,
+    )
+  );
+
+  return {
+    payloadWaitingTasks,
+    payloadTaskLines: payloadWaitingTasks.map((item) => describeWorkflowPreparationPayloadWaitingTask(item)),
+    scaffoldTaskSections: payloadWaitingTasks.map((item) => describeWorkflowPreparationScaffoldTask(item)),
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
