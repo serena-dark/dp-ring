@@ -6,8 +6,8 @@ import { promisify } from 'node:util';
 import {
   buildGovernanceSelectionContext,
   buildSessionContextInjected,
-  buildSessionDispatchMessageEnvelope as sessionDispatchMessageEnvelope,
   buildSessionDispatchMessageEnvelopeOptions as sessionDispatchMessageEnvelopeCallOptions,
+  buildSessionDispatchMessageEnvelopeState as sessionDispatchMessageEnvelopeState,
   buildSessionDispatchPacketWaitingTaskViews as sessionDispatchPacketWaitingTaskViews,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
@@ -21,7 +21,6 @@ import {
   describeWorkflowPreparationScaffoldTask,
   governanceBatchSignature,
   hydrateWaitingTaskGovernanceLabels as readyTasksWithCanonicalSessionLabels,
-  refreshSessionDispatchWaitingTasks,
   waitingTaskGovernanceBlockedReuse,
   workflowReuseGovernanceBlock,
 } from './governance-policy.mjs';
@@ -791,6 +790,29 @@ function sessionDispatchEnvelopeOptions(job, config, agentCards) {
     senderRole: 'orchestrator',
     recipientCard: agentCards.get(SESSION_DISPATCHER_ID) ?? null,
     recipient: SESSION_DISPATCHER_ID,
+  });
+}
+
+function sessionDispatchEnvelopeState({
+  job,
+  requirement,
+  storedWaitingTasks = [],
+  dispatchWaitingTasks = null,
+  refreshedWaitingTasks = null,
+  workflowPreparationPayloadWaitingTasks = null,
+  config,
+  agentCards,
+  dispatchedAt = null,
+}) {
+  return sessionDispatchMessageEnvelopeState({
+    job,
+    requirement,
+    storedWaitingTasks,
+    dispatchWaitingTasks,
+    refreshedWaitingTasks,
+    workflowPreparationPayloadWaitingTasks,
+    dispatchedAt,
+    ...sessionDispatchEnvelopeOptions(job, config, agentCards),
   });
 }
 
@@ -4127,18 +4149,21 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           );
         const config = await getConfig();
         const agentCards = mapAgentCards(await getAgents(config));
-        next.session_dispatch.dispatch.packet = sessionDispatchMessageEnvelope({
+        const dispatchedAt = nowIso();
+        const {
+          packet: sessionDispatchPacket,
+          waitingTasks: refreshedWaitingTasks,
+        } = sessionDispatchEnvelopeState({
           job,
           requirement,
-          waitingTasks: canonicalWaitingTasks,
+          storedWaitingTasks: canonicalWaitingTasks,
           workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-          ...sessionDispatchEnvelopeOptions(job, config, agentCards),
-          dispatchedAt: nowIso(),
+          config,
+          agentCards,
+          dispatchedAt,
         });
-        next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
-          canonicalWaitingTasks,
-          next.session_dispatch.dispatch.packet,
-        );
+        next.session_dispatch.dispatch.packet = sessionDispatchPacket;
+        next.workflow_preparation.waiting_tasks = refreshedWaitingTasks;
       }
     }
 
@@ -4981,20 +5006,22 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       );
 
       const agentCards = mapAgentCards(await getAgents(config));
-      const batchPacket = sessionDispatchMessageEnvelope({
+      const dispatchedAt = nowIso();
+      const {
+        packet: batchPacket,
+        waitingTasks: refreshedWaitingTasks,
+      } = sessionDispatchEnvelopeState({
         job,
         requirement,
-        waitingTasks: waitingTasksForDispatchPacket,
+        storedWaitingTasks: waitingTasksForDispatchPacket,
         workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        ...sessionDispatchEnvelopeOptions(job, config, agentCards),
-        dispatchedAt: nowIso(),
+        config,
+        agentCards,
+        dispatchedAt,
       });
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
-      next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
-        waitingTasksForDispatchPacket,
-        batchPacket,
-      );
+      next.workflow_preparation.waiting_tasks = refreshedWaitingTasks;
       next.workflow_preparation.generated_workflow_ids = generatedWorkflowIds;
       next.workflow_preparation.reused_workflow_ids = reusedWorkflowIds;
       next.workflow_preparation.parse_error = null;
@@ -5222,24 +5249,24 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.launched_at = nowIso();
       const config = await getConfig();
       const agentCards = mapAgentCards(await getAgents(config));
-      next.session_dispatch.dispatch.packet = sessionDispatchMessageEnvelope({
+      const dispatchedAt = nowIso();
+      const {
+        packet: sessionDispatchPacket,
+        waitingTasks: refreshedWaitingTasks,
+      } = sessionDispatchEnvelopeState({
         job,
         requirement,
-        waitingTasks: readyTasksForDispatchPacket,
+        storedWaitingTasks: next.workflow_preparation.waiting_tasks,
+        dispatchWaitingTasks: readyTasksForDispatchPacket,
+        refreshedWaitingTasks: readyTasksForDispatchPacket,
         workflowPreparationPayloadWaitingTasks: workflowPreparationPayloadWaitingTasksForDispatchPacket,
-        ...sessionDispatchEnvelopeOptions(job, config, agentCards),
-        dispatchedAt: nowIso(),
+        config,
+        agentCards,
+        dispatchedAt,
       });
-      next.session_dispatch.dispatch.last_dispatched_at = nowIso();
-      const dispatchedAt = nowIso();
-      next.workflow_preparation.waiting_tasks = refreshSessionDispatchWaitingTasks(
-        next.workflow_preparation.waiting_tasks,
-        next.session_dispatch.dispatch.packet,
-        {
-          refreshedWaitingTasks: readyTasksForDispatchPacket,
-          dispatchedAt,
-        },
-      );
+      next.session_dispatch.dispatch.packet = sessionDispatchPacket;
+      next.session_dispatch.dispatch.last_dispatched_at = dispatchedAt;
+      next.workflow_preparation.waiting_tasks = refreshedWaitingTasks;
       closeTraceStage(
         next,
         'session_dispatch',

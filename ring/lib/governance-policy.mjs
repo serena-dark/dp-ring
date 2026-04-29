@@ -1537,6 +1537,56 @@ export function buildSessionDispatchMessageEnvelope({
   };
 }
 
+export function buildSessionDispatchMessageEnvelopeState({
+  job = null,
+  requirement = null,
+  storedWaitingTasks = [],
+  dispatchWaitingTasks = null,
+  refreshedWaitingTasks = null,
+  workflowPreparationPayloadWaitingTasks = null,
+  protocolVersion = null,
+  traceId = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  callbackPath = null,
+  routing = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const waitingTasksForPacket = Array.isArray(dispatchWaitingTasks)
+    ? dispatchWaitingTasks
+    : Array.isArray(storedWaitingTasks)
+    ? storedWaitingTasks
+    : [];
+  const waitingTasksForRefresh = Array.isArray(refreshedWaitingTasks)
+    ? refreshedWaitingTasks
+    : waitingTasksForPacket;
+  const packet = buildSessionDispatchMessageEnvelope({
+    job,
+    requirement,
+    waitingTasks: waitingTasksForPacket,
+    workflowPreparationPayloadWaitingTasks,
+    protocolVersion,
+    traceId,
+    senderId,
+    senderRole,
+    recipientCard,
+    callbackPath,
+    routing,
+    recipient,
+    dispatchedAt,
+  });
+
+  return {
+    packet,
+    waitingTasks: refreshSessionDispatchWaitingTasks(storedWaitingTasks, packet, {
+      refreshedWaitingTasks: waitingTasksForRefresh,
+      dispatchedAt,
+    }),
+  };
+}
+
 export function mergeSessionDispatchPayloadWaitingTask(
   waitingTask = {},
   sessionDispatchPayloadTask = null,

@@ -7,6 +7,7 @@ import {
   buildSessionDispatchArtifacts,
   buildSessionDispatchMessageEnvelope,
   buildSessionDispatchMessageEnvelopeOptions,
+  buildSessionDispatchMessageEnvelopeState,
   buildSessionDispatchPacket,
   buildSessionDispatchPacketWaitingArea,
   buildSessionDispatchPacketWaitingTaskViews,
@@ -1610,6 +1611,142 @@ describe('governance policy', () => {
       recipient: 'dispatcher',
     });
     assert.equal(result.routing, routing);
+  });
+
+  it('builds session-dispatch message-envelope state from shared packet and waiting-task refresh helpers', () => {
+    const storedWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Stored task label ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-stale ',
+      workflow_name: ' Stale Workflow ',
+      ready_at: '2026-04-28T16:40:00Z',
+      dispatched_at: null,
+    };
+    const dispatchWaitingTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      task_type: ' documentation ',
+      milestone_id: ' ms-governance ',
+      task_document_path: ' docs/tasks/task-docs/task-docs.md ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      governance_reenable_guidance:
+        ' A later mainline checkpoint must keep branch_budget > 0 before automatic reuse resumes. ',
+      governance_blocked_reuse: [
+        {
+          workflow_template_id: ' wf-blocked ',
+          workflow_name: ' Blocked Workflow ',
+          reason: ' checkpoint_branch_budget_exhausted ',
+          checkpoint_id: ' cp-budget-0 ',
+          adoption_status: ' mainline ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+      ],
+      ready_at: '2026-04-28T16:45:00Z',
+    };
+    const workflowPreparationPayloadTask = {
+      task_id: 'task-docs',
+      task_name: 'Governed docs delivery from workflow preparation',
+      workflow_template_id: 'wf-selected',
+      workflow_name: 'Selected Workflow',
+    };
+    const job = {
+      id: 'job-session-dispatch',
+      trace: {
+        trace_id: 'trace-session-dispatch',
+      },
+      routing: {
+        policy: 'strict',
+        priority: 'high',
+      },
+      workflow_preparation: {
+        document: {
+          path: 'docs/plans/session-dispatch/workflow-preparation.md',
+        },
+      },
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: 'docs/plans/session-dispatch/task-dispatch.md',
+          },
+        },
+      },
+    };
+    const requirement = {
+      id: 'req-governed-docs',
+      data: {
+        name: 'Governed docs delivery',
+        description: 'Deliver the governed documentation batch safely.',
+        acceptance_criteria: [
+          'Keep the session-dispatch packet aligned with shared governance-policy helpers.',
+        ],
+      },
+    };
+    const recipientCard = {
+      id: 'session-dispatcher',
+      role: 'dispatcher',
+      accepts: ['batch_session_launch'],
+    };
+    const envelopeOptions = buildSessionDispatchMessageEnvelopeOptions({
+      config: {
+        message_protocol_version: ' ring.orchestrator.v1 ',
+      },
+      job,
+      senderId: ' dispatch-center ',
+      senderRole: ' orchestrator ',
+      recipientCard,
+      recipient: ' session-dispatcher ',
+    });
+    const dispatchedAt = '2026-04-29T01:36:15Z';
+    const expectedPacket = buildSessionDispatchMessageEnvelope({
+      job,
+      requirement,
+      waitingTasks: [dispatchWaitingTask],
+      workflowPreparationPayloadWaitingTasks: [workflowPreparationPayloadTask],
+      dispatchedAt,
+      ...envelopeOptions,
+    });
+
+    assert.deepEqual(
+      buildSessionDispatchMessageEnvelopeState({
+        job,
+        requirement,
+        storedWaitingTasks: [storedWaitingTask],
+        dispatchWaitingTasks: [dispatchWaitingTask],
+        workflowPreparationPayloadWaitingTasks: [workflowPreparationPayloadTask],
+        dispatchedAt,
+        ...envelopeOptions,
+      }),
+      {
+        packet: expectedPacket,
+        waitingTasks: refreshSessionDispatchWaitingTasks([storedWaitingTask], expectedPacket, {
+          refreshedWaitingTasks: [dispatchWaitingTask],
+          dispatchedAt,
+        }),
+      },
+    );
   });
 
   it('builds a session-dispatch packet from shared waiting-area state and workflow-preparation payload fallbacks', () => {
