@@ -1183,6 +1183,61 @@ export function buildWorkflowPreparationTaskHeaderView(waitingTask = {}) {
   };
 }
 
+function workflowPreparationDefaultCreateStepLines() {
+  return [
+    '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
+    '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
+    '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
+  ];
+}
+
+export function buildWorkflowPreparationScaffoldActionView(waitingTask = {}) {
+  const workflowTemplateId = trimString(waitingTask?.workflow_template_id);
+  const workflowAction = trimString(waitingTask?.workflow_action) === 'reuse' && workflowTemplateId
+    ? 'reuse'
+    : 'create';
+  const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
+  const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
+
+  if (workflowAction === 'reuse') {
+    return {
+      workflowAction,
+      bodyLines: [
+        `Workflow ID: ${workflowTemplateId}`,
+        '',
+        `Preferred reuse: ${reuseGuidanceView.preferredReuse}`,
+        `Governance selection context: ${reuseGuidanceView.governanceSelectionContext}`,
+        `Other candidates: ${reuseGuidanceView.reusableCandidatesWithoutNames}`,
+        `Governance-blocked reuse: ${reuseGuidanceView.governanceBlockedReuse}`,
+        `Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`,
+      ],
+    };
+  }
+
+  const bodyLines = [
+    `Workflow Name: ${trimString(waitingTask?.workflow_name) ?? 'Waiting workflow'}`,
+    '',
+  ];
+  if (reuseGuidanceView.governanceBlockedReuse !== 'none') {
+    bodyLines.push(`Governance note: ${reuseGuidanceView.governanceBlockedReuse}.`);
+    bodyLines.push(`Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`);
+    bodyLines.push('');
+  }
+  bodyLines.push('### Workflow Description');
+  bodyLines.push('');
+  bodyLines.push(
+    `Describe the custom workflow that should execute task ${taskHeaderView.taskId} once the session starts.`,
+  );
+  bodyLines.push('');
+  bodyLines.push('### Steps');
+  bodyLines.push('');
+  bodyLines.push(...workflowPreparationDefaultCreateStepLines());
+  return {
+    workflowAction,
+    bodyLines,
+  };
+}
+
 export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) {
   const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
   const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
@@ -1201,56 +1256,20 @@ export function describeWorkflowPreparationPayloadWaitingTask(waitingTask = {}) 
 }
 
 export function describeWorkflowPreparationScaffoldTask(waitingTask = {}) {
-  const workflowAction = trimString(waitingTask?.workflow_action) ?? 'create';
   const taskHeaderView = buildWorkflowPreparationTaskHeaderView(waitingTask);
-  const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
+  const actionView = buildWorkflowPreparationScaffoldActionView(waitingTask);
   const headerLines = [
     `## Task ${taskHeaderView.taskLabel}`,
     `Task Type: ${taskHeaderView.taskType}`,
     `Milestone: ${taskHeaderView.milestoneId}`,
     `Task Document: ${taskHeaderView.taskDocumentPath}`,
-    `Workflow Action: ${workflowAction}`,
+    `Workflow Action: ${actionView.workflowAction}`,
   ];
   if (taskHeaderView.replanningHandoff !== 'none') {
     headerLines.push(`Replanning handoff: ${taskHeaderView.replanningHandoff}`);
   }
 
-  if (workflowAction === 'reuse' && trimString(waitingTask?.workflow_template_id)) {
-    headerLines.push(`Workflow ID: ${trimString(waitingTask?.workflow_template_id)}`);
-    headerLines.push('');
-    headerLines.push(`Preferred reuse: ${reuseGuidanceView.preferredReuse}`);
-    headerLines.push(`Governance selection context: ${reuseGuidanceView.governanceSelectionContext}`);
-    headerLines.push(`Other candidates: ${reuseGuidanceView.reusableCandidatesWithoutNames}`);
-    headerLines.push(`Governance-blocked reuse: ${reuseGuidanceView.governanceBlockedReuse}`);
-    headerLines.push(`Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`);
-    return headerLines.join('\n');
-  }
-
-  headerLines.push(`Workflow Name: ${trimString(waitingTask?.workflow_name) ?? 'Waiting workflow'}`);
-  headerLines.push('');
-  if (reuseGuidanceView.governanceBlockedReuse !== 'none') {
-    headerLines.push(`Governance note: ${reuseGuidanceView.governanceBlockedReuse}.`);
-    headerLines.push(`Governance re-enable guidance: ${reuseGuidanceView.governanceReenableGuidance}`);
-    headerLines.push('');
-  }
-  headerLines.push('### Workflow Description');
-  headerLines.push('');
-  headerLines.push(
-    `Describe the custom workflow that should execute task ${taskHeaderView.taskId} once the session starts.`,
-  );
-  headerLines.push('');
-  headerLines.push('### Steps');
-  headerLines.push('');
-  headerLines.push(
-    '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
-  );
-  headerLines.push(
-    '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
-  );
-  headerLines.push(
-    '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
-  );
-  return headerLines.join('\n');
+  return [...headerLines, ...actionView.bodyLines].join('\n');
 }
 
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {

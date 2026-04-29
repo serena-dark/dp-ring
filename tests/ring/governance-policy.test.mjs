@@ -33,6 +33,7 @@ import {
   describeWorkflowPreparationPayloadWaitingTask,
   describeWorkflowPreparationScaffoldTask,
   buildWorkflowPreparationReuseGuidanceView,
+  buildWorkflowPreparationScaffoldActionView,
   buildWorkflowPreparationTaskHeaderView,
   describeWorkflowReuseGovernanceBlock,
   describeWorkflowReuseGovernanceBlockList,
@@ -2620,6 +2621,21 @@ describe('governance policy', () => {
           'wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
       },
     );
+    assert.deepEqual(
+      buildWorkflowPreparationScaffoldActionView(reusePayloadTask),
+      {
+        workflowAction: 'reuse',
+        bodyLines: [
+          'Workflow ID: wf-selected',
+          '',
+          'Preferred reuse: wf-selected (Selected Workflow) rank 7 via governance_prefer_effective_force. Preferred because stronger checkpoint force carried less policy risk.',
+          'Governance selection context: basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-selected (Selected Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 19 | compared: wf-compared (Compared Workflow) | policy: branch_budget=1 | governance_pressure_score: 1220 | effective_force_score: 13',
+          'Other candidates: wf-selected, wf-roomier',
+          'Governance-blocked reuse: wf-budget-hold (Branch Budget Template) last exhausted branch_budget=0 at active checkpoint cp-budget-hold under tight workflow_tightness / strong oversight, so automatic reuse stays blocked until a later run clears that constraint',
+          'Governance re-enable guidance: wf-budget-hold (Branch Budget Template) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+        ],
+      },
+    );
     assert.equal(
       describeWorkflowPreparationPayloadWaitingTask(reusePayloadTask),
       '- task-docs: Governed docs delivery\n'
@@ -2671,6 +2687,28 @@ describe('governance policy', () => {
         ],
       },
     );
+    assert.deepEqual(
+      buildWorkflowPreparationScaffoldActionView(createPayloadTask),
+      {
+        workflowAction: 'create',
+        bodyLines: [
+          'Workflow Name: Fresh workflow design Delivery Flow',
+          '',
+          'Governance note: wf-lineage-hold (Warm Lineage Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse.',
+          'Governance re-enable guidance: wf-lineage-hold (Warm Lineage Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+          '',
+          '### Workflow Description',
+          '',
+          'Describe the custom workflow that should execute task task-fresh once the session starts.',
+          '',
+          '### Steps',
+          '',
+          '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
+          '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
+          '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
+        ],
+      },
+    );
     assert.equal(
       describeWorkflowPreparationScaffoldTask(createPayloadTask),
       '## Task task-fresh: Fresh workflow design\n'
@@ -2686,6 +2724,63 @@ describe('governance policy', () => {
         + '### Workflow Description\n'
         + '\n'
         + 'Describe the custom workflow that should execute task task-fresh once the session starts.\n'
+        + '\n'
+        + '### Steps\n'
+        + '\n'
+        + '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan\n'
+        + '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output\n'
+        + '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
+    );
+  });
+
+  it('normalizes workflow-preparation scaffold actions back to create when reuse metadata is incomplete', () => {
+    assert.deepEqual(
+      buildWorkflowPreparationScaffoldActionView({
+        task_id: ' task-missing-workflow ',
+        task_name: ' Missing workflow id ',
+        task_type: ' planning ',
+        milestone_id: ' ms-gap ',
+        task_document_path: ' docs/tasks/task-missing-workflow/task-missing-workflow.md ',
+        workflow_action: ' reuse ',
+        workflow_name: ' Fallback Workflow Name ',
+      }),
+      {
+        workflowAction: 'create',
+        bodyLines: [
+          'Workflow Name: Fallback Workflow Name',
+          '',
+          '### Workflow Description',
+          '',
+          'Describe the custom workflow that should execute task task-missing-workflow once the session starts.',
+          '',
+          '### Steps',
+          '',
+          '- s1 | inspect | Review the task document and requirement context | inputs: task-document, requirement-document | outputs: scoped-plan',
+          '- s2 | execute | Produce the task deliverable | inputs: scoped-plan | outputs: candidate-output',
+          '- s3 | verify | Validate the task output against acceptance criteria | inputs: candidate-output, acceptance-criteria | outputs: verification-report',
+        ],
+      },
+    );
+    assert.equal(
+      describeWorkflowPreparationScaffoldTask({
+        task_id: ' task-missing-workflow ',
+        task_name: ' Missing workflow id ',
+        task_type: ' planning ',
+        milestone_id: ' ms-gap ',
+        task_document_path: ' docs/tasks/task-missing-workflow/task-missing-workflow.md ',
+        workflow_action: ' reuse ',
+        workflow_name: ' Fallback Workflow Name ',
+      }),
+      '## Task task-missing-workflow: Missing workflow id\n'
+        + 'Task Type: planning\n'
+        + 'Milestone: ms-gap\n'
+        + 'Task Document: docs/tasks/task-missing-workflow/task-missing-workflow.md\n'
+        + 'Workflow Action: create\n'
+        + 'Workflow Name: Fallback Workflow Name\n'
+        + '\n'
+        + '### Workflow Description\n'
+        + '\n'
+        + 'Describe the custom workflow that should execute task task-missing-workflow once the session starts.\n'
         + '\n'
         + '### Steps\n'
         + '\n'
