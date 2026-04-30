@@ -4074,6 +4074,13 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         : ['launch_failed'].includes(bundle.status)
         ? 'pending'
         : next.session_dispatch.status;
+    if (
+      next.status === 'failed' &&
+      next.current_stage === 'session_dispatch' &&
+      ['ready_queued', 'session_batched', 'session_launched'].includes(bundle.status)
+    ) {
+      next.runtime.last_error = null;
+    }
     if (canonicalWaitingTasks.length > 0) {
       const requirement = await ring.read('requirement', job.requirement_id).catch(() => null);
       if (requirement) {

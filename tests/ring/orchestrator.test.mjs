@@ -991,6 +991,7 @@ Release one ready task so adaptive workflow planning reaches the session-dispatc
 
     assert.equal(retried.status, 'waiting_for_session_dispatch');
     assert.equal(retried.current_stage, 'session_dispatch');
+    assert.equal(retried.runtime.last_error, null);
     assert.equal(retried.session_dispatch.status, 'waiting');
     assert.ok(retried.session_dispatch.dispatch.packet);
     assert.notEqual(
