@@ -1565,6 +1565,85 @@ export function buildWorkflowPreparationMessageEnvelope({
   };
 }
 
+export function buildWorkflowPreparationMessageEnvelopeState({
+  job = null,
+  requirement = {},
+  workflowPreparationPayloadWaitingTaskList = null,
+  workflowDocumentPath = null,
+  inspection = null,
+  protocolVersion = null,
+  traceId = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  callbackPath = null,
+  routing = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const packet = buildWorkflowPreparationMessageEnvelope({
+    job,
+    requirement,
+    workflowPreparationPayloadWaitingTaskList,
+    workflowDocumentPath,
+    protocolVersion,
+    traceId,
+    senderId,
+    senderRole,
+    recipientCard,
+    callbackPath,
+    routing,
+    recipient,
+    dispatchedAt,
+  });
+  const existingWorkflowPreparation =
+    typeof job?.workflow_preparation === 'object' && job.workflow_preparation !== null
+      ? structuredClone(job.workflow_preparation)
+      : {};
+  const existingDispatch =
+    typeof existingWorkflowPreparation.dispatch === 'object'
+      && existingWorkflowPreparation.dispatch !== null
+      ? structuredClone(existingWorkflowPreparation.dispatch)
+      : {};
+  const existingDocument =
+    typeof existingWorkflowPreparation.document === 'object'
+      && existingWorkflowPreparation.document !== null
+      ? structuredClone(existingWorkflowPreparation.document)
+      : {};
+  const signature = trimString(inspection?.signature);
+  const modifiedAt = trimString(inspection?.modified_at);
+  const normalizedDispatchedAt = trimString(dispatchedAt);
+
+  return {
+    packet,
+    workflowPreparation: {
+      ...existingWorkflowPreparation,
+      status: 'planning',
+      parse_error: null,
+      completed_at: null,
+      waiting_tasks: [],
+      generated_workflow_ids: [],
+      reused_workflow_ids: [],
+      dispatch: {
+        ...existingDispatch,
+        packet,
+        last_dispatched_at: normalizedDispatchedAt,
+      },
+      document: {
+        ...existingDocument,
+        exists: Boolean(inspection?.exists),
+        initial_signature: signature,
+        current_signature: signature,
+        last_modified_at: modifiedAt,
+        last_activity_at: modifiedAt,
+        has_observed_progress: false,
+        completion_reason: null,
+        completion_reported_at: null,
+      },
+    },
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks

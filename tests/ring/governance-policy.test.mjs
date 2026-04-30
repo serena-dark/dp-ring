@@ -19,6 +19,7 @@ import {
   buildWorkflowPreparationArtifacts,
   buildWorkflowPreparationMessageEnvelope,
   buildWorkflowPreparationMessageEnvelopeOptions,
+  buildWorkflowPreparationMessageEnvelopeState,
   buildWorkflowPreparationPacket,
   buildWorkflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTask,
@@ -3044,6 +3045,144 @@ describe('governance policy', () => {
       routing: job.routing,
     });
     assert.notEqual(result.routing, job.routing);
+  });
+
+  it('builds workflow-preparation dispatch state from the shared message-envelope and document helpers', () => {
+    const requirement = {
+      id: 'req-governed-docs',
+      data: {
+        name: ' Governed docs delivery ',
+        description: ' Keep workflow-preparation dispatch-state updates under shared governance-policy logic. ',
+        acceptance_criteria: [
+          {
+            description: 'Workflow preparation state should reuse the shared message envelope and document inspection outputs.',
+          },
+        ],
+      },
+    };
+    const job = {
+      id: 'job-governed-workflow-plan',
+      trace: {
+        trace_id: 'trace-governed-workflow-plan',
+      },
+      routing: {
+        policy: 'strict',
+        priority: 'high',
+      },
+      workflow_preparation: {
+        planner_agent_id: 'workflow-architect',
+        status: 'completed',
+        parse_error: 'previous parse error',
+        completed_at: '2026-04-28T02:00:00Z',
+        waiting_tasks: [{ task_id: 'stale-task' }],
+        generated_workflow_ids: ['wf-generated-old'],
+        reused_workflow_ids: ['wf-reused-old'],
+        dispatch: {
+          agent_id: 'workflow-architect',
+          packet: { id: 'pkt-old-workflow-plan' },
+          last_dispatched_at: '2026-04-28T03:00:00Z',
+        },
+        document: {
+          path: 'docs/workflows/plans/req-governed.md',
+          exists: false,
+          initial_signature: 'sig-old-initial',
+          current_signature: 'sig-old-current',
+          last_modified_at: '2026-04-28T04:00:00Z',
+          last_activity_at: '2026-04-28T04:30:00Z',
+          has_observed_progress: true,
+          completion_reason: 'completed',
+          completion_reported_at: '2026-04-28T05:00:00Z',
+          author_hint: 'preserve-me',
+        },
+      },
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: 'docs/plans/workflow-preparation/task-dispatch.md',
+          },
+        },
+      },
+    };
+    const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
+      [{
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      }],
+      new Map(),
+    );
+    const recipientCard = {
+      id: 'workflow-architect',
+      role: 'planner',
+      accepts: ['tasks_to_workflows'],
+    };
+    const inspection = {
+      exists: true,
+      signature: ' sig-workflow-plan ',
+      modified_at: ' 2026-04-29T04:15:16Z ',
+    };
+    const envelopeOptions = buildWorkflowPreparationMessageEnvelopeOptions({
+      config: {
+        message_protocol_version: ' ring.orchestrator.v1 ',
+      },
+      job,
+      senderId: ' dispatch-center ',
+      senderRole: ' orchestrator ',
+      recipientCard,
+      recipient: ' workflow-architect ',
+    });
+    const expectedPacket = buildWorkflowPreparationMessageEnvelope({
+      job,
+      requirement,
+      workflowPreparationPayloadWaitingTaskList: populatedListState,
+      workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+      dispatchedAt: ' 2026-04-29T03:14:15Z ',
+      ...envelopeOptions,
+    });
+
+    assert.deepEqual(
+      buildWorkflowPreparationMessageEnvelopeState({
+        job,
+        requirement,
+        workflowPreparationPayloadWaitingTaskList: populatedListState,
+        workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+        inspection,
+        dispatchedAt: ' 2026-04-29T03:14:15Z ',
+        ...envelopeOptions,
+      }),
+      {
+        packet: expectedPacket,
+        workflowPreparation: {
+          planner_agent_id: 'workflow-architect',
+          status: 'planning',
+          parse_error: null,
+          completed_at: null,
+          waiting_tasks: [],
+          generated_workflow_ids: [],
+          reused_workflow_ids: [],
+          dispatch: {
+            agent_id: 'workflow-architect',
+            packet: expectedPacket,
+            last_dispatched_at: '2026-04-29T03:14:15Z',
+          },
+          document: {
+            path: 'docs/workflows/plans/req-governed.md',
+            exists: true,
+            initial_signature: 'sig-workflow-plan',
+            current_signature: 'sig-workflow-plan',
+            last_modified_at: '2026-04-29T04:15:16Z',
+            last_activity_at: '2026-04-29T04:15:16Z',
+            has_observed_progress: false,
+            completion_reason: null,
+            completion_reported_at: null,
+            author_hint: 'preserve-me',
+          },
+        },
+      },
+    );
   });
 
   it('builds shared workflow-preparation task header state for packet and scaffold renderers', () => {

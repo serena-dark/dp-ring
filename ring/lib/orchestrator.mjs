@@ -11,8 +11,8 @@ import {
   buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
-  buildWorkflowPreparationMessageEnvelope as workflowPreparationMessageEnvelope,
   buildWorkflowPreparationMessageEnvelopeOptions as workflowPreparationMessageEnvelopeCallOptions,
+  buildWorkflowPreparationMessageEnvelopeState as workflowPreparationMessageEnvelopeState,
   buildWorkflowPreparationPacketScaffoldState as workflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
@@ -4614,14 +4614,17 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           ),
         ),
     );
-    const packet = workflowPreparationMessageEnvelope({
+    const dispatchedAt = nowIso();
+    const workflowPreparationDispatchState = workflowPreparationMessageEnvelopeState({
       job,
       requirement,
       workflowPreparationPayloadWaitingTaskList,
       workflowDocumentPath: job.workflow_preparation.document.path,
-      dispatchedAt: nowIso(),
+      inspection,
+      dispatchedAt,
       ...workflowPreparationEnvelopeOptions(job, config, agentCards),
     });
+    const { packet } = workflowPreparationDispatchState;
 
     let next = clone(job);
     next.current_stage = 'workflow_preparation';
@@ -4630,22 +4633,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       (intervention) => intervention.stage === 'workflow_preparation',
       'Workflow preparation redispatched.',
     );
-    next.workflow_preparation.status = 'planning';
-    next.workflow_preparation.parse_error = null;
-    next.workflow_preparation.completed_at = null;
-    next.workflow_preparation.waiting_tasks = [];
-    next.workflow_preparation.generated_workflow_ids = [];
-    next.workflow_preparation.reused_workflow_ids = [];
-    next.workflow_preparation.dispatch.packet = packet;
-    next.workflow_preparation.dispatch.last_dispatched_at = nowIso();
-    next.workflow_preparation.document.exists = inspection.exists;
-    next.workflow_preparation.document.initial_signature = inspection.signature;
-    next.workflow_preparation.document.current_signature = inspection.signature;
-    next.workflow_preparation.document.last_modified_at = inspection.modified_at;
-    next.workflow_preparation.document.last_activity_at = inspection.modified_at;
-    next.workflow_preparation.document.has_observed_progress = false;
-    next.workflow_preparation.document.completion_reason = null;
-    next.workflow_preparation.document.completion_reported_at = null;
+    next.workflow_preparation = workflowPreparationDispatchState.workflowPreparation;
     next.session_dispatch = emptySessionDispatch();
     next.runtime = {
       ...touchRuntime(next.runtime, config),
