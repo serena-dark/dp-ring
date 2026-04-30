@@ -1409,6 +1409,44 @@ export function buildWorkflowPreparationWaitingTaskListRenderView(
   };
 }
 
+export function buildWorkflowPreparationPacketScaffoldState({
+  requirement = {},
+  workflowPreparationPayloadWaitingTaskList = null,
+  workflowDocumentPath = null,
+  taskDispatchDocumentPath = null,
+} = {}) {
+  const promptRenderView = buildWorkflowPreparationPromptRenderView(
+    requirement,
+    workflowDocumentPath,
+    taskDispatchDocumentPath,
+  );
+  const waitingTaskListRenderView = buildWorkflowPreparationWaitingTaskListRenderView(
+    workflowPreparationPayloadWaitingTaskList,
+  );
+
+  return {
+    payloadWaitingTasks: waitingTaskListRenderView.payloadWaitingTasks,
+    packetSubject: promptRenderView.packetSubject,
+    packetBody: [
+      promptRenderView.packetRequirementLine,
+      promptRenderView.packetWorkflowPlanLine,
+      '',
+      promptRenderView.packetTaskHeading,
+      promptRenderView.assignmentGoalText,
+      '',
+      promptRenderView.packetWaitingTaskHeading,
+      waitingTaskListRenderView.payloadTaskListText,
+      '',
+      promptRenderView.outputContractHeading,
+      ...promptRenderView.outputContractLines,
+      '',
+      promptRenderView.rulesHeading,
+      ...promptRenderView.ruleLines,
+    ].join('\n'),
+    scaffoldText: `# ${promptRenderView.scaffoldTitle}\n\n${promptRenderView.scaffoldRequirementLine}\n${promptRenderView.scaffoldTaskDispatchSourceLine}\n\n${promptRenderView.scaffoldGoalHeading}\n\n${promptRenderView.assignmentGoalText}\n\n${waitingTaskListRenderView.scaffoldTaskSectionsText}\n`,
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks

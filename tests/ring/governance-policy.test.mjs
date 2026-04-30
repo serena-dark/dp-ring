@@ -16,6 +16,7 @@ import {
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTask,
   buildWorkflowPreparationPayloadWaitingTaskListState,
   buildWorkflowPreparationPromptRenderView,
@@ -2747,6 +2748,66 @@ describe('governance policy', () => {
           + '### Steps\n'
           + '\n'
           + '- s1 | inspect | Review the waiting task set | inputs: task-document | outputs: scoped-plan',
+      },
+    );
+  });
+
+  it('builds shared workflow-preparation packet/scaffold state from prompt and waiting-task helpers', () => {
+    const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
+      [{
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      }],
+      new Map(),
+    );
+    const promptRenderView = buildWorkflowPreparationPromptRenderView(
+      {
+        id: ' req-governed ',
+        data: {
+          name: ' Governed docs delivery ',
+        },
+      },
+      ' docs/workflows/plans/req-governed.md ',
+      ' docs/tasks/plans/req-governed.md ',
+    );
+    const waitingTaskListRenderView = buildWorkflowPreparationWaitingTaskListRenderView(populatedListState);
+
+    assert.deepEqual(
+      buildWorkflowPreparationPacketScaffoldState({
+        requirement: {
+          id: ' req-governed ',
+          data: {
+            name: ' Governed docs delivery ',
+          },
+        },
+        workflowPreparationPayloadWaitingTaskList: populatedListState,
+        workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+        taskDispatchDocumentPath: ' docs/tasks/plans/req-governed.md ',
+      }),
+      {
+        payloadWaitingTasks: populatedListState.payloadWaitingTasks,
+        packetSubject: promptRenderView.packetSubject,
+        packetBody: [
+          promptRenderView.packetRequirementLine,
+          promptRenderView.packetWorkflowPlanLine,
+          '',
+          promptRenderView.packetTaskHeading,
+          promptRenderView.assignmentGoalText,
+          '',
+          promptRenderView.packetWaitingTaskHeading,
+          waitingTaskListRenderView.payloadTaskListText,
+          '',
+          promptRenderView.outputContractHeading,
+          ...promptRenderView.outputContractLines,
+          '',
+          promptRenderView.rulesHeading,
+          ...promptRenderView.ruleLines,
+        ].join('\n'),
+        scaffoldText: `# ${promptRenderView.scaffoldTitle}\n\n${promptRenderView.scaffoldRequirementLine}\n${promptRenderView.scaffoldTaskDispatchSourceLine}\n\n${promptRenderView.scaffoldGoalHeading}\n\n${promptRenderView.assignmentGoalText}\n\n${waitingTaskListRenderView.scaffoldTaskSectionsText}\n`,
       },
     );
   });

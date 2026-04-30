@@ -11,9 +11,8 @@ import {
   buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPacketScaffoldState as workflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
-  buildWorkflowPreparationPromptRenderView as workflowPreparationPromptRenderView,
-  buildWorkflowPreparationWaitingTaskListRenderView as workflowPreparationWaitingTaskListRenderView,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
   checkpointEffectiveForceState,
   governanceBatchSignature,
@@ -1532,37 +1531,19 @@ function buildWorkflowPreparationPacket(
   jobId,
   config,
 ) {
-  const {
-    payloadWaitingTasks,
-    payloadTaskListText,
-  } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
-  const promptRenderView = workflowPreparationPromptRenderView(
+  const workflowPreparationRenderState = workflowPreparationPacketScaffoldState({
     requirement,
+    workflowPreparationPayloadWaitingTaskList,
     workflowDocumentPath,
-  );
+  });
 
   return {
     id: `pkt-${jobId}-workflow-plan`,
     recipient: config.workflow_designer_agent_id,
     kind: 'tasks_to_workflows',
-    subject: promptRenderView.packetSubject,
+    subject: workflowPreparationRenderState.packetSubject,
     dispatched_at: nowIso(),
-    body: [
-      promptRenderView.packetRequirementLine,
-      promptRenderView.packetWorkflowPlanLine,
-      '',
-      promptRenderView.packetTaskHeading,
-      promptRenderView.assignmentGoalText,
-      '',
-      promptRenderView.packetWaitingTaskHeading,
-      payloadTaskListText,
-      '',
-      promptRenderView.outputContractHeading,
-      ...promptRenderView.outputContractLines,
-      '',
-      promptRenderView.rulesHeading,
-      ...promptRenderView.ruleLines,
-    ].join('\n'),
+    body: workflowPreparationRenderState.packetBody,
     payload: {
       requirement_id: requirement.id,
       requirement_name: requirement.data.name,
@@ -1570,7 +1551,7 @@ function buildWorkflowPreparationPacket(
       acceptance_criteria: requirement.data.acceptance_criteria,
       document_path: workflowDocumentPath,
       source_document_path: null,
-      waiting_tasks: payloadWaitingTasks,
+      waiting_tasks: workflowPreparationRenderState.payloadWaitingTasks,
     },
   };
 }
@@ -1580,26 +1561,11 @@ function buildWorkflowPreparationScaffold(
   workflowPreparationPayloadWaitingTaskList,
   taskDispatchDocumentPath,
 ) {
-  const {
-    scaffoldTaskSectionsText,
-  } = workflowPreparationWaitingTaskListRenderView(workflowPreparationPayloadWaitingTaskList);
-  const promptRenderView = workflowPreparationPromptRenderView(
+  return workflowPreparationPacketScaffoldState({
     requirement,
-    null,
+    workflowPreparationPayloadWaitingTaskList,
     taskDispatchDocumentPath,
-  );
-
-  return `# ${promptRenderView.scaffoldTitle}
-
-${promptRenderView.scaffoldRequirementLine}
-${promptRenderView.scaffoldTaskDispatchSourceLine}
-
-${promptRenderView.scaffoldGoalHeading}
-
-${promptRenderView.assignmentGoalText}
-
-${scaffoldTaskSectionsText}
-`;
+  }).scaffoldText;
 }
 
 function parseTaskScopedSections(documentText) {
