@@ -1481,6 +1481,90 @@ export function buildWorkflowPreparationPacket({
   };
 }
 
+export function buildWorkflowPreparationArtifacts(job = null) {
+  return [
+    {
+      kind: 'task_dispatch_plan',
+      id: null,
+      path: trimString(job?.post_milestone?.task_dispatch?.document?.path) || null,
+      role: 'source',
+    },
+    {
+      kind: 'workflow_plan',
+      id: null,
+      path: trimString(job?.workflow_preparation?.document?.path) || null,
+      role: 'target',
+    },
+  ];
+}
+
+export function buildWorkflowPreparationMessageEnvelopeOptions({
+  config = null,
+  job = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  recipient = null,
+} = {}) {
+  const jobId = trimString(job?.id);
+  return {
+    protocolVersion: trimString(config?.message_protocol_version) || null,
+    traceId: trimString(job?.trace?.trace_id) || null,
+    senderId: trimString(senderId) || null,
+    senderRole: trimString(senderRole) || null,
+    recipientCard: recipientCard ?? null,
+    callbackPath: jobId ? `/api/orchestrator/jobs/${jobId}/agent-report` : null,
+    routing: job?.routing ?? null,
+    recipient: trimString(recipient) || null,
+  };
+}
+
+export function buildWorkflowPreparationMessageEnvelope({
+  job = null,
+  requirement = {},
+  workflowPreparationPayloadWaitingTaskList = null,
+  workflowDocumentPath = null,
+  protocolVersion = null,
+  traceId = null,
+  senderId = null,
+  senderRole = null,
+  recipientCard = null,
+  callbackPath = null,
+  routing = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const packet = buildWorkflowPreparationPacket({
+    requirement,
+    workflowPreparationPayloadWaitingTaskList,
+    workflowDocumentPath,
+    jobId: job?.id,
+    recipient,
+    dispatchedAt,
+  });
+
+  return {
+    ...packet,
+    protocol_version: trimString(protocolVersion) || null,
+    trace_id: trimString(traceId) || null,
+    sender: {
+      id: trimString(senderId) || null,
+      role: trimString(senderRole) || null,
+    },
+    recipient_card: recipientCard ?? null,
+    callback: {
+      kind: 'orchestrator_agent_report',
+      method: 'POST',
+      path: trimString(callbackPath) || null,
+    },
+    artifacts: buildWorkflowPreparationArtifacts(job),
+    routing:
+      typeof routing === 'object' && routing !== null
+        ? structuredClone(routing)
+        : routing ?? null,
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks

@@ -16,6 +16,9 @@ import {
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationArtifacts,
+  buildWorkflowPreparationMessageEnvelope,
+  buildWorkflowPreparationMessageEnvelopeOptions,
   buildWorkflowPreparationPacket,
   buildWorkflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTask,
@@ -2824,9 +2827,9 @@ describe('governance policy', () => {
     );
   });
 
-  it('builds workflow-preparation packets from shared packet/scaffold state', () => {
+  it('builds shared workflow-preparation packet payloads from shared scaffold state', () => {
     const requirement = {
-      id: ' req-governed ',
+      id: 'req-governed-docs',
       data: {
         name: ' Governed docs delivery ',
         description: ' Keep workflow-preparation packet envelopes under shared governance-policy logic. ',
@@ -2873,6 +2876,174 @@ describe('governance policy', () => {
         payload: renderState.packetPayload,
       },
     );
+  });
+
+  it('builds workflow-preparation artifact descriptors from task-dispatch source and workflow-plan target', () => {
+    const job = {
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: ' docs/plans/workflow-preparation/task-dispatch.md ',
+          },
+        },
+      },
+      workflow_preparation: {
+        document: {
+          path: ' docs/plans/workflow-preparation/workflow-plan.md ',
+        },
+      },
+    };
+
+    assert.deepEqual(buildWorkflowPreparationArtifacts(job), [
+      {
+        kind: 'task_dispatch_plan',
+        id: null,
+        path: 'docs/plans/workflow-preparation/task-dispatch.md',
+        role: 'source',
+      },
+      {
+        kind: 'workflow_plan',
+        id: null,
+        path: 'docs/plans/workflow-preparation/workflow-plan.md',
+        role: 'target',
+      },
+    ]);
+  });
+
+  it('builds workflow-preparation message-envelope options from config, job, and recipient card', () => {
+    const routing = {
+      mode: 'strict',
+      workflow_strategy: 'reuse_strict',
+    };
+    const recipientCard = {
+      id: 'workflow-architect',
+      role: 'planner',
+    };
+
+    const result = buildWorkflowPreparationMessageEnvelopeOptions({
+      config: {
+        message_protocol_version: ' ring.orchestrator.v1 ',
+      },
+      job: {
+        id: ' job-workflow-preparation ',
+        trace: {
+          trace_id: ' trace-workflow-preparation ',
+        },
+        routing,
+      },
+      senderId: ' dispatch-center ',
+      senderRole: ' orchestrator ',
+      recipientCard,
+      recipient: ' workflow-architect ',
+    });
+
+    assert.deepEqual(result, {
+      protocolVersion: 'ring.orchestrator.v1',
+      traceId: 'trace-workflow-preparation',
+      senderId: 'dispatch-center',
+      senderRole: 'orchestrator',
+      recipientCard,
+      callbackPath: '/api/orchestrator/jobs/job-workflow-preparation/agent-report',
+      routing,
+      recipient: 'workflow-architect',
+    });
+    assert.equal(result.routing, routing);
+  });
+
+  it('builds a workflow-preparation message envelope from shared packet/artifact helpers', () => {
+    const requirement = {
+      id: 'req-governed-docs',
+      data: {
+        name: ' Governed docs delivery ',
+        description: ' Keep workflow-preparation dispatch envelopes under shared governance-policy logic. ',
+        acceptance_criteria: [
+          {
+            description: 'The envelope should reuse the shared tasks_to_workflows packet state.',
+          },
+        ],
+      },
+    };
+    const job = {
+      id: 'job-governed-workflow-plan',
+      trace: {
+        trace_id: 'trace-governed-workflow-plan',
+      },
+      routing: {
+        policy: 'strict',
+        priority: 'high',
+      },
+      post_milestone: {
+        task_dispatch: {
+          document: {
+            path: 'docs/plans/workflow-preparation/task-dispatch.md',
+          },
+        },
+      },
+      workflow_preparation: {
+        document: {
+          path: 'docs/plans/workflow-preparation/workflow-plan.md',
+        },
+      },
+    };
+    const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
+      [{
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      }],
+      new Map(),
+    );
+    const recipientCard = {
+      id: 'workflow-architect',
+      role: 'planner',
+      accepts: ['tasks_to_workflows'],
+    };
+    const expectedPacket = buildWorkflowPreparationPacket({
+      requirement,
+      workflowPreparationPayloadWaitingTaskList: populatedListState,
+      workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+      jobId: ' job-governed-workflow-plan ',
+      recipient: ' workflow-architect ',
+      dispatchedAt: ' 2026-04-29T03:14:15Z ',
+    });
+
+    const result = buildWorkflowPreparationMessageEnvelope({
+      job,
+      requirement,
+      workflowPreparationPayloadWaitingTaskList: populatedListState,
+      workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+      recipient: ' workflow-architect ',
+      dispatchedAt: ' 2026-04-29T03:14:15Z ',
+      protocolVersion: ' ring.orchestrator.v1 ',
+      traceId: ' trace-governed-workflow-plan ',
+      senderId: ' dispatch-center ',
+      senderRole: ' orchestrator ',
+      recipientCard,
+      callbackPath: ' /api/orchestrator/jobs/job-governed-workflow-plan/agent-report ',
+      routing: job.routing,
+    });
+
+    assert.deepEqual(result, {
+      ...expectedPacket,
+      protocol_version: 'ring.orchestrator.v1',
+      trace_id: 'trace-governed-workflow-plan',
+      sender: {
+        id: 'dispatch-center',
+        role: 'orchestrator',
+      },
+      recipient_card: recipientCard,
+      callback: {
+        kind: 'orchestrator_agent_report',
+        method: 'POST',
+        path: '/api/orchestrator/jobs/job-governed-workflow-plan/agent-report',
+      },
+      artifacts: buildWorkflowPreparationArtifacts(job),
+      routing: job.routing,
+    });
+    assert.notEqual(result.routing, job.routing);
   });
 
   it('builds shared workflow-preparation task header state for packet and scaffold renderers', () => {

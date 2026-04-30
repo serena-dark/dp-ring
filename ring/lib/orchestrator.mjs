@@ -11,7 +11,8 @@ import {
   buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
-  buildWorkflowPreparationPacket,
+  buildWorkflowPreparationMessageEnvelope as workflowPreparationMessageEnvelope,
+  buildWorkflowPreparationMessageEnvelopeOptions as workflowPreparationMessageEnvelopeCallOptions,
   buildWorkflowPreparationPacketScaffoldState as workflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
@@ -810,6 +811,17 @@ function sessionDispatchEnvelopeState({
     workflowPreparationPayloadWaitingTasks,
     dispatchedAt,
     ...sessionDispatchEnvelopeOptions(job, config, agentCards),
+  });
+}
+
+function workflowPreparationEnvelopeOptions(job, config, agentCards) {
+  return workflowPreparationMessageEnvelopeCallOptions({
+    config,
+    job,
+    senderId: DISPATCH_CENTER_ID,
+    senderRole: 'orchestrator',
+    recipientCard: agentCards.get(config.workflow_designer_agent_id) ?? null,
+    recipient: config.workflow_designer_agent_id,
   });
 }
 
@@ -4602,33 +4614,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           ),
         ),
     );
-    const packet = buildMessageEnvelope(
+    const packet = workflowPreparationMessageEnvelope({
       job,
-      buildWorkflowPreparationPacket({
-        requirement,
-        workflowPreparationPayloadWaitingTaskList,
-        workflowDocumentPath: job.workflow_preparation.document.path,
-        jobId: job.id,
-        recipient: config.workflow_designer_agent_id,
-        dispatchedAt: nowIso(),
-      }),
-      config,
-      agentCards,
-      [
-        {
-          kind: 'task_dispatch_plan',
-          id: null,
-          path: job.post_milestone.task_dispatch.document.path,
-          role: 'source',
-        },
-        {
-          kind: 'workflow_plan',
-          id: null,
-          path: job.workflow_preparation.document.path,
-          role: 'target',
-        },
-      ],
-    );
+      requirement,
+      workflowPreparationPayloadWaitingTaskList,
+      workflowDocumentPath: job.workflow_preparation.document.path,
+      dispatchedAt: nowIso(),
+      ...workflowPreparationEnvelopeOptions(job, config, agentCards),
+    });
 
     let next = clone(job);
     next.current_stage = 'workflow_preparation';
