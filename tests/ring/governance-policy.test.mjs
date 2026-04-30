@@ -3166,6 +3166,7 @@ describe('governance policy', () => {
           dispatch: {
             agent_id: 'workflow-architect',
             packet: expectedPacket,
+            reports: [],
             last_dispatched_at: '2026-04-29T03:14:15Z',
           },
           document: {

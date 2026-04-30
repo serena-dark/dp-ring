@@ -1627,6 +1627,7 @@ export function buildWorkflowPreparationMessageEnvelopeState({
       dispatch: {
         ...existingDispatch,
         packet,
+        reports: [],
         last_dispatched_at: normalizedDispatchedAt,
       },
       document: {

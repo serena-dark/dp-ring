@@ -623,6 +623,218 @@ Serial routing should complete this branch before task dispatch starts.
     assert.ok(afterPrereqs.session_dispatch.waiting_task_ids.length >= 1);
   });
 
+  it('clears stale workflow-preparation dispatch reports, document completion markers, and session-dispatch state when workflow preparation is retried', async () => {
+    const result = await ring.orchestrator.createRequirementDispatch({
+      name: 'Workflow Retry State Reset',
+      description: 'Workflow-preparation retry should reset stale dispatch and waiting-area state before redispatching the planner.',
+      priority: 'high',
+      acceptance_criteria: [
+        { id: 'ac1', description: 'Retry resets planner-facing state', satisfied: false },
+      ],
+      created_by: 'test',
+    });
+
+    await writeFile(
+      join(tempDir, result.job.requirement_document.document.path),
+      `# Workflow Retry State Reset
+
+## Goal
+
+This requirement is complete and ready to continue into milestone planning.
+
+## Acceptance Criteria
+
+- Planner retry should reset stale workflow-preparation state
+- Waiting-area state should be cleared before redispatch
+`,
+      'utf-8',
+    );
+
+    const milestonePlanning = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'writer-agent',
+      status: 'completed',
+      note: 'Requirement document complete.',
+    });
+
+    await writeFile(
+      join(tempDir, milestonePlanning.milestone_plan.document.path),
+      `# Workflow Retry State Reset Milestone Plan
+
+## Planning Context
+
+Break the work into a foundation phase and a delivery phase.
+
+## Milestone 1: Foundation
+
+Capture the baseline coordination and controls.
+
+### Acceptance Checks
+
+- Scope is documented
+
+### Prerequisites
+
+- [human] Stakeholder kickoff is scheduled
+
+## Milestone 2: Delivery
+
+Prepare one dispatchable task for workflow preparation.
+
+### Acceptance Checks
+
+- Delivery work is ready for workflow selection
+`,
+      'utf-8',
+    );
+
+    const postMilestone = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'milestone-planner',
+      status: 'completed',
+      note: 'Milestone plan complete.',
+    });
+
+    await writeFile(
+      join(tempDir, postMilestone.post_milestone.prerequisite_analysis.document.path),
+      `# Workflow Retry State Reset Prerequisite Analysis
+
+## Goal
+
+Release one ready task so workflow preparation completes and session dispatch becomes populated.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder kickoff is scheduled
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: downstream review is still pending
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Delivery
+
+### Ready Now
+
+- [human] Delivery scope is approved
+`,
+      'utf-8',
+    );
+
+    const afterPrereqs = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'prerequisite-preparer',
+      status: 'completed',
+      note: 'Prerequisites complete.',
+    });
+
+    assert.equal(afterPrereqs.status, 'waiting_for_session_dispatch');
+    assert.equal(afterPrereqs.workflow_preparation.status, 'completed');
+    assert.ok(afterPrereqs.workflow_preparation.waiting_tasks.length >= 1);
+    assert.ok(afterPrereqs.session_dispatch.waiting_task_ids.length >= 1);
+
+    const jobPath = join(
+      tempDir,
+      '.ring',
+      'orchestrator',
+      'jobs',
+      `${result.job.id}.json`,
+    );
+    const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+    jobRecord.status = 'workflow_rework_required';
+    jobRecord.current_stage = 'workflow_preparation';
+    jobRecord.workflow_preparation.status = 'rework_required';
+    jobRecord.workflow_preparation.parse_error = 'Retry requested to clear stale waiting-area state.';
+    jobRecord.workflow_preparation.completed_at = '2026-04-30T12:00:00Z';
+    jobRecord.workflow_preparation.dispatch.packet = {
+      id: 'stale-workflow-packet',
+      recipient: 'workflow-architect',
+      body: 'stale workflow-preparation packet body',
+      payload: { waiting_tasks: [] },
+    };
+    jobRecord.workflow_preparation.dispatch.reports = [
+      { agent_id: 'workflow-architect', status: 'completed', note: 'stale planner report' },
+    ];
+    jobRecord.workflow_preparation.dispatch.last_dispatched_at = '2026-04-30T12:01:00Z';
+    jobRecord.workflow_preparation.document.exists = false;
+    jobRecord.workflow_preparation.document.initial_signature = 'stale-initial-signature';
+    jobRecord.workflow_preparation.document.current_signature = 'stale-current-signature';
+    jobRecord.workflow_preparation.document.last_modified_at = '2026-04-30T12:02:00Z';
+    jobRecord.workflow_preparation.document.last_activity_at = '2026-04-30T12:03:00Z';
+    jobRecord.workflow_preparation.document.has_observed_progress = true;
+    jobRecord.workflow_preparation.document.completion_reason = 'completed';
+    jobRecord.workflow_preparation.document.completion_reported_at = '2026-04-30T12:04:00Z';
+    jobRecord.workflow_preparation.document.author_hint = 'preserve-me';
+    jobRecord.session_dispatch.status = 'dispatched';
+    jobRecord.session_dispatch.waiting_task_ids = ['stale-task'];
+    jobRecord.session_dispatch.session_id = 'session-stale';
+    jobRecord.session_dispatch.workflow_run_ids = ['run-stale'];
+    jobRecord.session_dispatch.launched_at = '2026-04-30T12:05:00Z';
+    jobRecord.session_dispatch.dispatch.packet = {
+      id: 'stale-session-dispatch-packet',
+      recipient: 'session-dispatcher',
+      body: 'stale session-dispatch packet body',
+      payload: { waiting_tasks: [{ task_id: 'stale-task' }] },
+    };
+    jobRecord.session_dispatch.dispatch.reports = [
+      { agent_id: 'session-dispatcher', status: 'completed', note: 'stale dispatch report' },
+    ];
+    jobRecord.session_dispatch.dispatch.last_dispatched_at = '2026-04-30T12:06:00Z';
+    await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+    const retried = await ring.orchestrator.retryJob(result.job.id);
+
+    assert.equal(retried.status, 'workflow_dispatched');
+    assert.equal(retried.current_stage, 'workflow_preparation');
+    assert.equal(retried.workflow_preparation.status, 'planning');
+    assert.equal(retried.workflow_preparation.parse_error, null);
+    assert.equal(retried.workflow_preparation.completed_at, null);
+    assert.deepEqual(retried.workflow_preparation.waiting_tasks, []);
+    assert.deepEqual(retried.workflow_preparation.generated_workflow_ids, []);
+    assert.deepEqual(retried.workflow_preparation.reused_workflow_ids, []);
+    assert.equal(retried.workflow_preparation.dispatch.agent_id, 'workflow-architect');
+    assert.ok(retried.workflow_preparation.dispatch.packet);
+    assert.notEqual(retried.workflow_preparation.dispatch.packet.id, 'stale-workflow-packet');
+    assert.notEqual(
+      retried.workflow_preparation.dispatch.last_dispatched_at,
+      '2026-04-30T12:01:00Z',
+    );
+    assert.deepEqual(retried.workflow_preparation.dispatch.reports, []);
+    assert.equal(retried.workflow_preparation.document.exists, true);
+    assert.notEqual(
+      retried.workflow_preparation.document.initial_signature,
+      'stale-initial-signature',
+    );
+    assert.equal(
+      retried.workflow_preparation.document.current_signature,
+      retried.workflow_preparation.document.initial_signature,
+    );
+    assert.notEqual(
+      retried.workflow_preparation.document.last_modified_at,
+      '2026-04-30T12:02:00Z',
+    );
+    assert.equal(
+      retried.workflow_preparation.document.last_activity_at,
+      retried.workflow_preparation.document.last_modified_at,
+    );
+    assert.equal(retried.workflow_preparation.document.has_observed_progress, false);
+    assert.equal(retried.workflow_preparation.document.completion_reason, null);
+    assert.equal(retried.workflow_preparation.document.completion_reported_at, null);
+    assert.equal(retried.workflow_preparation.document.author_hint, 'preserve-me');
+    assert.deepEqual(retried.session_dispatch, {
+      dispatcher_id: 'dispatcher',
+      status: 'pending',
+      dispatch: {
+        agent_id: 'dispatcher',
+        packet: null,
+        reports: [],
+        last_dispatched_at: null,
+      },
+      waiting_task_ids: [],
+      session_id: null,
+      workflow_run_ids: [],
+      launched_at: null,
+    });
+  });
+
   it('distills interventions into a follow-up requirement and redispatches a new job', async () => {
     const result = await ring.orchestrator.createRequirementDispatch({
       name: 'Intervention Follow-up',
