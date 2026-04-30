@@ -2753,6 +2753,18 @@ describe('governance policy', () => {
   });
 
   it('builds shared workflow-preparation packet/scaffold state from prompt and waiting-task helpers', () => {
+    const requirement = {
+      id: ' req-governed ',
+      data: {
+        name: ' Governed docs delivery ',
+        description: ' Keep workflow-preparation payload metadata under one helper. ',
+        acceptance_criteria: [
+          {
+            description: 'Workflow packet payload stays aligned with the shared prompt/render state.',
+          },
+        ],
+      },
+    };
     const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
       [{
         id: ' task-docs ',
@@ -2765,12 +2777,7 @@ describe('governance policy', () => {
       new Map(),
     );
     const promptRenderView = buildWorkflowPreparationPromptRenderView(
-      {
-        id: ' req-governed ',
-        data: {
-          name: ' Governed docs delivery ',
-        },
-      },
+      requirement,
       ' docs/workflows/plans/req-governed.md ',
       ' docs/tasks/plans/req-governed.md ',
     );
@@ -2778,12 +2785,7 @@ describe('governance policy', () => {
 
     assert.deepEqual(
       buildWorkflowPreparationPacketScaffoldState({
-        requirement: {
-          id: ' req-governed ',
-          data: {
-            name: ' Governed docs delivery ',
-          },
-        },
+        requirement,
         workflowPreparationPayloadWaitingTaskList: populatedListState,
         workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
         taskDispatchDocumentPath: ' docs/tasks/plans/req-governed.md ',
@@ -2807,6 +2809,15 @@ describe('governance policy', () => {
           promptRenderView.rulesHeading,
           ...promptRenderView.ruleLines,
         ].join('\n'),
+        packetPayload: {
+          requirement_id: promptRenderView.requirementId,
+          requirement_name: promptRenderView.requirementName,
+          description: requirement.data.description,
+          acceptance_criteria: requirement.data.acceptance_criteria,
+          document_path: promptRenderView.workflowDocumentPath,
+          source_document_path: null,
+          waiting_tasks: populatedListState.payloadWaitingTasks,
+        },
         scaffoldText: `# ${promptRenderView.scaffoldTitle}\n\n${promptRenderView.scaffoldRequirementLine}\n${promptRenderView.scaffoldTaskDispatchSourceLine}\n\n${promptRenderView.scaffoldGoalHeading}\n\n${promptRenderView.assignmentGoalText}\n\n${waitingTaskListRenderView.scaffoldTaskSectionsText}\n`,
       },
     );

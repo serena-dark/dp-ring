@@ -1443,6 +1443,15 @@ export function buildWorkflowPreparationPacketScaffoldState({
       promptRenderView.rulesHeading,
       ...promptRenderView.ruleLines,
     ].join('\n'),
+    packetPayload: {
+      requirement_id: promptRenderView.requirementId,
+      requirement_name: promptRenderView.requirementName,
+      description: requirement?.data?.description,
+      acceptance_criteria: requirement?.data?.acceptance_criteria,
+      document_path: promptRenderView.workflowDocumentPath,
+      source_document_path: null,
+      waiting_tasks: waitingTaskListRenderView.payloadWaitingTasks,
+    },
     scaffoldText: `# ${promptRenderView.scaffoldTitle}\n\n${promptRenderView.scaffoldRequirementLine}\n${promptRenderView.scaffoldTaskDispatchSourceLine}\n\n${promptRenderView.scaffoldGoalHeading}\n\n${promptRenderView.assignmentGoalText}\n\n${waitingTaskListRenderView.scaffoldTaskSectionsText}\n`,
   };
 }

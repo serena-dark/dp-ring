@@ -1544,15 +1544,7 @@ function buildWorkflowPreparationPacket(
     subject: workflowPreparationRenderState.packetSubject,
     dispatched_at: nowIso(),
     body: workflowPreparationRenderState.packetBody,
-    payload: {
-      requirement_id: requirement.id,
-      requirement_name: requirement.data.name,
-      description: requirement.data.description,
-      acceptance_criteria: requirement.data.acceptance_criteria,
-      document_path: workflowDocumentPath,
-      source_document_path: null,
-      waiting_tasks: workflowPreparationRenderState.payloadWaitingTasks,
-    },
+    payload: workflowPreparationRenderState.packetPayload,
   };
 }
 
