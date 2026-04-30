@@ -1337,6 +1337,24 @@ export function buildWorkflowPreparationPromptRenderView(
     ?? 'docs/tasks/plans/pending.md';
   const assignmentGoalText =
     'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.';
+  const outputContractHeading = 'Output contract:';
+  const outputContractLines = [
+    '- Use sections named "## Task <task-id>: <task-name>".',
+    '- Add "Workflow Action: reuse" or "Workflow Action: create".',
+    '- Reuse path: add "Workflow ID: <workflow-id>".',
+    '- Create path: add "Workflow Name: <name>".',
+    '- For created workflows add "### Workflow Description" with a short paragraph.',
+    '- For created workflows add "### Steps" and bullet lines in the format:',
+    '  - <step-id> | <step-name> | <description> | inputs: a, b | outputs: x, y',
+  ];
+  const rulesHeading = 'Rules:';
+  const ruleLines = [
+    '- One task maps to one workflow.',
+    '- Prefer previous templates ranked for the task type.',
+    '- If a reusable workflow is omitted as governance-blocked, do not silently reinstate it; follow governance_reenable_guidance instead.',
+    '- Use the task document and ready prerequisites as the planning context.',
+    '- When finished, report completion back to the orchestrator.',
+  ];
 
   return {
     requirementId,
@@ -1347,6 +1365,10 @@ export function buildWorkflowPreparationPromptRenderView(
     packetRequirementLine: `Requirement ${requirementId}: ${requirementName}`,
     packetWorkflowPlanLine: `Target workflow plan: ${normalizedWorkflowDocumentPath}`,
     assignmentGoalText,
+    outputContractHeading,
+    outputContractLines,
+    rulesHeading,
+    ruleLines,
     scaffoldTitle: `${requirementName} Workflow Preparation`,
     scaffoldRequirementLine: `> Requirement ${requirementId}`,
     scaffoldTaskDispatchSourceLine:
