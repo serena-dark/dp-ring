@@ -11,6 +11,7 @@ import {
   buildWaitingTaskGovernanceViewState,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPacket,
   buildWorkflowPreparationPacketScaffoldState as workflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTaskListState as workflowPreparationPayloadWaitingTaskListState,
   checkpointAutomaticReuseSelectionPolicy as checkpointAutomaticReusePolicy,
@@ -1522,30 +1523,6 @@ ${prerequisites}
 Split milestone prerequisites into "ready now" and "blocked / missing" so the dispatcher can identify safe early tasks.
 
 ${milestoneSections}`;
-}
-
-function buildWorkflowPreparationPacket(
-  requirement,
-  workflowPreparationPayloadWaitingTaskList,
-  workflowDocumentPath,
-  jobId,
-  config,
-) {
-  const workflowPreparationRenderState = workflowPreparationPacketScaffoldState({
-    requirement,
-    workflowPreparationPayloadWaitingTaskList,
-    workflowDocumentPath,
-  });
-
-  return {
-    id: `pkt-${jobId}-workflow-plan`,
-    recipient: config.workflow_designer_agent_id,
-    kind: 'tasks_to_workflows',
-    subject: workflowPreparationRenderState.packetSubject,
-    dispatched_at: nowIso(),
-    body: workflowPreparationRenderState.packetBody,
-    payload: workflowPreparationRenderState.packetPayload,
-  };
 }
 
 function buildWorkflowPreparationScaffold(
@@ -4627,13 +4604,14 @@ function inferTaskTypeFromContext(goal, contextText = '') {
     );
     const packet = buildMessageEnvelope(
       job,
-      buildWorkflowPreparationPacket(
+      buildWorkflowPreparationPacket({
         requirement,
         workflowPreparationPayloadWaitingTaskList,
-        job.workflow_preparation.document.path,
-        job.id,
-        config,
-      ),
+        workflowDocumentPath: job.workflow_preparation.document.path,
+        jobId: job.id,
+        recipient: config.workflow_designer_agent_id,
+        dispatchedAt: nowIso(),
+      }),
       config,
       agentCards,
       [

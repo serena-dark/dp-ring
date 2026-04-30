@@ -16,6 +16,7 @@ import {
   buildSessionDispatchPayloadWaitingTask,
   buildSessionGovernanceContext,
   buildWaitingTaskRecord,
+  buildWorkflowPreparationPacket,
   buildWorkflowPreparationPacketScaffoldState,
   buildWorkflowPreparationPayloadWaitingTask,
   buildWorkflowPreparationPayloadWaitingTaskListState,
@@ -2819,6 +2820,57 @@ describe('governance policy', () => {
           waiting_tasks: populatedListState.payloadWaitingTasks,
         },
         scaffoldText: `# ${promptRenderView.scaffoldTitle}\n\n${promptRenderView.scaffoldRequirementLine}\n${promptRenderView.scaffoldTaskDispatchSourceLine}\n\n${promptRenderView.scaffoldGoalHeading}\n\n${promptRenderView.assignmentGoalText}\n\n${waitingTaskListRenderView.scaffoldTaskSectionsText}\n`,
+      },
+    );
+  });
+
+  it('builds workflow-preparation packets from shared packet/scaffold state', () => {
+    const requirement = {
+      id: ' req-governed ',
+      data: {
+        name: ' Governed docs delivery ',
+        description: ' Keep workflow-preparation packet envelopes under shared governance-policy logic. ',
+        acceptance_criteria: [
+          {
+            description: 'The packet wrapper should reuse the same shared subject/body/payload state.',
+          },
+        ],
+      },
+    };
+    const populatedListState = buildWorkflowPreparationPayloadWaitingTaskListState(
+      [{
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      }],
+      new Map(),
+    );
+    const renderState = buildWorkflowPreparationPacketScaffoldState({
+      requirement,
+      workflowPreparationPayloadWaitingTaskList: populatedListState,
+      workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+    });
+
+    assert.deepEqual(
+      buildWorkflowPreparationPacket({
+        requirement,
+        workflowPreparationPayloadWaitingTaskList: populatedListState,
+        workflowDocumentPath: ' docs/workflows/plans/req-governed.md ',
+        jobId: ' job-governed ',
+        recipient: ' workflow-architect ',
+        dispatchedAt: ' 2026-04-29T03:14:15Z ',
+      }),
+      {
+        id: 'pkt-job-governed-workflow-plan',
+        recipient: 'workflow-architect',
+        kind: 'tasks_to_workflows',
+        subject: renderState.packetSubject,
+        dispatched_at: '2026-04-29T03:14:15Z',
+        body: renderState.packetBody,
+        payload: renderState.packetPayload,
       },
     );
   });

@@ -1456,6 +1456,31 @@ export function buildWorkflowPreparationPacketScaffoldState({
   };
 }
 
+export function buildWorkflowPreparationPacket({
+  requirement = {},
+  workflowPreparationPayloadWaitingTaskList = null,
+  workflowDocumentPath = null,
+  jobId = null,
+  recipient = null,
+  dispatchedAt = null,
+} = {}) {
+  const workflowPreparationRenderState = buildWorkflowPreparationPacketScaffoldState({
+    requirement,
+    workflowPreparationPayloadWaitingTaskList,
+    workflowDocumentPath,
+  });
+
+  return {
+    id: `pkt-${trimString(jobId) || 'unknown-job'}-workflow-plan`,
+    recipient: trimString(recipient) || null,
+    kind: 'tasks_to_workflows',
+    subject: workflowPreparationRenderState.packetSubject,
+    dispatched_at: trimString(dispatchedAt) || null,
+    body: workflowPreparationRenderState.packetBody,
+    payload: workflowPreparationRenderState.packetPayload,
+  };
+}
+
 function workflowPreparationPayloadWaitingTasksFromJob(job = null) {
   return Array.isArray(job?.workflow_preparation?.dispatch?.packet?.payload?.waiting_tasks)
     ? job.workflow_preparation.dispatch.packet.payload.waiting_tasks
