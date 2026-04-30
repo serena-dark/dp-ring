@@ -1863,6 +1863,19 @@ describe('governance policy', () => {
           },
         },
       },
+      session_dispatch: {
+        dispatch: {
+          agent_id: 'dispatcher',
+          reports: [
+            {
+              agent_id: 'dispatcher',
+              status: 'failed',
+              note: 'stale dispatch report',
+            },
+          ],
+          last_dispatched_at: '2026-04-28T16:00:00Z',
+        },
+      },
     };
     const requirement = {
       id: 'req-governed-docs',
@@ -1911,6 +1924,12 @@ describe('governance policy', () => {
       }),
       {
         packet: expectedPacket,
+        dispatch: {
+          agent_id: 'dispatcher',
+          packet: expectedPacket,
+          reports: [],
+          last_dispatched_at: null,
+        },
         waitingTasks: refreshSessionDispatchWaitingTasks([storedWaitingTask], expectedPacket, {
           refreshedWaitingTasks: [dispatchWaitingTask],
           dispatchedAt,

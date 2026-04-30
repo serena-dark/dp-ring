@@ -1989,6 +1989,7 @@ export function buildSessionDispatchMessageEnvelopeState({
   routing = null,
   recipient = null,
   dispatchedAt = null,
+  dispatchRecordedAt = null,
 } = {}) {
   const waitingTasksForPacket = Array.isArray(dispatchWaitingTasks)
     ? dispatchWaitingTasks
@@ -1998,6 +1999,14 @@ export function buildSessionDispatchMessageEnvelopeState({
   const waitingTasksForRefresh = Array.isArray(refreshedWaitingTasks)
     ? refreshedWaitingTasks
     : waitingTasksForPacket;
+  const existingSessionDispatch =
+    typeof job?.session_dispatch === 'object' && job.session_dispatch !== null
+      ? structuredClone(job.session_dispatch)
+      : {};
+  const existingDispatch =
+    typeof existingSessionDispatch.dispatch === 'object' && existingSessionDispatch.dispatch !== null
+      ? structuredClone(existingSessionDispatch.dispatch)
+      : {};
   const packet = buildSessionDispatchMessageEnvelope({
     job,
     requirement,
@@ -2013,9 +2022,16 @@ export function buildSessionDispatchMessageEnvelopeState({
     recipient,
     dispatchedAt,
   });
+  const normalizedDispatchRecordedAt = trimString(dispatchRecordedAt);
 
   return {
     packet,
+    dispatch: {
+      ...existingDispatch,
+      packet,
+      reports: [],
+      last_dispatched_at: normalizedDispatchRecordedAt,
+    },
     waitingTasks: refreshSessionDispatchWaitingTasks(storedWaitingTasks, packet, {
       refreshedWaitingTasks: waitingTasksForRefresh,
       dispatchedAt,

@@ -835,6 +835,187 @@ Release one ready task so workflow preparation completes and session dispatch be
     });
   });
 
+  it('clears stale session-dispatch reports when a session-dispatch retry resyncs from the adaptive waiting area', async () => {
+    const result = await ring.orchestrator.createRequirementDispatch({
+      name: 'Adaptive Session Dispatch Retry Reset',
+      description: 'Session-dispatch retry should rebuild waiting-area state from the adaptive bundle without carrying stale dispatch reports forward.',
+      priority: 'high',
+      acceptance_criteria: [
+        { id: 'ac1', description: 'Adaptive retry resets stale session-dispatch state', satisfied: false },
+      ],
+      created_by: 'test',
+    });
+
+    await writeFile(
+      join(tempDir, result.job.requirement_document.document.path),
+      `# Adaptive Session Dispatch Retry Reset
+
+## Goal
+
+Create one ready task so adaptive workflow planning reaches the waiting area.
+
+## Acceptance Criteria
+
+- Session-dispatch retry rebuilds the waiting area from the adaptive bundle
+- Stale dispatch reports do not survive the retry
+`,
+      'utf-8',
+    );
+
+    const milestonePlanning = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'writer-agent',
+      status: 'completed',
+      note: 'Requirement document complete.',
+    });
+
+    await writeFile(
+      join(tempDir, milestonePlanning.milestone_plan.document.path),
+      `# Adaptive Session Dispatch Retry Reset Milestone Plan
+
+## Planning Context
+
+Break the work into a foundation phase and a delivery phase.
+
+## Milestone 1: Foundation
+
+Capture the baseline coordination and controls.
+
+### Acceptance Checks
+
+- Scope is documented
+
+### Prerequisites
+
+- [human] Stakeholder kickoff is scheduled
+
+## Milestone 2: Delivery
+
+Prepare one dispatchable task for adaptive workflow preparation.
+
+### Acceptance Checks
+
+- Delivery work is ready for workflow selection
+`,
+      'utf-8',
+    );
+
+    const postMilestone = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'milestone-planner',
+      status: 'completed',
+      note: 'Milestone plan complete.',
+    });
+
+    await writeFile(
+      join(tempDir, postMilestone.post_milestone.prerequisite_analysis.document.path),
+      `# Adaptive Session Dispatch Retry Reset Prerequisite Analysis
+
+## Goal
+
+Release one ready task so adaptive workflow planning reaches the session-dispatch waiting area.
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[0]}: Foundation
+
+### Ready Now
+
+- [human] Stakeholder kickoff is scheduled
+
+### Blocked / Missing
+
+- [reference] API contract is published | reason: downstream review is still pending
+
+## Milestone ${postMilestone.milestone_plan.generated_milestone_ids[1]}: Delivery
+
+### Ready Now
+
+- [human] Delivery scope is approved
+`,
+      'utf-8',
+    );
+
+    const afterPrereqs = await ring.orchestrator.reportAgent(result.job.id, {
+      agent_id: 'prerequisite-preparer',
+      status: 'completed',
+      note: 'Prerequisites complete.',
+    });
+
+    assert.equal(afterPrereqs.status, 'waiting_for_session_dispatch');
+    assert.ok(afterPrereqs.adaptive_dispatch.bundle_id);
+    assert.ok(afterPrereqs.session_dispatch.waiting_task_ids.length >= 1);
+
+    const jobPath = join(
+      tempDir,
+      '.ring',
+      'orchestrator',
+      'jobs',
+      `${result.job.id}.json`,
+    );
+    const bundlePath = join(
+      tempDir,
+      '.ring',
+      'orchestrator',
+      'bundles',
+      `${afterPrereqs.adaptive_dispatch.bundle_id}.json`,
+    );
+    const jobRecord = JSON.parse(await readFile(jobPath, 'utf-8'));
+    const bundleRecord = JSON.parse(await readFile(bundlePath, 'utf-8'));
+
+    bundleRecord.status = 'ready_queued';
+    bundleRecord.batching.status = 'queued';
+    bundleRecord.batching.error = null;
+    bundleRecord.batching.session_id = null;
+    bundleRecord.batching.workflow_run_ids = [];
+    bundleRecord.batching.launched_at = null;
+    await writeFile(bundlePath, `${JSON.stringify(bundleRecord, null, 2)}\n`, 'utf-8');
+
+    jobRecord.status = 'failed';
+    jobRecord.current_stage = 'session_dispatch';
+    jobRecord.runtime.last_error = 'Old batch launch failure should be cleared by adaptive resync.';
+    jobRecord.session_dispatch.status = 'pending';
+    jobRecord.session_dispatch.waiting_task_ids = ['stale-task'];
+    jobRecord.session_dispatch.session_id = 'session-stale';
+    jobRecord.session_dispatch.workflow_run_ids = ['run-stale'];
+    jobRecord.session_dispatch.launched_at = '2026-04-30T12:05:00Z';
+    jobRecord.session_dispatch.dispatch.packet = {
+      id: 'stale-session-dispatch-packet',
+      recipient: 'session-dispatcher',
+      body: 'stale session-dispatch packet body',
+      payload: { waiting_tasks: [{ task_id: 'stale-task' }] },
+    };
+    jobRecord.session_dispatch.dispatch.reports = [
+      { agent_id: 'session-dispatcher', status: 'failed', note: 'stale dispatch report' },
+    ];
+    jobRecord.session_dispatch.dispatch.last_dispatched_at = '2026-04-30T12:06:00Z';
+    await writeFile(jobPath, `${JSON.stringify(jobRecord, null, 2)}\n`, 'utf-8');
+
+    const retried = await ring.orchestrator.retryJob(result.job.id);
+
+    assert.equal(retried.status, 'waiting_for_session_dispatch');
+    assert.equal(retried.current_stage, 'session_dispatch');
+    assert.equal(retried.session_dispatch.status, 'waiting');
+    assert.ok(retried.session_dispatch.dispatch.packet);
+    assert.notEqual(
+      retried.session_dispatch.dispatch.packet.body,
+      'stale session-dispatch packet body',
+    );
+    assert.deepEqual(retried.session_dispatch.dispatch.reports, []);
+    assert.equal(retried.session_dispatch.dispatch.last_dispatched_at, null);
+    assert.deepEqual(
+      retried.session_dispatch.waiting_task_ids,
+      retried.workflow_preparation.waiting_tasks.map((item) => item.task_id),
+    );
+    assert.equal(retried.session_dispatch.session_id, null);
+    assert.deepEqual(retried.session_dispatch.workflow_run_ids, []);
+    assert.equal(retried.session_dispatch.launched_at, null);
+    assert.ok(
+      Array.isArray(retried.session_dispatch.dispatch.packet.payload.waiting_tasks),
+    );
+    assert.ok(
+      retried.session_dispatch.dispatch.packet.payload.waiting_tasks.every(
+        (item) => item.task_id !== 'stale-task',
+      ),
+    );
+  });
+
   it('distills interventions into a follow-up requirement and redispatches a new job', async () => {
     const result = await ring.orchestrator.createRequirementDispatch({
       name: 'Intervention Follow-up',

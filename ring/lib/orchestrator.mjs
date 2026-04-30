@@ -4086,7 +4086,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         const agentCards = mapAgentCards(await getAgents(config));
         const dispatchedAt = nowIso();
         const {
-          packet: sessionDispatchPacket,
+          dispatch: sessionDispatchDispatch,
           waitingTasks: refreshedWaitingTasks,
         } = sessionDispatchEnvelopeState({
           job,
@@ -4096,8 +4096,12 @@ function inferTaskTypeFromContext(goal, contextText = '') {
           config,
           agentCards,
           dispatchedAt,
+          dispatchRecordedAt:
+            bundle.status === 'session_launched'
+              ? bundle.batching.launched_at ?? null
+              : null,
         });
-        next.session_dispatch.dispatch.packet = sessionDispatchPacket;
+        next.session_dispatch.dispatch = sessionDispatchDispatch;
         next.workflow_preparation.waiting_tasks = refreshedWaitingTasks;
       }
     }
@@ -4825,7 +4829,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const agentCards = mapAgentCards(await getAgents(config));
       const dispatchedAt = nowIso();
       const {
-        packet: batchPacket,
+        dispatch: sessionDispatchDispatch,
         waitingTasks: refreshedWaitingTasks,
       } = sessionDispatchEnvelopeState({
         job,
@@ -4835,6 +4839,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         config,
         agentCards,
         dispatchedAt,
+        dispatchRecordedAt: null,
       });
       let next = clone(job);
       next.workflow_preparation.status = 'completed';
@@ -4848,8 +4853,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       next.session_dispatch.session_id = null;
       next.session_dispatch.workflow_run_ids = [];
       next.session_dispatch.launched_at = null;
-      next.session_dispatch.dispatch.packet = batchPacket;
-      next.session_dispatch.dispatch.last_dispatched_at = null;
+      next.session_dispatch.dispatch = sessionDispatchDispatch;
       next.current_stage = 'session_dispatch';
       next.updated_at = nowIso();
       closeTraceStage(
@@ -4862,7 +4866,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         stage: 'session_dispatch',
         kind: 'dispatch',
         agent_id: SESSION_DISPATCHER_ID,
-        packet_id: batchPacket.id,
+        packet_id: sessionDispatchDispatch.packet.id,
         note: `${waitingTasks.length} tasks are waiting for the next batch launch.`,
       });
       next = transitionJob(
@@ -5067,7 +5071,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
       const agentCards = mapAgentCards(await getAgents(config));
       const dispatchedAt = nowIso();
       const {
-        packet: sessionDispatchPacket,
+        dispatch: sessionDispatchDispatch,
         waitingTasks: refreshedWaitingTasks,
       } = sessionDispatchEnvelopeState({
         job,
@@ -5079,9 +5083,9 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         config,
         agentCards,
         dispatchedAt,
+        dispatchRecordedAt: dispatchedAt,
       });
-      next.session_dispatch.dispatch.packet = sessionDispatchPacket;
-      next.session_dispatch.dispatch.last_dispatched_at = dispatchedAt;
+      next.session_dispatch.dispatch = sessionDispatchDispatch;
       next.workflow_preparation.waiting_tasks = refreshedWaitingTasks;
       closeTraceStage(
         next,
