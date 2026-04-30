@@ -1337,6 +1337,8 @@ export function buildWorkflowPreparationPromptRenderView(
     ?? 'docs/tasks/plans/pending.md';
   const assignmentGoalText =
     'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.';
+  const packetTaskHeading = 'Task:';
+  const packetWaitingTaskHeading = 'Tasks waiting for workflow assignment:';
   const outputContractHeading = 'Output contract:';
   const outputContractLines = [
     '- Use sections named "## Task <task-id>: <task-name>".',
@@ -1364,6 +1366,8 @@ export function buildWorkflowPreparationPromptRenderView(
     packetSubject: `Assign reusable or custom workflows for requirement ${requirementId}`,
     packetRequirementLine: `Requirement ${requirementId}: ${requirementName}`,
     packetWorkflowPlanLine: `Target workflow plan: ${normalizedWorkflowDocumentPath}`,
+    packetTaskHeading,
+    packetWaitingTaskHeading,
     assignmentGoalText,
     outputContractHeading,
     outputContractLines,
@@ -1373,6 +1377,7 @@ export function buildWorkflowPreparationPromptRenderView(
     scaffoldRequirementLine: `> Requirement ${requirementId}`,
     scaffoldTaskDispatchSourceLine:
       `> Task dispatch source: ${normalizedTaskDispatchDocumentPath}`,
+    scaffoldGoalHeading: '## Goal',
   };
 }
 

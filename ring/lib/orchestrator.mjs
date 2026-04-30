@@ -1551,10 +1551,10 @@ function buildWorkflowPreparationPacket(
       promptRenderView.packetRequirementLine,
       promptRenderView.packetWorkflowPlanLine,
       '',
-      'Task:',
+      promptRenderView.packetTaskHeading,
       promptRenderView.assignmentGoalText,
       '',
-      'Tasks waiting for workflow assignment:',
+      promptRenderView.packetWaitingTaskHeading,
       payloadTaskListText,
       '',
       promptRenderView.outputContractHeading,
@@ -1594,7 +1594,7 @@ function buildWorkflowPreparationScaffold(
 ${promptRenderView.scaffoldRequirementLine}
 ${promptRenderView.scaffoldTaskDispatchSourceLine}
 
-## Goal
+${promptRenderView.scaffoldGoalHeading}
 
 ${promptRenderView.assignmentGoalText}
 

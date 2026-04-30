@@ -2635,6 +2635,8 @@ describe('governance policy', () => {
         packetSubject: 'Assign reusable or custom workflows for requirement req-governed',
         packetRequirementLine: 'Requirement req-governed: Governed docs delivery',
         packetWorkflowPlanLine: 'Target workflow plan: docs/workflows/plans/req-governed.md',
+        packetTaskHeading: 'Task:',
+        packetWaitingTaskHeading: 'Tasks waiting for workflow assignment:',
         assignmentGoalText:
           'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.',
         outputContractHeading: 'Output contract:',
@@ -2658,6 +2660,7 @@ describe('governance policy', () => {
         scaffoldTitle: 'Governed docs delivery Workflow Preparation',
         scaffoldRequirementLine: '> Requirement req-governed',
         scaffoldTaskDispatchSourceLine: '> Task dispatch source: docs/tasks/plans/req-governed.md',
+        scaffoldGoalHeading: '## Goal',
       },
     );
 
@@ -2671,6 +2674,8 @@ describe('governance policy', () => {
         packetSubject: 'Assign reusable or custom workflows for requirement pending',
         packetRequirementLine: 'Requirement pending: Untitled requirement',
         packetWorkflowPlanLine: 'Target workflow plan: docs/workflows/plans/pending.md',
+        packetTaskHeading: 'Task:',
+        packetWaitingTaskHeading: 'Tasks waiting for workflow assignment:',
         assignmentGoalText:
           'Assign exactly one workflow to each waiting task. Reuse ranked templates when possible, otherwise define a custom workflow.',
         outputContractHeading: 'Output contract:',
@@ -2694,6 +2699,7 @@ describe('governance policy', () => {
         scaffoldTitle: 'Untitled requirement Workflow Preparation',
         scaffoldRequirementLine: '> Requirement pending',
         scaffoldTaskDispatchSourceLine: '> Task dispatch source: docs/tasks/plans/pending.md',
+        scaffoldGoalHeading: '## Goal',
       },
     );
   });
