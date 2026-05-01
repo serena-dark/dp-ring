@@ -1258,19 +1258,14 @@ function workflowPreparationReusableCandidates(recommendation) {
 }
 
 function describeWorkflowPreparationReusableCandidates(waitingTask, includeNames = true) {
-  if (!Array.isArray(waitingTask?.reusable_candidates) || waitingTask.reusable_candidates.length === 0) {
+  const reusableCandidates = canonicalizeWaitingTaskReusableCandidates(waitingTask);
+  if (reusableCandidates.length === 0) {
     return 'none';
   }
-  return waitingTask.reusable_candidates
-    .map((item) => {
-      const workflowId = trimString(item?.id);
-      const workflowName = trimString(item?.name) ?? workflowId;
-      if (!workflowId) {
-        return null;
-      }
-      return includeNames ? `${workflowId} (${workflowName})` : workflowId;
-    })
-    .filter(Boolean)
+  return reusableCandidates
+    .map((item) => (
+      includeNames ? `${item.id} (${item.name})` : item.id
+    ))
     .join(', ');
 }
 

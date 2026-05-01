@@ -3739,6 +3739,44 @@ describe('governance policy', () => {
     );
   });
 
+  it('canonicalizes workflow-preparation reusable candidate render guidance from legacy waiting-task payloads', () => {
+    assert.deepEqual(
+      buildWorkflowPreparationReuseGuidanceView({
+        reusable_candidates: [
+          {
+            workflow_template_id: ' wf-selected ',
+            workflow_name: ' Selected Workflow Legacy Alias ',
+          },
+          {
+            id: ' wf-roomier ',
+            name: ' Roomier Template ',
+          },
+          {
+            id: ' wf-selected ',
+            name: ' Selected Workflow Stale ',
+          },
+          {
+            workflow_template_id: ' wf-roomier ',
+            workflow_name: ' Roomier Template Stale Alias ',
+          },
+        ],
+        canonical_workflow_name_overrides: {
+          'wf-selected': 'Selected Workflow Canonical',
+          'wf-roomier': 'Roomier Template Canonical',
+        },
+      }),
+      {
+        preferredReuse: 'No ranked workflow recommendation yet.',
+        governanceSelectionContext: 'none',
+        reusableCandidatesWithNames:
+          'wf-selected (Selected Workflow Canonical), wf-roomier (Roomier Template Canonical)',
+        reusableCandidatesWithoutNames: 'wf-selected, wf-roomier',
+        governanceBlockedReuse: 'none',
+        governanceReenableGuidance: 'none',
+      },
+    );
+  });
+
   it('normalizes workflow-preparation scaffold actions back to create when reuse metadata is incomplete', () => {
     assert.deepEqual(
       buildWorkflowPreparationScaffoldActionView({
