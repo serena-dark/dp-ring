@@ -580,7 +580,7 @@ describe('governance policy', () => {
           branch_budget: 3,
           governance_pressure_score: 1206,
         },
-        14,
+        { effectiveForceScore: 14, lineageDepth: 4 },
         { id: 'wf-tight-template', data: { name: 'Tight Template' } },
         {
           constrained: true,
@@ -589,7 +589,7 @@ describe('governance policy', () => {
           branch_budget: 1,
           governance_pressure_score: 1228,
         },
-        Number.NaN,
+        { effectiveForceScore: Number.NaN, lineageDepth: 2 },
       ),
       {
         basis: 'governance_minimize_policy_carryover',
@@ -599,6 +599,7 @@ describe('governance policy', () => {
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          lineage_depth: 4,
         },
         compared: {
           workflow_id: 'wf-tight-template',
@@ -606,6 +607,7 @@ describe('governance policy', () => {
           policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
           governance_pressure_score: 1228,
           effective_force_score: 0,
+          lineage_depth: 2,
         },
       },
     );
@@ -674,11 +676,13 @@ describe('governance policy', () => {
       effectiveForceByTemplate: new Map([
         ['wf-tight-template', {
           effectiveForceScore: 13,
+          lineageDepth: 3,
           divergenceScore: 2,
           composabilityScore: 0,
         }],
         ['wf-roomier-template', {
           effectiveForceScore: 14,
+          lineageDepth: 4,
           divergenceScore: 1,
           composabilityScore: 2,
         }],
@@ -704,6 +708,7 @@ describe('governance policy', () => {
         policy: 'branch_budget=3',
         governance_pressure_score: 1206,
         effective_force_score: 14,
+        lineage_depth: 4,
         divergence_score: 1,
         composability_score: 2,
       },
@@ -713,6 +718,7 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 13,
+        lineage_depth: 3,
         divergence_score: 2,
         composability_score: 0,
       },
@@ -745,11 +751,13 @@ describe('governance policy', () => {
       effectiveForceByTemplate: new Map([
         ['wf-strong-force-template', {
           effectiveForceScore: 19,
+          lineageDepth: 5,
           divergenceScore: 1,
           composabilityScore: 3,
         }],
         ['wf-weaker-force-template', {
           effectiveForceScore: 13,
+          lineageDepth: 2,
           divergenceScore: 3,
           composabilityScore: 0,
         }],
@@ -775,6 +783,7 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 19,
+        lineage_depth: 5,
         divergence_score: 1,
         composability_score: 3,
       },
@@ -784,6 +793,7 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 13,
+        lineage_depth: 2,
         divergence_score: 3,
         composability_score: 0,
       },
@@ -814,6 +824,7 @@ describe('governance policy', () => {
           policy: ' branch_budget=3 ',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          lineage_depth: 4,
         },
         compared: {
           workflow_id: ' wf-tight-template ',
@@ -821,6 +832,7 @@ describe('governance policy', () => {
           policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
           governance_pressure_score: 1228,
           effective_force_score: Number.NaN,
+          lineage_depth: 2,
         },
       },
       governance_blocked_reuse: [
@@ -866,6 +878,7 @@ describe('governance policy', () => {
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          lineage_depth: 4,
         },
         compared: {
           workflow_id: 'wf-tight-template',
@@ -873,6 +886,7 @@ describe('governance policy', () => {
           policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
           governance_pressure_score: 1228,
           effective_force_score: 0,
+          lineage_depth: 2,
         },
       },
       governance_blocked_reuse: [{
@@ -914,6 +928,7 @@ describe('governance policy', () => {
             policy: ' branch_budget=3 ',
             governance_pressure_score: 1206,
             effective_force_score: 14,
+            lineage_depth: 4,
           },
           compared: {
             workflow_id: ' wf-tight-template ',
@@ -921,6 +936,7 @@ describe('governance policy', () => {
             policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
             governance_pressure_score: 1228,
             effective_force_score: Number.NaN,
+            lineage_depth: 2,
           },
         },
       },
@@ -967,6 +983,7 @@ describe('governance policy', () => {
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          lineage_depth: 4,
         },
         compared: {
           workflow_id: 'wf-tight-template',
@@ -974,6 +991,7 @@ describe('governance policy', () => {
           policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
           governance_pressure_score: 1228,
           effective_force_score: 0,
+          lineage_depth: 2,
         },
       },
     }];
@@ -5156,7 +5174,7 @@ describe('governance policy', () => {
         branch_budget: 1,
         governance_pressure_score: 1228,
       },
-      27,
+      { effectiveForceScore: 27, lineageDepth: 5 },
       { id: 'wf-low-force', data: { name: 'Low Force Template' } },
       {
         constrained: true,
@@ -5165,12 +5183,12 @@ describe('governance policy', () => {
         branch_budget: 1,
         governance_pressure_score: 1228,
       },
-      12,
+      { effectiveForceScore: 12, lineageDepth: 2 },
     );
 
     assert.equal(
       describeGovernanceSelectionContext(selectionContext),
-      'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-high-force (High Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 27 | compared: wf-low-force (Low Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 12',
+      'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-high-force (High Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 27 | lineage_depth: 5 | compared: wf-low-force (Low Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 12 | lineage_depth: 2',
     );
     assert.equal(describeGovernanceSelectionContext(null), 'none');
   });

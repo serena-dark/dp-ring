@@ -303,6 +303,7 @@ function buildGovernedSessionDoc() {
                 policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
                 governance_pressure_score: 1228,
                 effective_force_score: 25,
+                lineage_depth: 5,
                 divergence_score: 1,
                 composability_score: 3,
               },
@@ -312,6 +313,7 @@ function buildGovernedSessionDoc() {
                 policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
                 governance_pressure_score: 1228,
                 effective_force_score: 0,
+                lineage_depth: 2,
                 divergence_score: 4,
                 composability_score: 0,
               },
@@ -778,6 +780,13 @@ describe('validator', async () => {
     it('rejects a governed session selection context with a negative divergence score', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.divergence_score = -1;
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session selection context with a negative lineage depth', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.lineage_depth = -1;
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
     });

@@ -3246,19 +3246,19 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         scaffold,
-        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         scaffold,
-        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
 
       const workflowPlan = prerequisiteCompleted.workflow_preparation.waiting_tasks
@@ -3297,11 +3297,11 @@ ${workflowPlan}
       );
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
 
       const renamedDocumentationTaskName = 'Governed workflow selection guidance (renamed before prelaunch refresh)';
@@ -3975,11 +3975,11 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         scaffold,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         scaffold,
-        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         scaffold.includes(
@@ -3988,11 +3988,11 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         retried.workflow_preparation.dispatch.packet.body.includes(
@@ -4073,11 +4073,11 @@ ${workflowPlan}
       assert.equal(finalizedDocumentationTask?.parent_decision_note, replanningDecisionNote);
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         finalized.session_dispatch.dispatch.packet.body.includes(

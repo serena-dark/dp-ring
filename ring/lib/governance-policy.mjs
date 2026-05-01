@@ -972,14 +972,16 @@ function selectionContextBranchMetricScore(score) {
 function selectionContextEffectiveForceState(value) {
   if (value && typeof value === 'object') {
     return {
-      effective_force_score: normalizeEffectiveForceScore(value?.effectiveForceScore),
-      divergence_score: selectionContextBranchMetricScore(value?.divergenceScore),
-      composability_score: selectionContextBranchMetricScore(value?.composabilityScore),
+      effective_force_score: normalizeEffectiveForceScore(value?.effectiveForceScore ?? value?.effective_force_score),
+      lineage_depth: selectionContextBranchMetricScore(value?.lineageDepth ?? value?.lineage_depth),
+      divergence_score: selectionContextBranchMetricScore(value?.divergenceScore ?? value?.divergence_score),
+      composability_score: selectionContextBranchMetricScore(value?.composabilityScore ?? value?.composability_score),
     };
   }
 
   return {
     effective_force_score: normalizeEffectiveForceScore(value),
+    lineage_depth: null,
     divergence_score: null,
     composability_score: null,
   };
@@ -1001,6 +1003,9 @@ function selectionContextEntry(workflow, policy, effectiveForceState) {
       ? governancePressureScore
       : null,
     effective_force_score: metricState.effective_force_score,
+    ...(metricState.lineage_depth !== null
+      ? { lineage_depth: metricState.lineage_depth }
+      : {}),
     ...(metricState.divergence_score !== null
       ? { divergence_score: metricState.divergence_score }
       : {}),
@@ -1025,6 +1030,9 @@ function normalizeGovernanceSelectionContextEntry(entry) {
       ? entry.governance_pressure_score
       : null,
     effective_force_score: normalizeEffectiveForceScore(entry?.effective_force_score),
+    ...(selectionContextBranchMetricScore(entry?.lineage_depth) !== null
+      ? { lineage_depth: selectionContextBranchMetricScore(entry?.lineage_depth) }
+      : {}),
     ...(selectionContextBranchMetricScore(entry?.divergence_score) !== null
       ? { divergence_score: selectionContextBranchMetricScore(entry?.divergence_score) }
       : {}),
@@ -2783,7 +2791,9 @@ function describeGovernanceSelectionContextEntry(entry) {
     : 'n/a';
   const divergenceScore = selectionContextBranchMetricScore(entry?.divergence_score);
   const composabilityScore = selectionContextBranchMetricScore(entry?.composability_score);
+  const lineageDepth = selectionContextBranchMetricScore(entry?.lineage_depth);
   const branchMetricLabels = [
+    lineageDepth !== null ? `lineage_depth: ${lineageDepth}` : null,
     divergenceScore !== null ? `divergence_score: ${divergenceScore}` : null,
     composabilityScore !== null ? `composability_score: ${composabilityScore}` : null,
   ].filter(Boolean);

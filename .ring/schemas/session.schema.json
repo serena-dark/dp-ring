@@ -88,6 +88,7 @@
                           "policy": { "type": "string" },
                           "governance_pressure_score": { "type": ["number", "null"] },
                           "effective_force_score": { "type": ["number", "null"] },
+                          "lineage_depth": { "type": ["integer", "null"], "minimum": 0 },
                           "divergence_score": { "type": ["integer", "null"], "minimum": 0 },
                           "composability_score": { "type": ["integer", "null"], "minimum": 0 }
                         }
@@ -102,6 +103,7 @@
                           "policy": { "type": "string" },
                           "governance_pressure_score": { "type": ["number", "null"] },
                           "effective_force_score": { "type": ["number", "null"] },
+                          "lineage_depth": { "type": ["integer", "null"], "minimum": 0 },
                           "divergence_score": { "type": ["integer", "null"], "minimum": 0 },
                           "composability_score": { "type": ["integer", "null"], "minimum": 0 }
                         }
