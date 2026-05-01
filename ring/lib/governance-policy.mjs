@@ -1839,7 +1839,7 @@ export async function buildSessionDispatchPacketWaitingTaskViews(
 
   return {
     workflowPreparationPayloadWaitingTasksForDispatchPacket:
-      workflowPreparationPayloadWaitingTaskViews.waitingTasksForSessionContext,
+      workflowPreparationPayloadWaitingTaskViews.waitingTasksForDispatchPacket,
     waitingTasksForSessionContext: waitingTaskViews.waitingTasksForSessionContext,
     waitingTasksForDispatchPacket: waitingTaskViews.waitingTasksForDispatchPacket,
   };

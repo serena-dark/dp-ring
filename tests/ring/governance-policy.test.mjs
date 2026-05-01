@@ -2346,6 +2346,37 @@ describe('governance policy', () => {
 
     assert.equal(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].canonical_task_name, 'Governed docs delivery canonical');
     assert.equal(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].canonical_workflow_name, 'Selected Workflow Canonical');
+    assert.deepEqual(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].governance_selection_context, {
+      basis: 'governance_prefer_effective_force',
+      preferred: {
+        workflow_id: 'wf-selected',
+        workflow_name: 'Selected Workflow Canonical',
+        policy: 'branch_budget=1',
+        governance_pressure_score: 1220,
+        effective_force_score: 19,
+      },
+      compared: {
+        workflow_id: 'wf-compared',
+        workflow_name: 'Compared Workflow Canonical',
+        policy: 'branch_budget=1',
+        governance_pressure_score: 1220,
+        effective_force_score: 13,
+      },
+    });
+    assert.deepEqual(result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].governance_blocked_reuse, [{
+      id: 'wf-budget-hold',
+      name: 'Branch Budget Template Canonical',
+      reason: 'checkpoint_branch_budget_exhausted',
+      checkpoint_id: 'cp-budget-hold',
+      adoption_status: 'mainline',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+    }]);
+    assert.equal(
+      result.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].governance_reenable_guidance,
+      'wf-budget-hold (Branch Budget Template Canonical) should stay off automatic reuse until a later mainline checkpoint clears branch_budget=0 at active checkpoint cp-budget-hold.',
+    );
     assert.deepEqual(result.waitingTasksForSessionContext[0].canonical_selection_context_workflow_names, {
       'wf-selected': 'Selected Workflow Canonical',
       'wf-compared': 'Compared Workflow Canonical',
