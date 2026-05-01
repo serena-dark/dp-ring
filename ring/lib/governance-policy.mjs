@@ -387,11 +387,18 @@ export async function hydrateWaitingTaskGovernanceLabels(
 
   return waitingTasks.map((item) => {
     const taskId = trimString(item?.task_id);
-    const workflowTemplateId = trimString(item?.workflow_template_id);
     const fallbackWaitingTask = fallbackWaitingTaskById.get(taskId) ?? null;
+    const selectionContext = normalizeGovernanceSelectionContext(
+      waitingTaskSelectionContext(item, fallbackWaitingTask),
+    );
+    const workflowTemplateId = trimString(item?.workflow_template_id)
+      || trimString(fallbackWaitingTask?.workflow_template_id)
+      || trimString(selectionContext?.preferred?.workflow_id)
+      || null;
     const replanningHandoff =
       taskReplanningHandoffById.get(taskId) ?? waitingTaskReplanningHandoff(item);
     const canonicalWorkflowNameOverridesForTask = {
+      ...canonicalWorkflowNameOverrides(fallbackWaitingTask),
       ...canonicalWorkflowNameOverrides(item),
       ...workflowNameOverridesForIds(
         waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTask),
@@ -406,18 +413,41 @@ export async function hydrateWaitingTaskGovernanceLabels(
       canonicalWorkflowNameOverridesForTask,
       waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
     );
+    const canonicalWorkflowName = workflowTemplateId
+      ? canonicalWorkflowNameOverridesForTask[workflowTemplateId]
+        || trimString(item?.canonical_workflow_name)
+        || trimString(fallbackWaitingTask?.canonical_workflow_name)
+        || null
+      : trimString(item?.canonical_workflow_name)
+        || trimString(fallbackWaitingTask?.canonical_workflow_name)
+        || null;
+    const fallbackWorkflowName = item?.workflow_name
+      ?? fallbackWaitingTask?.workflow_name
+      ?? (trimString(selectionContext?.preferred?.workflow_id) === workflowTemplateId
+        ? selectionContext?.preferred?.workflow_name ?? null
+        : null);
 
     return {
       ...item,
+      ...(trimString(item?.workflow_template_id)
+        ? {}
+        : workflowTemplateId
+          ? { workflow_template_id: fallbackWaitingTask?.workflow_template_id ?? workflowTemplateId }
+          : {}),
+      ...(trimString(item?.workflow_name) || fallbackWorkflowName == null
+        ? {}
+        : { workflow_name: fallbackWorkflowName }),
+      governance_selection_context:
+        item?.governance_selection_context ?? fallbackWaitingTask?.governance_selection_context ?? null,
       canonical_task_name:
         taskNameById.get(taskId)
         || trimString(item?.canonical_task_name)
         || trimString(item?.task_name)
         || null,
       canonical_workflow_name:
-        canonicalWorkflowNameOverridesForTask[workflowTemplateId]
-        || trimString(item?.canonical_workflow_name)
+        canonicalWorkflowName
         || trimString(item?.workflow_name)
+        || trimString(fallbackWaitingTask?.workflow_name)
         || null,
       ...(replanningHandoff ?? {}),
       ...(Object.keys(canonicalWorkflowNameOverridesForTask).length > 0
@@ -1029,6 +1059,13 @@ export function canonicalizeWaitingTaskGovernanceLabels(
       normalizeGovernanceSelectionContext(waitingTaskSelectionContext(item, fallbackWaitingTask)),
       workflowNameOverrides,
     );
+    const recoveredWorkflowTemplateId = trimString(item?.workflow_template_id)
+      || trimString(fallbackWaitingTask?.workflow_template_id)
+      || trimString(fallbackSelectionContext?.preferred?.workflow_id)
+      || null;
+    const canonicalWorkflowName = trimString(item?.canonical_workflow_name)
+      || trimString(fallbackWaitingTask?.canonical_workflow_name)
+      || (recoveredWorkflowTemplateId ? workflowNameOverrides[recoveredWorkflowTemplateId] ?? null : null);
     const governanceBlockedReuse = canonicalizeWaitingTaskGovernanceBlockedReuse(
       labelCarrier,
       fallbackWaitingTask?.governance_blocked_reuse,
@@ -1038,13 +1075,25 @@ export function canonicalizeWaitingTaskGovernanceLabels(
     );
     return {
       ...item,
+      ...(trimString(item?.workflow_template_id)
+        ? {}
+        : recoveredWorkflowTemplateId
+          ? { workflow_template_id: fallbackWaitingTask?.workflow_template_id ?? recoveredWorkflowTemplateId }
+          : {}),
       task_name: selectionContextEntry?.task_name
         || trimString(item?.canonical_task_name)
         || trimString(item?.task_name)
         || null,
       workflow_name: selectionContextEntry?.workflow_name
-        || trimString(item?.canonical_workflow_name)
+        || canonicalWorkflowName
+        || selectionContextWorkflowDisplayName({
+          workflow_template_id: recoveredWorkflowTemplateId,
+          workflow_name: item?.workflow_name ?? fallbackWaitingTask?.workflow_name,
+          canonical_workflow_name: canonicalWorkflowName,
+          selection_context: fallbackSelectionContext,
+        })
         || trimString(item?.workflow_name)
+        || trimString(fallbackWaitingTask?.workflow_name)
         || null,
       governance_selection_context:
         selectionContextEntry?.selection_context ?? fallbackSelectionContext ?? null,

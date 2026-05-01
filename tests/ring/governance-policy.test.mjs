@@ -4112,6 +4112,182 @@ describe('governance policy', () => {
     );
   });
 
+  it('recovers primary workflow identity from workflow-preparation payload when live waiting tasks lose both workflow id and governed selection context', async () => {
+    const readyTasks = [{
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      governance_selection_context: null,
+      governance_blocked_reuse: [],
+    }];
+    const fallbackWaitingTasks = [{
+      task_id: 'task-docs',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Fallback) ',
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template (Fallback) ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template (Fallback) ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 11,
+        },
+      },
+    }];
+    const liveDocs = new Map([
+      ['task:task-docs', { id: 'task-docs', data: { name: 'Documentation Refresh' } }],
+      ['workflow:wf-roomier-template', { id: 'wf-roomier-template', data: { name: 'Roomier Template Renamed' } }],
+      ['workflow:wf-tight-template', { id: 'wf-tight-template', data: { name: 'Tight Template Renamed' } }],
+    ]);
+
+    const result = await buildWaitingTaskGovernanceViewState(
+      readyTasks,
+      async (kind, id) => liveDocs.get(`${kind}:${id}`) ?? null,
+      fallbackWaitingTasks,
+    );
+
+    assert.deepEqual(result.waitingTasksForSessionContext[0], {
+      task_id: ' task-docs ',
+      task_name: ' Documentation (Legacy) ',
+      governance_selection_context: {
+        basis: ' governance_minimize_policy_carryover ',
+        preferred: {
+          workflow_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template (Fallback) ',
+          policy: ' branch_budget=3 ',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: ' wf-tight-template ',
+          workflow_name: ' Tight Template (Fallback) ',
+          policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
+          governance_pressure_score: 1228,
+          effective_force_score: 11,
+        },
+      },
+      governance_blocked_reuse: [],
+      canonical_task_name: 'Documentation Refresh',
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: ' Roomier Template (Fallback) ',
+      canonical_workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+      },
+      canonical_selection_context_workflow_names: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+      },
+    });
+    assert.deepEqual(result.waitingTasksForDispatchPacket[0], {
+      task_id: ' task-docs ',
+      task_name: 'Documentation Refresh',
+      governance_selection_context: {
+        basis: 'governance_minimize_policy_carryover',
+        preferred: {
+          workflow_id: 'wf-roomier-template',
+          workflow_name: 'Roomier Template Renamed',
+          policy: 'branch_budget=3',
+          governance_pressure_score: 1206,
+          effective_force_score: 14,
+        },
+        compared: {
+          workflow_id: 'wf-tight-template',
+          workflow_name: 'Tight Template Renamed',
+          policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+          governance_pressure_score: 1228,
+          effective_force_score: 11,
+        },
+      },
+      governance_blocked_reuse: [],
+      workflow_template_id: ' wf-roomier-template ',
+      workflow_name: 'Roomier Template Renamed',
+      canonical_task_name: 'Documentation Refresh',
+      canonical_workflow_name: 'Roomier Template Renamed',
+      canonical_workflow_name_overrides: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+      },
+      canonical_selection_context_workflow_names: {
+        'wf-roomier-template': 'Roomier Template Renamed',
+        'wf-tight-template': 'Tight Template Renamed',
+      },
+      governance_reenable_guidance: 'none',
+    });
+    assert.deepEqual(buildSessionContextInjected(result.waitingTasksForSessionContext), {
+      workflow_template: 'wf-roomier-template',
+      distillations_applied: [],
+      registry_rank_at_selection: null,
+      replanning_handoffs: [],
+      governance_selection_contexts: [{
+        task_id: 'task-docs',
+        task_name: 'Documentation Refresh',
+        workflow_template_id: 'wf-roomier-template',
+        workflow_name: 'Roomier Template Renamed',
+        selection_context: {
+          basis: 'governance_minimize_policy_carryover',
+          preferred: {
+            workflow_id: 'wf-roomier-template',
+            workflow_name: 'Roomier Template Renamed',
+            policy: 'branch_budget=3',
+            governance_pressure_score: 1206,
+            effective_force_score: 14,
+          },
+          compared: {
+            workflow_id: 'wf-tight-template',
+            workflow_name: 'Tight Template Renamed',
+            policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+            governance_pressure_score: 1228,
+            effective_force_score: 11,
+          },
+        },
+      }],
+    });
+    assert.deepEqual(
+      buildSessionDispatchPayloadWaitingTask(
+        result.waitingTasksForDispatchPacket[0],
+        fallbackWaitingTasks[0],
+      ),
+      {
+        task_id: 'task-docs',
+        task_name: 'Documentation Refresh',
+        task_type: null,
+        milestone_id: null,
+        task_document_path: 'docs/tasks/task-docs/task-docs.md',
+        workflow_template_id: 'wf-roomier-template',
+        workflow_name: 'Roomier Template Renamed',
+        replanning_handoff: null,
+        governance_selection_context: {
+          basis: 'governance_minimize_policy_carryover',
+          preferred: {
+            workflow_id: 'wf-roomier-template',
+            workflow_name: 'Roomier Template Renamed',
+            policy: 'branch_budget=3',
+            governance_pressure_score: 1206,
+            effective_force_score: 14,
+          },
+          compared: {
+            workflow_id: 'wf-tight-template',
+            workflow_name: 'Tight Template Renamed',
+            policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+            governance_pressure_score: 1228,
+            effective_force_score: 11,
+          },
+        },
+        governance_blocked_reuse: [],
+        governance_reenable_guidance: 'none',
+      },
+    );
+  });
+
   it('deduplicates normalized session governance selection context injection entries', () => {
     const readyTasks = [
       {
