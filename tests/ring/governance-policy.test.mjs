@@ -2661,6 +2661,61 @@ describe('governance policy', () => {
     );
   });
 
+  it('dedupes workflow-preparation reusable candidates through shared canonical candidate helpers', () => {
+    assert.deepEqual(
+      buildWorkflowPreparationPayloadWaitingTask(
+        {
+          id: ' task-docs ',
+          data: {
+            name: ' Governed docs delivery ',
+            task_type: ' documentation ',
+            milestone_id: ' ms-governance ',
+          },
+        },
+        {
+          recommended: {
+            workflow: {
+              id: ' wf-selected ',
+              data: {
+                name: ' Selected Workflow ',
+              },
+            },
+            rank: 7,
+            mode: ' governance_prefer_effective_force ',
+          },
+          candidates: [
+            {
+              workflow_template_id: ' wf-selected ',
+              workflow_name: ' Selected Workflow ',
+            },
+            {
+              id: ' wf-roomier ',
+              name: ' Roomier Template ',
+            },
+            {
+              id: ' wf-selected ',
+              name: ' Selected Workflow Stale ',
+            },
+            {
+              workflow_template_id: ' wf-roomier ',
+              workflow_name: ' Roomier Template Stale ',
+            },
+          ],
+        },
+      ).reusable_candidates,
+      [
+        {
+          id: 'wf-selected',
+          name: 'Selected Workflow',
+        },
+        {
+          id: 'wf-roomier',
+          name: 'Roomier Template',
+        },
+      ],
+    );
+  });
+
   it('builds workflow-preparation payload waiting-task list state from shared per-task helpers', () => {
     const docsTask = {
       id: ' task-docs ',

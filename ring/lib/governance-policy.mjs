@@ -292,6 +292,31 @@ function normalizeReusableWorkflowCandidate(candidate) {
   };
 }
 
+function canonicalizeReusableWorkflowCandidateList(rawCandidates = [], workflowNameOverrides = {}) {
+  if (!Array.isArray(rawCandidates) || rawCandidates.length === 0) {
+    return [];
+  }
+
+  const overrides = workflowNameOverrides && typeof workflowNameOverrides === 'object'
+    ? workflowNameOverrides
+    : {};
+  const seenCandidateIds = new Set();
+  return rawCandidates
+    .map((rawCandidate) => {
+      const candidate = normalizeReusableWorkflowCandidate(rawCandidate);
+      const workflowName = overrides[candidate.id] ?? candidate.name;
+      if (!candidate.id || !workflowName || seenCandidateIds.has(candidate.id)) {
+        return null;
+      }
+      seenCandidateIds.add(candidate.id);
+      return {
+        id: candidate.id,
+        name: workflowName,
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeCanonicalWorkflowNameMap(overrides) {
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
     return {};
@@ -755,21 +780,7 @@ function canonicalizeWaitingTaskReusableCandidates(
       : [];
 
   const workflowNameOverrides = canonicalWorkflowNameOverrides(waitingTask);
-  const seenCandidateIds = new Set();
-  return rawCandidates
-    .map((rawCandidate) => {
-      const candidate = normalizeReusableWorkflowCandidate(rawCandidate);
-      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
-      if (!candidate.id || !workflowName || seenCandidateIds.has(candidate.id)) {
-        return null;
-      }
-      seenCandidateIds.add(candidate.id);
-      return {
-        id: candidate.id,
-        name: workflowName,
-      };
-    })
-    .filter(Boolean);
+  return canonicalizeReusableWorkflowCandidateList(rawCandidates, workflowNameOverrides);
 }
 
 export function describeWaitingTaskGovernance(waitingTask) {
@@ -1243,21 +1254,7 @@ function summarizeWorkflowPreparationRecommendation(recommendation) {
 }
 
 function workflowPreparationReusableCandidates(recommendation) {
-  if (!Array.isArray(recommendation?.candidates)) {
-    return [];
-  }
-  return recommendation.candidates
-    .map((item) => {
-      const id = trimString(item?.id);
-      if (!id) {
-        return null;
-      }
-      return {
-        id,
-        name: trimString(item?.name) ?? trimString(item?.data?.name) ?? id,
-      };
-    })
-    .filter(Boolean);
+  return canonicalizeReusableWorkflowCandidateList(recommendation?.candidates ?? []);
 }
 
 function describeWorkflowPreparationReusableCandidates(waitingTask, includeNames = true) {
