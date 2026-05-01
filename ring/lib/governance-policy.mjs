@@ -259,11 +259,17 @@ function canonicalWorkflowNameOverrides(entry) {
   };
 }
 
-function waitingTaskSelectionContextWorkflowIds(item) {
+function waitingTaskSelectionContext(item, fallbackWaitingTask = null) {
+  return item?.governance_selection_context ?? fallbackWaitingTask?.governance_selection_context ?? null;
+}
+
+function waitingTaskSelectionContextWorkflowIds(item, fallbackWaitingTask = null) {
+  const selectionContext = waitingTaskSelectionContext(item, fallbackWaitingTask);
   return uniqueTrimmedStrings([
     item?.workflow_template_id,
-    item?.governance_selection_context?.preferred?.workflow_id,
-    item?.governance_selection_context?.compared?.workflow_id,
+    fallbackWaitingTask?.workflow_template_id,
+    selectionContext?.preferred?.workflow_id,
+    selectionContext?.compared?.workflow_id,
   ]);
 }
 
@@ -286,7 +292,7 @@ function waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask = null) {
 function waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTask = null) {
   return uniqueTrimmedStrings([
     item?.workflow_template_id,
-    ...waitingTaskSelectionContextWorkflowIds(item),
+    ...waitingTaskSelectionContextWorkflowIds(item, fallbackWaitingTask),
     ...waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
   ]);
 }
@@ -394,7 +400,7 @@ export async function hydrateWaitingTaskGovernanceLabels(
     };
     const canonicalSelectionContextWorkflowNames = pickWorkflowNameOverrides(
       canonicalWorkflowNameOverridesForTask,
-      waitingTaskSelectionContextWorkflowIds(item),
+      waitingTaskSelectionContextWorkflowIds(item, fallbackWaitingTask),
     );
     const canonicalBlockedReuseWorkflowNames = pickWorkflowNameOverrides(
       canonicalWorkflowNameOverridesForTask,
@@ -1019,6 +1025,10 @@ export function canonicalizeWaitingTaskGovernanceLabels(
       },
     };
     const workflowNameOverrides = canonicalWorkflowNameOverrides(labelCarrier);
+    const fallbackSelectionContext = canonicalizeSelectionContextWorkflowLabels(
+      normalizeGovernanceSelectionContext(waitingTaskSelectionContext(item, fallbackWaitingTask)),
+      workflowNameOverrides,
+    );
     const governanceBlockedReuse = canonicalizeWaitingTaskGovernanceBlockedReuse(
       labelCarrier,
       fallbackWaitingTask?.governance_blocked_reuse,
@@ -1037,7 +1047,7 @@ export function canonicalizeWaitingTaskGovernanceLabels(
         || trimString(item?.workflow_name)
         || null,
       governance_selection_context:
-        selectionContextEntry?.selection_context ?? structuredClone(item?.governance_selection_context ?? null),
+        selectionContextEntry?.selection_context ?? fallbackSelectionContext ?? null,
       governance_blocked_reuse: governanceBlockedReuse,
       governance_reenable_guidance: governanceReenableGuidance,
       ...(Object.keys(workflowNameOverrides).length > 0
