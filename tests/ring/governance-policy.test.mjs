@@ -1071,6 +1071,96 @@ describe('governance policy', () => {
     );
   });
 
+  it('preserves workflow selection provenance through session-dispatch payload refreshes', () => {
+    const sourceTask = {
+      task_id: ' task-docs ',
+      task_name: ' Governed docs delivery ',
+      workflow_template_id: ' wf-selected ',
+      workflow_name: ' Selected Workflow ',
+      workflow_source: ' registry_reuse ',
+      registry_rank: 7,
+      registry_mode: ' governance_prefer_effective_force ',
+      selection_note:
+        ' Preferred because stronger checkpoint force carried less policy risk. ',
+      governance_selection_context: {
+        basis: ' governance_prefer_effective_force ',
+        preferred: {
+          workflow_id: ' wf-selected ',
+          workflow_name: ' Selected Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 19,
+        },
+        compared: {
+          workflow_id: ' wf-compared ',
+          workflow_name: ' Compared Workflow ',
+          policy: ' branch_budget=1 ',
+          governance_pressure_score: 1220,
+          effective_force_score: 13,
+        },
+      },
+      canonical_workflow_name_overrides: {
+        ' wf-selected ': ' Selected Workflow Canonical ',
+        ' wf-compared ': ' Compared Workflow Canonical ',
+      },
+    };
+
+    const payloadTask = buildSessionDispatchPayloadWaitingTask(sourceTask);
+    assert.equal(payloadTask.workflow_source, 'registry_reuse');
+    assert.equal(payloadTask.registry_rank, 7);
+    assert.equal(payloadTask.registry_mode, 'governance_prefer_effective_force');
+    assert.equal(
+      payloadTask.selection_note,
+      'Preferred because stronger checkpoint force carried less policy risk.',
+    );
+
+    const mergedWaitingTask = mergeSessionDispatchPayloadWaitingTask(
+      {
+        task_id: 'task-docs',
+        workflow_template_id: 'wf-selected',
+        workflow_name: 'Selected Workflow Legacy',
+        workflow_source: null,
+        registry_rank: null,
+        registry_mode: null,
+        selection_note: null,
+      },
+      payloadTask,
+    );
+    assert.equal(mergedWaitingTask.workflow_source, 'registry_reuse');
+    assert.equal(mergedWaitingTask.registry_rank, 7);
+    assert.equal(mergedWaitingTask.registry_mode, 'governance_prefer_effective_force');
+    assert.equal(
+      mergedWaitingTask.selection_note,
+      'Preferred because stronger checkpoint force carried less policy risk.',
+    );
+
+    const refreshedWaitingTasks = refreshSessionDispatchWaitingTasks(
+      [
+        {
+          task_id: 'task-docs',
+          workflow_template_id: 'wf-selected',
+          workflow_name: 'Selected Workflow Legacy',
+          workflow_source: null,
+          registry_rank: null,
+          registry_mode: null,
+          selection_note: null,
+        },
+      ],
+      {
+        payload: {
+          waiting_tasks: [payloadTask],
+        },
+      },
+    );
+    assert.equal(refreshedWaitingTasks[0].workflow_source, 'registry_reuse');
+    assert.equal(refreshedWaitingTasks[0].registry_rank, 7);
+    assert.equal(refreshedWaitingTasks[0].registry_mode, 'governance_prefer_effective_force');
+    assert.equal(
+      refreshedWaitingTasks[0].selection_note,
+      'Preferred because stronger checkpoint force carried less policy risk.',
+    );
+  });
+
   it('merges session-dispatch payload waiting-task state back into stored waiting-task records', () => {
     const payloadTask = buildSessionDispatchPayloadWaitingTask(
       {

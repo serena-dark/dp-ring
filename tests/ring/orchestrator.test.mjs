@@ -1771,6 +1771,12 @@ Split milestone prerequisites into ready and blocked sets.
         task_document_path: documentationTask.task_document_path,
         workflow_template_id: documentationTask.workflow_template_id,
         workflow_name: documentationTask.workflow_name,
+        ...(documentationTask.workflow_source ? { workflow_source: documentationTask.workflow_source } : {}),
+        ...(Number.isInteger(documentationTask.registry_rank)
+          ? { registry_rank: documentationTask.registry_rank }
+          : {}),
+        ...(documentationTask.registry_mode ? { registry_mode: documentationTask.registry_mode } : {}),
+        ...(documentationTask.selection_note ? { selection_note: documentationTask.selection_note } : {}),
         replanning_handoff: null,
         governance_selection_context: documentationTask.governance_selection_context ?? null,
         governance_blocked_reuse: documentationTask.governance_blocked_reuse ?? [],
@@ -2485,6 +2491,12 @@ Split milestone prerequisites into ready and blocked sets.
           task_document_path: documentationTask.task_document_path,
           workflow_template_id: documentationTask.workflow_template_id,
           workflow_name: documentationTask.workflow_name,
+          ...(documentationTask.workflow_source ? { workflow_source: documentationTask.workflow_source } : {}),
+          ...(Number.isInteger(documentationTask.registry_rank)
+            ? { registry_rank: documentationTask.registry_rank }
+            : {}),
+          ...(documentationTask.registry_mode ? { registry_mode: documentationTask.registry_mode } : {}),
+          ...(documentationTask.selection_note ? { selection_note: documentationTask.selection_note } : {}),
           replanning_handoff: null,
           governance_selection_context: documentationTask.governance_selection_context ?? null,
           governance_blocked_reuse: documentationTask.governance_blocked_reuse ?? [],
@@ -3380,6 +3392,18 @@ ${workflowPlan}
           task_document_path: finalizedDocumentationTask.task_document_path,
           workflow_template_id: finalizedDocumentationTask.workflow_template_id,
           workflow_name: renamedPreferredWorkflowName,
+          ...(finalizedDocumentationTask.workflow_source
+            ? { workflow_source: finalizedDocumentationTask.workflow_source }
+            : {}),
+          ...(Number.isInteger(finalizedDocumentationTask.registry_rank)
+            ? { registry_rank: finalizedDocumentationTask.registry_rank }
+            : {}),
+          ...(finalizedDocumentationTask.registry_mode
+            ? { registry_mode: finalizedDocumentationTask.registry_mode }
+            : {}),
+          ...(finalizedDocumentationTask.selection_note
+            ? { selection_note: finalizedDocumentationTask.selection_note }
+            : {}),
           replanning_handoff: null,
           preferred_reuse: expectedPreferredReuse,
           reusable_candidates: expectedReusableCandidates,
@@ -4126,6 +4150,18 @@ ${workflowPlan}
           task_document_path: finalizedDocumentationTask.task_document_path,
           workflow_template_id: finalizedDocumentationTask.workflow_template_id,
           workflow_name: renamedPreferredWorkflowName,
+          ...(finalizedDocumentationTask.workflow_source
+            ? { workflow_source: finalizedDocumentationTask.workflow_source }
+            : {}),
+          ...(Number.isInteger(finalizedDocumentationTask.registry_rank)
+            ? { registry_rank: finalizedDocumentationTask.registry_rank }
+            : {}),
+          ...(finalizedDocumentationTask.registry_mode
+            ? { registry_mode: finalizedDocumentationTask.registry_mode }
+            : {}),
+          ...(finalizedDocumentationTask.selection_note
+            ? { selection_note: finalizedDocumentationTask.selection_note }
+            : {}),
           replanning_handoff: {
             parent_task_id: replanningParentTaskId,
             parent_decision_note: replanningDecisionNote,
@@ -4712,6 +4748,12 @@ Split milestone prerequisites into ready and blocked sets.
           task_document_path: waitingTask.task_document_path,
           workflow_template_id: waitingTask.workflow_template_id,
           workflow_name: expectedLaunchEntry.workflow_name,
+          ...(waitingTask.workflow_source ? { workflow_source: waitingTask.workflow_source } : {}),
+          ...(Number.isInteger(waitingTask.registry_rank)
+            ? { registry_rank: waitingTask.registry_rank }
+            : {}),
+          ...(waitingTask.registry_mode ? { registry_mode: waitingTask.registry_mode } : {}),
+          ...(waitingTask.selection_note ? { selection_note: waitingTask.selection_note } : {}),
           replanning_handoff: null,
           governance_selection_context: expectedLaunchEntry.selection_context,
           governance_blocked_reuse: [],
@@ -5387,6 +5429,12 @@ Split milestone prerequisites into ready and blocked sets.
           task_document_path: waitingTask.task_document_path,
           workflow_template_id: waitingTask.workflow_template_id,
           workflow_name: expectedLaunchEntry.workflow_name,
+          ...(waitingTask.workflow_source ? { workflow_source: waitingTask.workflow_source } : {}),
+          ...(Number.isInteger(waitingTask.registry_rank)
+            ? { registry_rank: waitingTask.registry_rank }
+            : {}),
+          ...(waitingTask.registry_mode ? { registry_mode: waitingTask.registry_mode } : {}),
+          ...(waitingTask.selection_note ? { selection_note: waitingTask.selection_note } : {}),
           replanning_handoff: null,
           governance_selection_context: expectedLaunchEntry.selection_context,
           governance_blocked_reuse: [],

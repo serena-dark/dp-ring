@@ -1944,6 +1944,21 @@ export function buildSessionDispatchPayloadWaitingTask(
     governanceBlockedReuse,
   );
 
+  const workflowSource = waitingTaskRecord?.workflow_source
+    || trimString(mergedWaitingTask.workflow_source)
+    || null;
+  const registryRank = Number.isInteger(waitingTaskRecord?.registry_rank)
+    ? waitingTaskRecord.registry_rank
+    : Number.isInteger(mergedWaitingTask?.registry_rank)
+      ? mergedWaitingTask.registry_rank
+      : null;
+  const registryMode = waitingTaskRecord?.registry_mode
+    || trimString(mergedWaitingTask.registry_mode)
+    || null;
+  const selectionNote = waitingTaskRecord?.selection_note
+    || trimString(mergedWaitingTask.selection_note)
+    || null;
+
   return {
     task_id: waitingTaskRecord?.task_id || taskId,
     task_name: waitingTaskRecord?.task_name || trimString(mergedWaitingTask.task_name) || null,
@@ -1959,6 +1974,10 @@ export function buildSessionDispatchPayloadWaitingTask(
       || trimString(mergedWaitingTask.workflow_name)
       || trimString(mergedWaitingTask.workflow_template_id)
       || null,
+    ...(workflowSource ? { workflow_source: workflowSource } : {}),
+    ...(registryRank !== null ? { registry_rank: registryRank } : {}),
+    ...(registryMode ? { registry_mode: registryMode } : {}),
+    ...(selectionNote ? { selection_note: selectionNote } : {}),
     replanning_handoff: waitingTaskRecord?.parent_task_id && waitingTaskRecord?.parent_decision_note
       ? {
           parent_task_id: waitingTaskRecord.parent_task_id,
@@ -2215,6 +2234,21 @@ export function mergeSessionDispatchPayloadWaitingTask(
     waitingTask,
   );
 
+  const workflowSource = mergedPayloadWaitingTask?.workflow_source
+    ?? waitingTask?.workflow_source
+    ?? null;
+  const registryRank = Number.isInteger(mergedPayloadWaitingTask?.registry_rank)
+    ? mergedPayloadWaitingTask.registry_rank
+    : Number.isInteger(waitingTask?.registry_rank)
+      ? waitingTask.registry_rank
+      : null;
+  const registryMode = mergedPayloadWaitingTask?.registry_mode
+    ?? waitingTask?.registry_mode
+    ?? null;
+  const selectionNote = mergedPayloadWaitingTask?.selection_note
+    ?? waitingTask?.selection_note
+    ?? null;
+
   return {
     ...waitingTask,
     task_name: mergedPayloadWaitingTask?.task_name ?? waitingTask?.task_name ?? null,
@@ -2229,6 +2263,10 @@ export function mergeSessionDispatchPayloadWaitingTask(
       ?? waitingTask?.workflow_template_id
       ?? null,
     workflow_name: mergedPayloadWaitingTask?.workflow_name ?? waitingTask?.workflow_name ?? null,
+    ...(workflowSource ? { workflow_source: workflowSource } : {}),
+    ...(registryRank !== null ? { registry_rank: registryRank } : {}),
+    ...(registryMode ? { registry_mode: registryMode } : {}),
+    ...(selectionNote ? { selection_note: selectionNote } : {}),
     replanning_handoff:
       mergedPayloadWaitingTask?.replanning_handoff
       ?? waitingTask?.replanning_handoff
