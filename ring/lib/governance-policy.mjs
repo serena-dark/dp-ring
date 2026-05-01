@@ -230,6 +230,50 @@ export function normalizeWorkflowReuseGovernanceBlock(block) {
   };
 }
 
+function workflowReuseGovernanceBlockKey(block) {
+  return [
+    trimString(block?.id),
+    trimString(block?.reason),
+    trimString(block?.checkpoint_id),
+    trimString(block?.adoption_status),
+    nonNegativeInteger(block?.branch_budget),
+    trimString(block?.workflow_tightness),
+    trimString(block?.oversight_strength),
+  ].join('|');
+}
+
+function canonicalizeWorkflowReuseGovernanceBlockList(rawCandidates = [], workflowNameOverrides = {}) {
+  if (!Array.isArray(rawCandidates) || rawCandidates.length === 0) {
+    return [];
+  }
+
+  const overrides = workflowNameOverrides && typeof workflowNameOverrides === 'object'
+    ? workflowNameOverrides
+    : {};
+  const seenCandidateKeys = new Set();
+  return rawCandidates
+    .map((rawCandidate) => {
+      const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
+      const workflowName = overrides[candidate.id] ?? candidate.name;
+      if (!candidate.id || !workflowName || !candidate.reason) {
+        return null;
+      }
+      return {
+        ...candidate,
+        name: workflowName,
+      };
+    })
+    .filter(Boolean)
+    .filter((candidate) => {
+      const candidateKey = workflowReuseGovernanceBlockKey(candidate);
+      if (seenCandidateKeys.has(candidateKey)) {
+        return false;
+      }
+      seenCandidateKeys.add(candidateKey);
+      return true;
+    });
+}
+
 function normalizeReusableWorkflowCandidate(candidate) {
   const id = trimString(candidate?.id)
     ?? trimString(candidate?.workflow_template_id)
@@ -625,10 +669,11 @@ export function describeWorkflowReuseGovernanceBlock(block) {
 }
 
 export function describeWorkflowReuseGovernanceBlockList(items = []) {
-  if (!Array.isArray(items) || items.length === 0) {
+  const canonicalItems = canonicalizeWorkflowReuseGovernanceBlockList(items);
+  if (canonicalItems.length === 0) {
     return 'none';
   }
-  return items.map((item) => describeWorkflowReuseGovernanceBlock(item)).join('; ');
+  return canonicalItems.map((item) => describeWorkflowReuseGovernanceBlock(item)).join('; ');
 }
 
 export function describeWorkflowReuseGovernanceReenableGuidance(block) {
@@ -666,10 +711,11 @@ export function describeWorkflowReuseGovernanceReenableGuidance(block) {
 }
 
 export function describeWorkflowReuseGovernanceReenableGuidanceList(items = []) {
-  if (!Array.isArray(items) || items.length === 0) {
+  const canonicalItems = canonicalizeWorkflowReuseGovernanceBlockList(items);
+  if (canonicalItems.length === 0) {
     return 'none';
   }
-  return items.map((item) => describeWorkflowReuseGovernanceReenableGuidance(item)).join('; ');
+  return canonicalItems.map((item) => describeWorkflowReuseGovernanceReenableGuidance(item)).join('; ');
 }
 
 export function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource) {
@@ -677,11 +723,9 @@ export function waitingTaskGovernanceBlockedReuse(recommendation, workflowSource
     return [];
   }
 
-  return Array.isArray(recommendation?.governance_blocked_candidates)
-    ? recommendation.governance_blocked_candidates
-        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
-        .filter((item) => item.id && item.name && item.reason)
-    : [];
+  return canonicalizeWorkflowReuseGovernanceBlockList(
+    recommendation?.governance_blocked_candidates ?? [],
+  );
 }
 
 export function canonicalizeWaitingTaskGovernanceBlockedReuse(
@@ -696,19 +740,7 @@ export function canonicalizeWaitingTaskGovernanceBlockedReuse(
       : [];
 
   const workflowNameOverrides = canonicalWorkflowNameOverrides(waitingTask);
-  return rawCandidates
-    .map((rawCandidate) => {
-      const candidate = normalizeWorkflowReuseGovernanceBlock(rawCandidate);
-      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
-      if (!candidate.id || !workflowName || !candidate.reason) {
-        return null;
-      }
-      return {
-        ...candidate,
-        name: workflowName,
-      };
-    })
-    .filter(Boolean);
+  return canonicalizeWorkflowReuseGovernanceBlockList(rawCandidates, workflowNameOverrides);
 }
 
 function canonicalizeWaitingTaskReusableCandidates(
@@ -757,20 +789,16 @@ export function describeWaitingTaskReplanningHandoff(waitingTask) {
 
 function governanceBatchIdentityEntries(waitingTasks = []) {
   return waitingTasks.flatMap((item) =>
-    Array.isArray(item?.governance_blocked_reuse)
-      ? item.governance_blocked_reuse
-          .map((candidate) => normalizeWorkflowReuseGovernanceBlock(candidate))
-          .filter((candidate) => candidate.reason)
-          .map((candidate) => ({
-            reason: candidate.reason,
-            workflow_template_id: candidate.id,
-            checkpoint_id: candidate.checkpoint_id,
-            adoption_status: candidate.adoption_status,
-            branch_budget: candidate.branch_budget,
-            workflow_tightness: candidate.workflow_tightness,
-            oversight_strength: candidate.oversight_strength,
-          }))
-      : [],
+    canonicalizeWaitingTaskGovernanceBlockedReuse(item)
+      .map((candidate) => ({
+        reason: candidate.reason,
+        workflow_template_id: candidate.id,
+        checkpoint_id: candidate.checkpoint_id,
+        adoption_status: candidate.adoption_status,
+        branch_budget: candidate.branch_budget,
+        workflow_tightness: candidate.workflow_tightness,
+        oversight_strength: candidate.oversight_strength,
+      })),
   );
 }
 
@@ -1271,11 +1299,9 @@ export function buildWorkflowPreparationPayloadWaitingTask(task = {}, recommenda
   const governanceSelectionContext = recommendation?.recommended?.selection_context
     ? structuredClone(recommendation.recommended.selection_context)
     : null;
-  const governanceBlockedReuse = Array.isArray(recommendation?.governance_blocked_candidates)
-    ? recommendation.governance_blocked_candidates
-        .map((item) => normalizeWorkflowReuseGovernanceBlock(item))
-        .filter((item) => item.id && item.name && item.reason)
-    : [];
+  const governanceBlockedReuse = canonicalizeWorkflowReuseGovernanceBlockList(
+    recommendation?.governance_blocked_candidates ?? [],
+  );
   const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
     governanceBlockedReuse,
   );

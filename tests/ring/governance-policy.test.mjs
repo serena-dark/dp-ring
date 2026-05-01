@@ -4145,6 +4145,45 @@ describe('governance policy', () => {
     );
   });
 
+  it('deduplicates canonical blocked-reuse waiting-task entries while preserving canonical workflow labels', () => {
+    assert.deepEqual(
+      canonicalizeWaitingTaskGovernanceBlockedReuse({
+        canonical_governance_blocked_reuse_workflow_names: {
+          'wf-lineage-hold': ' Warm Lineage Template Renamed ',
+        },
+        governance_blocked_reuse: [
+          {
+            id: ' wf-lineage-hold ',
+            name: ' Warm Lineage Template (Legacy) ',
+            reason: ' warm_semantic_lineage ',
+            checkpoint_id: ' cp-lineage ',
+          },
+          {
+            workflow_template_id: 'wf-lineage-hold',
+            workflow_name: 'Warm Lineage Template Duplicate',
+            reason: 'warm_semantic_lineage',
+            checkpoint_id: 'cp-lineage',
+          },
+          {
+            workflow_template_id: 'wf-invalid-candidate',
+            workflow_name: 'Invalid Candidate',
+            reason: ' ',
+          },
+        ],
+      }),
+      [{
+        id: 'wf-lineage-hold',
+        name: 'Warm Lineage Template Renamed',
+        reason: 'warm_semantic_lineage',
+        checkpoint_id: 'cp-lineage',
+        adoption_status: null,
+        branch_budget: null,
+        workflow_tightness: null,
+        oversight_strength: null,
+      }],
+    );
+  });
+
   it('hydrates fallback selection-context workflow names and preserves governed session context when live waiting tasks lose that context', async () => {
     const readyTasks = [{
       task_id: ' task-docs ',
@@ -4742,6 +4781,69 @@ describe('governance policy', () => {
       detail: 'wf-roomier-template (Roomier Template) already has warm semantic checkpoint lineage that requires an explicit governance decision before reuse',
     }]);
     assert.equal(buildSessionGovernanceContext([{ task_id: 'task-clean', governance_blocked_reuse: [] }]), null);
+  });
+
+  it('deduplicates repeated governance-blocked recommendation candidates before building workflow-preparation payload state', () => {
+    const recommendation = {
+      recommended: null,
+      governance_blocked_candidates: [
+        {
+          workflow_template_id: ' wf-roomier-template ',
+          workflow_name: ' Roomier Template ',
+          reason: ' warm_semantic_lineage ',
+          checkpoint_id: ' cp-roomier ',
+          adoption_status: ' synthesized ',
+          branch_budget: 0,
+          workflow_tightness: ' tight ',
+          oversight_strength: ' strong ',
+        },
+        {
+          id: 'wf-roomier-template',
+          name: 'Roomier Template Duplicate',
+          reason: 'warm_semantic_lineage',
+          checkpoint_id: 'cp-roomier',
+          adoption_status: 'synthesized',
+          branch_budget: 0,
+          workflow_tightness: 'tight',
+          oversight_strength: 'strong',
+        },
+        {
+          workflow_template_id: 'wf-invalid-candidate',
+          workflow_name: 'Invalid Candidate',
+          reason: ' ',
+        },
+      ],
+    };
+
+    const blockedReuse = waitingTaskGovernanceBlockedReuse(recommendation, 'custom_generated');
+    assert.deepEqual(blockedReuse, [{
+      id: 'wf-roomier-template',
+      name: 'Roomier Template',
+      reason: 'warm_semantic_lineage',
+      checkpoint_id: 'cp-roomier',
+      adoption_status: 'synthesized',
+      branch_budget: 0,
+      workflow_tightness: 'tight',
+      oversight_strength: 'strong',
+    }]);
+
+    const payloadTask = buildWorkflowPreparationPayloadWaitingTask(
+      {
+        id: ' task-docs ',
+        data: {
+          name: ' Governed docs delivery ',
+          task_type: ' documentation ',
+          milestone_id: ' ms-governance ',
+        },
+      },
+      recommendation,
+    );
+
+    assert.deepEqual(payloadTask.governance_blocked_reuse, blockedReuse);
+    assert.equal(
+      payloadTask.governance_reenable_guidance,
+      'wf-roomier-template (Roomier Template) should stay off automatic reuse until governance records an explicit reuse decision for its warm semantic lineage.',
+    );
   });
 
   it('deduplicates repeated blocked reuse entries before persisting session governance context', () => {
