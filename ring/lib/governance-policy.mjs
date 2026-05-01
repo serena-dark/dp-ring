@@ -230,6 +230,24 @@ export function normalizeWorkflowReuseGovernanceBlock(block) {
   };
 }
 
+function normalizeReusableWorkflowCandidate(candidate) {
+  const id = trimString(candidate?.id)
+    ?? trimString(candidate?.workflow_template_id)
+    ?? trimString(candidate?.workflow_name)
+    ?? trimString(candidate?.name)
+    ?? null;
+  const name = trimString(candidate?.name)
+    ?? trimString(candidate?.workflow_name)
+    ?? trimString(candidate?.id)
+    ?? trimString(candidate?.workflow_template_id)
+    ?? null;
+
+  return {
+    id,
+    name,
+  };
+}
+
 function normalizeCanonicalWorkflowNameMap(overrides) {
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
     return {};
@@ -289,11 +307,28 @@ function waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask = null) {
   ]);
 }
 
+function waitingTaskReusableCandidateWorkflowIds(item, fallbackWaitingTask = null) {
+  const currentCandidateIds = Array.isArray(item?.reusable_candidates)
+    ? item.reusable_candidates.map((candidate) => normalizeReusableWorkflowCandidate(candidate)?.id)
+    : [];
+  const fallbackCandidateIds = Array.isArray(fallbackWaitingTask?.reusable_candidates)
+    ? fallbackWaitingTask.reusable_candidates.map(
+        (candidate) => normalizeReusableWorkflowCandidate(candidate)?.id,
+      )
+    : [];
+
+  return uniqueTrimmedStrings([
+    ...currentCandidateIds,
+    ...fallbackCandidateIds,
+  ]);
+}
+
 function waitingTaskCanonicalWorkflowIds(item, fallbackWaitingTask = null) {
   return uniqueTrimmedStrings([
     item?.workflow_template_id,
     ...waitingTaskSelectionContextWorkflowIds(item, fallbackWaitingTask),
     ...waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
+    ...waitingTaskReusableCandidateWorkflowIds(item, fallbackWaitingTask),
   ]);
 }
 
@@ -413,6 +448,17 @@ export async function hydrateWaitingTaskGovernanceLabels(
       canonicalWorkflowNameOverridesForTask,
       waitingTaskBlockedReuseWorkflowIds(item, fallbackWaitingTask),
     );
+    const reusableCandidates = canonicalizeWaitingTaskReusableCandidates(
+      {
+        ...fallbackWaitingTask,
+        ...item,
+        canonical_workflow_name_overrides: canonicalWorkflowNameOverridesForTask,
+      },
+      fallbackWaitingTask?.reusable_candidates,
+    );
+    const preferredReuse = trimString(item?.preferred_reuse)
+      || trimString(fallbackWaitingTask?.preferred_reuse)
+      || null;
     const canonicalWorkflowName = workflowTemplateId
       ? canonicalWorkflowNameOverridesForTask[workflowTemplateId]
         || trimString(item?.canonical_workflow_name)
@@ -439,6 +485,8 @@ export async function hydrateWaitingTaskGovernanceLabels(
         : { workflow_name: fallbackWorkflowName }),
       governance_selection_context:
         item?.governance_selection_context ?? fallbackWaitingTask?.governance_selection_context ?? null,
+      ...(preferredReuse ? { preferred_reuse: preferredReuse } : {}),
+      ...(reusableCandidates.length > 0 ? { reusable_candidates: reusableCandidates } : {}),
       canonical_task_name:
         taskNameById.get(taskId)
         || trimString(item?.canonical_task_name)
@@ -657,6 +705,35 @@ export function canonicalizeWaitingTaskGovernanceBlockedReuse(
       }
       return {
         ...candidate,
+        name: workflowName,
+      };
+    })
+    .filter(Boolean);
+}
+
+function canonicalizeWaitingTaskReusableCandidates(
+  waitingTask,
+  fallbackCandidates = null,
+) {
+  const rawCandidates = Array.isArray(waitingTask?.reusable_candidates)
+    && waitingTask.reusable_candidates.length > 0
+    ? waitingTask.reusable_candidates
+    : Array.isArray(fallbackCandidates)
+      ? fallbackCandidates
+      : [];
+
+  const workflowNameOverrides = canonicalWorkflowNameOverrides(waitingTask);
+  const seenCandidateIds = new Set();
+  return rawCandidates
+    .map((rawCandidate) => {
+      const candidate = normalizeReusableWorkflowCandidate(rawCandidate);
+      const workflowName = workflowNameOverrides[candidate.id] ?? candidate.name;
+      if (!candidate.id || !workflowName || seenCandidateIds.has(candidate.id)) {
+        return null;
+      }
+      seenCandidateIds.add(candidate.id);
+      return {
+        id: candidate.id,
         name: workflowName,
       };
     })
@@ -1070,6 +1147,13 @@ export function canonicalizeWaitingTaskGovernanceLabels(
       labelCarrier,
       fallbackWaitingTask?.governance_blocked_reuse,
     );
+    const reusableCandidates = canonicalizeWaitingTaskReusableCandidates(
+      labelCarrier,
+      fallbackWaitingTask?.reusable_candidates,
+    );
+    const preferredReuse = trimString(item?.preferred_reuse)
+      || trimString(fallbackWaitingTask?.preferred_reuse)
+      || null;
     const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
       governanceBlockedReuse,
     );
@@ -1097,6 +1181,8 @@ export function canonicalizeWaitingTaskGovernanceLabels(
         || null,
       governance_selection_context:
         selectionContextEntry?.selection_context ?? fallbackSelectionContext ?? null,
+      ...(preferredReuse ? { preferred_reuse: preferredReuse } : {}),
+      ...(reusableCandidates.length > 0 ? { reusable_candidates: reusableCandidates } : {}),
       governance_blocked_reuse: governanceBlockedReuse,
       governance_reenable_guidance: governanceReenableGuidance,
       ...(Object.keys(workflowNameOverrides).length > 0
@@ -1775,6 +1861,12 @@ export function buildSessionDispatchPayloadWaitingTask(
   const currentGovernanceBlockedReuse = Array.isArray(waitingTask?.governance_blocked_reuse)
     ? waitingTask.governance_blocked_reuse
     : [];
+  const currentReusableCandidates = Array.isArray(waitingTask?.reusable_candidates)
+    ? waitingTask.reusable_candidates
+    : [];
+  const preferredReuse = trimString(waitingTask?.preferred_reuse)
+    || trimString(workflowPreparationPayloadTask?.preferred_reuse)
+    || null;
   const mergedWaitingTask = {
     ...workflowPreparationPayloadTask,
     ...waitingTask,
@@ -1795,6 +1887,12 @@ export function buildSessionDispatchPayloadWaitingTask(
     workflow_name: trimString(waitingTask?.workflow_name)
       || trimString(workflowPreparationPayloadTask?.workflow_name)
       || null,
+    ...(preferredReuse ? { preferred_reuse: preferredReuse } : {}),
+    reusable_candidates: currentReusableCandidates.length > 0
+      ? currentReusableCandidates
+      : Array.isArray(workflowPreparationPayloadTask?.reusable_candidates)
+        ? workflowPreparationPayloadTask.reusable_candidates
+        : [],
     governance_selection_context:
       waitingTask?.governance_selection_context
       ?? workflowPreparationPayloadTask?.governance_selection_context
@@ -1867,6 +1965,12 @@ export function buildSessionDispatchPayloadWaitingTask(
           parent_decision_note: waitingTaskRecord.parent_decision_note,
         }
       : replanningHandoff,
+    ...(waitingTaskRecord?.preferred_reuse || preferredReuse
+      ? { preferred_reuse: waitingTaskRecord?.preferred_reuse ?? preferredReuse }
+      : {}),
+    ...(Array.isArray(waitingTaskRecord?.reusable_candidates) && waitingTaskRecord.reusable_candidates.length > 0
+      ? { reusable_candidates: waitingTaskRecord.reusable_candidates }
+      : {}),
     governance_selection_context: waitingTaskRecord?.governance_selection_context ?? null,
     governance_blocked_reuse: governanceBlockedReuse,
     governance_reenable_guidance: governanceReenableGuidance,
@@ -2187,6 +2291,7 @@ export function describeSessionDispatchPayloadWaitingTask(waitingTask = {}) {
   const taskName = trimString(waitingTask?.task_name) ?? 'Unnamed task';
   const workflowTemplateId = trimString(waitingTask?.workflow_template_id) ?? 'unknown-workflow';
   const governance = describeWaitingTaskGovernance(waitingTask);
+  const reuseGuidanceView = buildWorkflowPreparationReuseGuidanceView(waitingTask);
   const governanceSelectionContext = describeGovernanceSelectionContext(
     waitingTask?.governance_selection_context ?? null,
   );
@@ -2196,8 +2301,14 @@ export function describeSessionDispatchPayloadWaitingTask(waitingTask = {}) {
   if (governance !== 'none') {
     parts.push(`governance: ${governance}`);
   }
+  if (trimString(waitingTask?.preferred_reuse)) {
+    parts.push(`preferred_reuse: ${reuseGuidanceView.preferredReuse}`);
+  }
   if (governanceSelectionContext !== 'none') {
     parts.push(`governance_selection_context: ${governanceSelectionContext}`);
+  }
+  if (reuseGuidanceView.reusableCandidatesWithNames !== 'none') {
+    parts.push(`reusable_candidates: ${reuseGuidanceView.reusableCandidatesWithNames}`);
   }
   if (replanningHandoff !== 'none') {
     parts.push(`replanning_handoff: ${replanningHandoff}`);
@@ -2246,10 +2357,12 @@ export function buildWaitingTaskRecord(waitingTask = {}) {
     workflowNameOverrides,
   );
   const governanceBlockedReuse = canonicalizeWaitingTaskGovernanceBlockedReuse(labelCarrier);
+  const reusableCandidates = canonicalizeWaitingTaskReusableCandidates(labelCarrier);
   const governanceReenableGuidance = describeWorkflowReuseGovernanceReenableGuidanceList(
     governanceBlockedReuse,
   );
   const replanningHandoff = waitingTaskReplanningHandoff(waitingTask);
+  const preferredReuse = trimString(waitingTask?.preferred_reuse);
   const workflowName = selectionContextWorkflowDisplayName({
     workflow_template_id: workflowTemplateId,
     workflow_name: waitingTask?.workflow_name,
@@ -2272,6 +2385,8 @@ export function buildWaitingTaskRecord(waitingTask = {}) {
     registry_rank: Number.isInteger(waitingTask?.registry_rank) ? waitingTask.registry_rank : null,
     registry_mode: trimString(waitingTask?.registry_mode) || null,
     selection_note: trimString(waitingTask?.selection_note) || null,
+    ...(preferredReuse ? { preferred_reuse: preferredReuse } : {}),
+    ...(reusableCandidates.length > 0 ? { reusable_candidates: reusableCandidates } : {}),
     governance_selection_context: governanceSelectionContext
       ? structuredClone(governanceSelectionContext)
       : null,

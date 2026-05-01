@@ -4288,6 +4288,118 @@ describe('governance policy', () => {
     );
   });
 
+  it('recovers workflow-preparation reuse guidance and reusable candidates for session-dispatch artifacts when live waiting tasks lose them', async () => {
+    const job = {
+      workflow_preparation: {
+        dispatch: {
+          packet: {
+            payload: {
+              waiting_tasks: [
+                {
+                  task_id: ' task-docs ',
+                  task_name: ' Documentation Refresh Fallback ',
+                  workflow_template_id: ' wf-roomier-template ',
+                  workflow_name: ' Roomier Template Fallback ',
+                  preferred_reuse:
+                    ' wf-roomier-template (Roomier Template Fallback) rank 7 via governance_minimize_policy_carryover. Preferred because it carried less inherited policy. ',
+                  reusable_candidates: [
+                    {
+                      id: ' wf-roomier-template ',
+                      name: ' Roomier Template Fallback ',
+                    },
+                    {
+                      id: ' wf-alt-template ',
+                      name: ' Alternate Template Fallback ',
+                    },
+                  ],
+                  governance_selection_context: null,
+                  governance_blocked_reuse: [],
+                },
+              ],
+            },
+          },
+        },
+      },
+    };
+    const waitingTasks = [
+      {
+        task_id: ' task-docs ',
+        task_name: ' Documentation Refresh Ready ',
+        workflow_template_id: ' wf-roomier-template ',
+        workflow_name: ' Roomier Template Ready ',
+        preferred_reuse: null,
+        reusable_candidates: [],
+        governance_selection_context: null,
+        governance_blocked_reuse: [],
+      },
+    ];
+    const liveDocs = new Map([
+      ['task:task-docs', { id: 'task-docs', data: { name: 'Documentation Refresh Canonical' } }],
+      ['workflow:wf-roomier-template', { id: 'wf-roomier-template', data: { name: 'Roomier Template Renamed' } }],
+      ['workflow:wf-alt-template', { id: 'wf-alt-template', data: { name: 'Alternate Template Renamed' } }],
+    ]);
+
+    const views = await buildSessionDispatchPacketWaitingTaskViews(
+      job,
+      waitingTasks,
+      async (kind, id) => liveDocs.get(`${kind}:${id}`) ?? null,
+    );
+
+    assert.equal(
+      views.waitingTasksForDispatchPacket[0].preferred_reuse,
+      'wf-roomier-template (Roomier Template Fallback) rank 7 via governance_minimize_policy_carryover. Preferred because it carried less inherited policy.',
+    );
+    assert.deepEqual(views.waitingTasksForDispatchPacket[0].reusable_candidates, [
+      {
+        id: 'wf-roomier-template',
+        name: 'Roomier Template Renamed',
+      },
+      {
+        id: 'wf-alt-template',
+        name: 'Alternate Template Renamed',
+      },
+    ]);
+    assert.deepEqual(views.workflowPreparationPayloadWaitingTasksForDispatchPacket[0].reusable_candidates, [
+      {
+        id: 'wf-roomier-template',
+        name: 'Roomier Template Renamed',
+      },
+      {
+        id: 'wf-alt-template',
+        name: 'Alternate Template Renamed',
+      },
+    ]);
+
+    const waitingArea = buildSessionDispatchPacketWaitingArea(
+      views.waitingTasksForDispatchPacket,
+      views.workflowPreparationPayloadWaitingTasksForDispatchPacket,
+      job,
+    );
+
+    assert.equal(
+      waitingArea.payloadWaitingTasks[0].preferred_reuse,
+      'wf-roomier-template (Roomier Template Fallback) rank 7 via governance_minimize_policy_carryover. Preferred because it carried less inherited policy.',
+    );
+    assert.deepEqual(waitingArea.payloadWaitingTasks[0].reusable_candidates, [
+      {
+        id: 'wf-roomier-template',
+        name: 'Roomier Template Renamed',
+      },
+      {
+        id: 'wf-alt-template',
+        name: 'Alternate Template Renamed',
+      },
+    ]);
+    assert.match(
+      waitingArea.taskLines,
+      /preferred_reuse: wf-roomier-template \(Roomier Template Fallback\) rank 7 via governance_minimize_policy_carryover\. Preferred because it carried less inherited policy\./,
+    );
+    assert.match(
+      waitingArea.taskLines,
+      /reusable_candidates: wf-roomier-template \(Roomier Template Renamed\), wf-alt-template \(Alternate Template Renamed\)/,
+    );
+  });
+
   it('deduplicates normalized session governance selection context injection entries', () => {
     const readyTasks = [
       {

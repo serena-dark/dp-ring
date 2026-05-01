@@ -3336,6 +3336,18 @@ ${workflowPlan}
       const expectedSelectionContext = structuredClone(documentationTask.governance_selection_context);
       expectedSelectionContext.preferred.workflow_name = renamedPreferredWorkflowName;
       expectedSelectionContext.compared.workflow_name = renamedComparedWorkflowName;
+      const expectedPreferredReuse =
+        'wf-guidance-docs-template (Guidance Docs Template) rank 2 via governance_minimize_policy_carryover. Automatic reuse preferred wf-guidance-docs-template before wf-guidance-docs-tight-policy-carryover because both reusable templates still carry inherited checkpoint policy, and wf-guidance-docs-template has the lower governance cost (branch_budget=3) compared with wf-guidance-docs-tight-policy-carryover (tight workflow_tightness, strong oversight, branch_budget=1).';
+      const expectedReusableCandidates = [
+        {
+          id: 'wf-guidance-docs-template',
+          name: renamedPreferredWorkflowName,
+        },
+        {
+          id: 'wf-guidance-docs-tight-policy-carryover',
+          name: renamedComparedWorkflowName,
+        },
+      ];
 
       assert.equal(refreshedDocumentationTask?.task_name, renamedDocumentationTaskName);
       assert.deepEqual(
@@ -3369,6 +3381,8 @@ ${workflowPlan}
           workflow_template_id: finalizedDocumentationTask.workflow_template_id,
           workflow_name: renamedPreferredWorkflowName,
           replanning_handoff: null,
+          preferred_reuse: expectedPreferredReuse,
+          reusable_candidates: expectedReusableCandidates,
           governance_selection_context: expectedSelectionContext,
           governance_blocked_reuse: [],
           governance_reenable_guidance: 'none',
@@ -4086,6 +4100,18 @@ ${workflowPlan}
       const expectedSelectionContext = structuredClone(effectiveForceSelectionContext);
       expectedSelectionContext.preferred.workflow_name = renamedPreferredWorkflowName;
       expectedSelectionContext.compared.workflow_name = renamedComparedWorkflowName;
+      const expectedPreferredReuse =
+        'wf-guidance-docs-high-force-policy-carryover (Guidance Docs High Force Policy Carryover) rank 2 via governance_prefer_effective_force. Automatic reuse preferred wf-guidance-docs-high-force-policy-carryover before wf-guidance-docs-low-force-policy-carryover because both reusable templates carry equivalent inherited checkpoint policy, and wf-guidance-docs-high-force-policy-carryover retains stronger checkpoint effective force (25) than wf-guidance-docs-low-force-policy-carryover (0).';
+      const expectedReusableCandidates = [
+        {
+          id: 'wf-guidance-docs-high-force-policy-carryover',
+          name: renamedPreferredWorkflowName,
+        },
+        {
+          id: 'wf-guidance-docs-low-force-policy-carryover',
+          name: renamedComparedWorkflowName,
+        },
+      ];
       assert.ok(Array.isArray(launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks));
       const launchedPayloadTask = launchedJob.session_dispatch.dispatch.packet.payload.waiting_tasks.find(
         (item) => item.task_id === finalizedDocumentationTask.task_id,
@@ -4104,6 +4130,8 @@ ${workflowPlan}
             parent_task_id: replanningParentTaskId,
             parent_decision_note: replanningDecisionNote,
           },
+          preferred_reuse: expectedPreferredReuse,
+          reusable_candidates: expectedReusableCandidates,
           governance_selection_context: expectedSelectionContext,
           governance_blocked_reuse: [],
           governance_reenable_guidance: 'none',
