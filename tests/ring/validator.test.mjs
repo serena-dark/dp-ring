@@ -303,6 +303,8 @@ function buildGovernedSessionDoc() {
                 policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
                 governance_pressure_score: 1228,
                 effective_force_score: 25,
+                divergence_score: 1,
+                composability_score: 3,
               },
               compared: {
                 workflow_id: 'wf-2-test',
@@ -310,6 +312,8 @@ function buildGovernedSessionDoc() {
                 policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
                 governance_pressure_score: 1228,
                 effective_force_score: 0,
+                divergence_score: 4,
+                composability_score: 0,
               },
             },
           },
@@ -767,6 +771,13 @@ describe('validator', async () => {
     it('rejects a governed session context with an invalid workflow tightness label', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.governance_context.blocked_reuse[0].workflow_tightness = 'chaotic';
+      const { valid } = validator.validate('session', doc);
+      assert.equal(valid, false);
+    });
+
+    it('rejects a governed session selection context with a negative divergence score', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.divergence_score = -1;
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
     });

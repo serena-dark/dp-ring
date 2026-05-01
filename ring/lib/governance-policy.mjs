@@ -965,13 +965,34 @@ function normalizeEffectiveForceScore(score) {
   return Number.isFinite(score) ? score : 0;
 }
 
-function selectionContextEntry(workflow, policy, effectiveForceScore) {
+function selectionContextBranchMetricScore(score) {
+  return nonNegativeInteger(score);
+}
+
+function selectionContextEffectiveForceState(value) {
+  if (value && typeof value === 'object') {
+    return {
+      effective_force_score: normalizeEffectiveForceScore(value?.effectiveForceScore),
+      divergence_score: selectionContextBranchMetricScore(value?.divergenceScore),
+      composability_score: selectionContextBranchMetricScore(value?.composabilityScore),
+    };
+  }
+
+  return {
+    effective_force_score: normalizeEffectiveForceScore(value),
+    divergence_score: null,
+    composability_score: null,
+  };
+}
+
+function selectionContextEntry(workflow, policy, effectiveForceState) {
   const workflowId = trimString(workflow?.id);
   if (!workflowId) {
     return null;
   }
 
   const governancePressureScore = automaticReusePolicyGovernancePressureScore(policy);
+  const metricState = selectionContextEffectiveForceState(effectiveForceState);
   return {
     workflow_id: workflowId,
     workflow_name: trimString(workflow?.data?.name) ?? workflowId,
@@ -979,7 +1000,13 @@ function selectionContextEntry(workflow, policy, effectiveForceScore) {
     governance_pressure_score: Number.isFinite(governancePressureScore)
       ? governancePressureScore
       : null,
-    effective_force_score: normalizeEffectiveForceScore(effectiveForceScore),
+    effective_force_score: metricState.effective_force_score,
+    ...(metricState.divergence_score !== null
+      ? { divergence_score: metricState.divergence_score }
+      : {}),
+    ...(metricState.composability_score !== null
+      ? { composability_score: metricState.composability_score }
+      : {}),
   };
 }
 
@@ -998,6 +1025,12 @@ function normalizeGovernanceSelectionContextEntry(entry) {
       ? entry.governance_pressure_score
       : null,
     effective_force_score: normalizeEffectiveForceScore(entry?.effective_force_score),
+    ...(selectionContextBranchMetricScore(entry?.divergence_score) !== null
+      ? { divergence_score: selectionContextBranchMetricScore(entry?.divergence_score) }
+      : {}),
+    ...(selectionContextBranchMetricScore(entry?.composability_score) !== null
+      ? { composability_score: selectionContextBranchMetricScore(entry?.composability_score) }
+      : {}),
   };
 }
 
@@ -2528,6 +2561,15 @@ function workflowEffectiveForce(effectiveForceByTemplate, workflow) {
   if (!workflowId) {
     return 0;
   }
+  const value = effectiveForceByTemplate.get(workflowId);
+  return selectionContextEffectiveForceState(value).effective_force_score;
+}
+
+function workflowEffectiveForceState(effectiveForceByTemplate, workflow) {
+  const workflowId = trimString(workflow?.id);
+  if (!workflowId) {
+    return 0;
+  }
   return effectiveForceByTemplate.get(workflowId) ?? 0;
 }
 
@@ -2644,6 +2686,10 @@ export function governedAutomaticReuseSelectionState({
       automaticReusePolicyByTemplate,
       preferredWorkflow,
     );
+    const preferredEffectiveForceState = workflowEffectiveForceState(
+      effectiveForceByTemplate,
+      preferredWorkflow,
+    );
     const preferredEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, preferredWorkflow);
     const comparedWorkflow = trimString(preferredWorkflow?.id) === trimString(defaultWorkflow?.id)
       ? constrainedReusableCandidates.find((workflow) => trimString(workflow?.id) !== trimString(preferredWorkflow?.id)) ?? null
@@ -2652,6 +2698,10 @@ export function governedAutomaticReuseSelectionState({
     if (comparedWorkflow) {
       const comparedPolicy = workflowAutomaticReusePolicy(
         automaticReusePolicyByTemplate,
+        comparedWorkflow,
+      );
+      const comparedEffectiveForceState = workflowEffectiveForceState(
+        effectiveForceByTemplate,
         comparedWorkflow,
       );
       const comparedEffectiveForce = workflowEffectiveForce(effectiveForceByTemplate, comparedWorkflow);
@@ -2671,10 +2721,10 @@ export function governedAutomaticReuseSelectionState({
           recommendedMode,
           preferredWorkflow,
           preferredPolicy,
-          preferredEffectiveForce,
+          preferredEffectiveForceState,
           comparedWorkflow,
           comparedPolicy,
-          comparedEffectiveForce,
+          comparedEffectiveForceState,
         );
         recommendedNote =
           `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates still carry inherited checkpoint policy, `
@@ -2685,10 +2735,10 @@ export function governedAutomaticReuseSelectionState({
           recommendedMode,
           preferredWorkflow,
           preferredPolicy,
-          preferredEffectiveForce,
+          preferredEffectiveForceState,
           comparedWorkflow,
           comparedPolicy,
-          comparedEffectiveForce,
+          comparedEffectiveForceState,
         );
         recommendedNote =
           `Automatic reuse preferred ${preferredWorkflow.id} before ${comparedWorkflow.id} because both reusable templates carry equivalent inherited checkpoint policy, `
@@ -2731,7 +2781,19 @@ function describeGovernanceSelectionContextEntry(entry) {
   const effectiveForce = Number.isFinite(entry.effective_force_score)
     ? entry.effective_force_score
     : 'n/a';
-  return `${workflowId} (${workflowName}) | policy: ${policy} | governance_pressure_score: ${governancePressure} | effective_force_score: ${effectiveForce}`;
+  const divergenceScore = selectionContextBranchMetricScore(entry?.divergence_score);
+  const composabilityScore = selectionContextBranchMetricScore(entry?.composability_score);
+  const branchMetricLabels = [
+    divergenceScore !== null ? `divergence_score: ${divergenceScore}` : null,
+    composabilityScore !== null ? `composability_score: ${composabilityScore}` : null,
+  ].filter(Boolean);
+  return [
+    `${workflowId} (${workflowName})`,
+    `policy: ${policy}`,
+    `governance_pressure_score: ${governancePressure}`,
+    `effective_force_score: ${effectiveForce}`,
+    ...branchMetricLabels,
+  ].join(' | ');
 }
 
 export function describeGovernanceSelectionContext(selectionContext) {

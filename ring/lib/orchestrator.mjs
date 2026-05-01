@@ -4505,7 +4505,7 @@ function inferTaskTypeFromContext(goal, contextText = '') {
         const checkpointContext = await workflowRunCheckpointContext(ring, latestRun, activeCheckpoint);
         effectiveForceByTemplate.set(
           workflow.id,
-          checkpointEffectiveForceState(activeCheckpoint, checkpointContext).effectiveForceScore,
+          checkpointEffectiveForceState(activeCheckpoint, checkpointContext),
         );
       } else {
         effectiveForceByTemplate.set(workflow.id, 0);

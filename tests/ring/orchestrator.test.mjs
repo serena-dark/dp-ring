@@ -3246,11 +3246,19 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         scaffold,
-        /Governance selection context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        scaffold,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /governance_selection_context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
 
       const workflowPlan = prerequisiteCompleted.workflow_preparation.waiting_tasks
@@ -3289,7 +3297,11 @@ ${workflowPlan}
       );
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /governance_selection_context: basis: governance_minimize_policy_carryover \(preferred the lower inherited governance cost\) \| preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-template \(Guidance Docs Template\) \| policy: branch_budget=3 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        finalized.session_dispatch.dispatch.packet.body,
+        /compared: wf-guidance-docs-tight-policy-carryover \(Guidance Docs Tight Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
 
       const renamedDocumentationTaskName = 'Governed workflow selection guidance (renamed before prelaunch refresh)';
@@ -3963,7 +3975,11 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         scaffold,
-        /Governance selection context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        scaffold,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         scaffold.includes(
@@ -3972,7 +3988,11 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        retried.workflow_preparation.dispatch.packet.body,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         retried.workflow_preparation.dispatch.packet.body.includes(
@@ -4053,7 +4073,11 @@ ${workflowPlan}
       assert.equal(finalizedDocumentationTask?.parent_decision_note, replanningDecisionNote);
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /governance_selection_context: basis: governance_prefer_effective_force \(preferred the stronger checkpoint effective force after governance cost tied\) \| preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+      );
+      assert.match(
+        finalized.session_dispatch.dispatch.packet.body,
+        /compared: wf-guidance-docs-low-force-policy-carryover \(Guidance Docs Low Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.ok(
         finalized.session_dispatch.dispatch.packet.body.includes(
@@ -6910,20 +6934,20 @@ Split milestone prerequisites into ready and blocked sets.
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
       const costSelectionContext = bundle.workflows.waiting_tasks[0].governance_selection_context;
       assert.equal(costSelectionContext?.basis, 'governance_minimize_policy_carryover');
-      assert.deepEqual(costSelectionContext?.preferred, {
-        workflow_id: 'wf-testing-budget-policy-carryover',
-        workflow_name: 'Testing Budget Policy Carryover',
-        policy: 'branch_budget=3',
-        governance_pressure_score: 1116,
-        effective_force_score: 2,
-      });
-      assert.deepEqual(costSelectionContext?.compared, {
-        workflow_id: 'wf-testing-tight-policy-carryover',
-        workflow_name: 'Testing Tight Policy Carryover',
-        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
-        governance_pressure_score: 1228,
-        effective_force_score: 0,
-      });
+      assert.equal(costSelectionContext?.preferred?.workflow_id, 'wf-testing-budget-policy-carryover');
+      assert.equal(costSelectionContext?.preferred?.workflow_name, 'Testing Budget Policy Carryover');
+      assert.equal(costSelectionContext?.preferred?.policy, 'branch_budget=3');
+      assert.equal(costSelectionContext?.preferred?.governance_pressure_score, 1116);
+      assert.equal(costSelectionContext?.preferred?.effective_force_score, 2);
+      assert.equal(Number.isInteger(costSelectionContext?.preferred?.divergence_score), true);
+      assert.equal(Number.isInteger(costSelectionContext?.preferred?.composability_score), true);
+      assert.equal(costSelectionContext?.compared?.workflow_id, 'wf-testing-tight-policy-carryover');
+      assert.equal(costSelectionContext?.compared?.workflow_name, 'Testing Tight Policy Carryover');
+      assert.equal(costSelectionContext?.compared?.policy, 'tight workflow_tightness, strong oversight, branch_budget=1');
+      assert.equal(costSelectionContext?.compared?.governance_pressure_score, 1228);
+      assert.equal(costSelectionContext?.compared?.effective_force_score, 0);
+      assert.equal(Number.isInteger(costSelectionContext?.compared?.divergence_score), true);
+      assert.equal(Number.isInteger(costSelectionContext?.compared?.composability_score), true);
       assert.ok(
         costSelectionContext.preferred.governance_pressure_score
           < costSelectionContext.compared.governance_pressure_score,
@@ -7263,20 +7287,20 @@ Split milestone prerequisites into ready and blocked sets.
       assert.deepEqual(bundle.workflows.waiting_tasks[0].governance_blocked_reuse, []);
       const effectiveForceSelectionContext = bundle.workflows.waiting_tasks[0].governance_selection_context;
       assert.equal(effectiveForceSelectionContext?.basis, 'governance_prefer_effective_force');
-      assert.deepEqual(effectiveForceSelectionContext?.preferred, {
-        workflow_id: 'wf-testing-high-force-policy-carryover',
-        workflow_name: 'Testing High Force Policy Carryover',
-        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
-        governance_pressure_score: 1228,
-        effective_force_score: 25,
-      });
-      assert.deepEqual(effectiveForceSelectionContext?.compared, {
-        workflow_id: 'wf-testing-low-force-policy-carryover',
-        workflow_name: 'Testing Low Force Policy Carryover',
-        policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
-        governance_pressure_score: 1228,
-        effective_force_score: 0,
-      });
+      assert.equal(effectiveForceSelectionContext?.preferred?.workflow_id, 'wf-testing-high-force-policy-carryover');
+      assert.equal(effectiveForceSelectionContext?.preferred?.workflow_name, 'Testing High Force Policy Carryover');
+      assert.equal(effectiveForceSelectionContext?.preferred?.policy, 'tight workflow_tightness, strong oversight, branch_budget=1');
+      assert.equal(effectiveForceSelectionContext?.preferred?.governance_pressure_score, 1228);
+      assert.equal(effectiveForceSelectionContext?.preferred?.effective_force_score, 25);
+      assert.equal(Number.isInteger(effectiveForceSelectionContext?.preferred?.divergence_score), true);
+      assert.equal(Number.isInteger(effectiveForceSelectionContext?.preferred?.composability_score), true);
+      assert.equal(effectiveForceSelectionContext?.compared?.workflow_id, 'wf-testing-low-force-policy-carryover');
+      assert.equal(effectiveForceSelectionContext?.compared?.workflow_name, 'Testing Low Force Policy Carryover');
+      assert.equal(effectiveForceSelectionContext?.compared?.policy, 'tight workflow_tightness, strong oversight, branch_budget=1');
+      assert.equal(effectiveForceSelectionContext?.compared?.governance_pressure_score, 1228);
+      assert.equal(effectiveForceSelectionContext?.compared?.effective_force_score, 0);
+      assert.equal(Number.isInteger(effectiveForceSelectionContext?.compared?.divergence_score), true);
+      assert.equal(Number.isInteger(effectiveForceSelectionContext?.compared?.composability_score), true);
       assert.equal(
         effectiveForceSelectionContext.preferred.governance_pressure_score,
         effectiveForceSelectionContext.compared.governance_pressure_score,

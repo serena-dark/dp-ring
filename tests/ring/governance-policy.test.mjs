@@ -672,8 +672,16 @@ describe('governance policy', () => {
         }],
       ]),
       effectiveForceByTemplate: new Map([
-        ['wf-tight-template', 13],
-        ['wf-roomier-template', 14],
+        ['wf-tight-template', {
+          effectiveForceScore: 13,
+          divergenceScore: 2,
+          composabilityScore: 0,
+        }],
+        ['wf-roomier-template', {
+          effectiveForceScore: 14,
+          divergenceScore: 1,
+          composabilityScore: 2,
+        }],
       ]),
       registryRanksByWorkflowId: new Map([
         ['wf-tight-template', 1],
@@ -696,6 +704,8 @@ describe('governance policy', () => {
         policy: 'branch_budget=3',
         governance_pressure_score: 1206,
         effective_force_score: 14,
+        divergence_score: 1,
+        composability_score: 2,
       },
       compared: {
         workflow_id: 'wf-tight-template',
@@ -703,6 +713,8 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 13,
+        divergence_score: 2,
+        composability_score: 0,
       },
     });
   });
@@ -731,8 +743,16 @@ describe('governance policy', () => {
         }],
       ]),
       effectiveForceByTemplate: new Map([
-        ['wf-strong-force-template', 19],
-        ['wf-weaker-force-template', 13],
+        ['wf-strong-force-template', {
+          effectiveForceScore: 19,
+          divergenceScore: 1,
+          composabilityScore: 3,
+        }],
+        ['wf-weaker-force-template', {
+          effectiveForceScore: 13,
+          divergenceScore: 3,
+          composabilityScore: 0,
+        }],
       ]),
       registryRanksByWorkflowId: new Map([
         ['wf-strong-force-template', 1],
@@ -755,6 +775,8 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 19,
+        divergence_score: 1,
+        composability_score: 3,
       },
       compared: {
         workflow_id: 'wf-weaker-force-template',
@@ -762,6 +784,8 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 13,
+        divergence_score: 3,
+        composability_score: 0,
       },
     });
   });

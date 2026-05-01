@@ -87,7 +87,9 @@
                           "workflow_name": { "type": "string" },
                           "policy": { "type": "string" },
                           "governance_pressure_score": { "type": ["number", "null"] },
-                          "effective_force_score": { "type": ["number", "null"] }
+                          "effective_force_score": { "type": ["number", "null"] },
+                          "divergence_score": { "type": ["integer", "null"], "minimum": 0 },
+                          "composability_score": { "type": ["integer", "null"], "minimum": 0 }
                         }
                       },
                       "compared": {
@@ -99,7 +101,9 @@
                           "workflow_name": { "type": "string" },
                           "policy": { "type": "string" },
                           "governance_pressure_score": { "type": ["number", "null"] },
-                          "effective_force_score": { "type": ["number", "null"] }
+                          "effective_force_score": { "type": ["number", "null"] },
+                          "divergence_score": { "type": ["integer", "null"], "minimum": 0 },
+                          "composability_score": { "type": ["integer", "null"], "minimum": 0 }
                         }
                       }
                     }
