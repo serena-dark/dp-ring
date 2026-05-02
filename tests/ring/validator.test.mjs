@@ -833,6 +833,24 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank blocked-reuse linkage fields in governed session context', () => {
+      const cases = [
+        ['task_id', ''],
+        ['task_id', '   '],
+        ['workflow_template_id', ''],
+        ['workflow_template_id', '   '],
+        ['workflow_name', ''],
+        ['workflow_name', '   '],
+      ];
+
+      for (const [field, value] of cases) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.governance_context.blocked_reuse[0][field] = value;
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${field}=${JSON.stringify(value)}`);
+      }
+    });
+
     it('rejects blank blocked-reuse checkpoint ids across governed session hold reasons', () => {
       const cases = [
         ['warm_semantic_lineage', '   '],
