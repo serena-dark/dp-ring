@@ -981,6 +981,7 @@ function selectionContextEffectiveForceState(value) {
   if (value && typeof value === 'object') {
     return {
       effective_force_score: normalizeEffectiveForceScore(value?.effectiveForceScore ?? value?.effective_force_score),
+      checkpoint_id: trimString(value?.checkpointId ?? value?.checkpoint_id),
       evidence_count: selectionContextEvidenceCount(value?.evidenceCount ?? value?.evidence_count),
       replay_status: selectionContextReplayStatus(value?.replayStatus ?? value?.replay_status),
       lineage_depth: selectionContextBranchMetricScore(value?.lineageDepth ?? value?.lineage_depth),
@@ -991,6 +992,7 @@ function selectionContextEffectiveForceState(value) {
 
   return {
     effective_force_score: normalizeEffectiveForceScore(value),
+    checkpoint_id: null,
     evidence_count: null,
     replay_status: null,
     lineage_depth: null,
@@ -999,7 +1001,7 @@ function selectionContextEffectiveForceState(value) {
   };
 }
 
-function selectionContextEntry(workflow, policy, effectiveForceState) {
+function selectionContextEntry(workflow, policy, effectiveForceState, { includeCheckpointId = false } = {}) {
   const workflowId = trimString(workflow?.id);
   if (!workflowId) {
     return null;
@@ -1015,6 +1017,9 @@ function selectionContextEntry(workflow, policy, effectiveForceState) {
       ? governancePressureScore
       : null,
     effective_force_score: metricState.effective_force_score,
+    ...(includeCheckpointId && metricState.checkpoint_id
+      ? { checkpoint_id: metricState.checkpoint_id }
+      : {}),
     ...(metricState.evidence_count !== null
       ? { evidence_count: metricState.evidence_count }
       : {}),
@@ -1048,6 +1053,9 @@ function normalizeGovernanceSelectionContextEntry(entry) {
       ? entry.governance_pressure_score
       : null,
     effective_force_score: normalizeEffectiveForceScore(entry?.effective_force_score),
+    ...(trimString(entry?.checkpoint_id)
+      ? { checkpoint_id: trimString(entry?.checkpoint_id) }
+      : {}),
     ...(selectionContextEvidenceCount(entry?.evidence_count) !== null
       ? { evidence_count: selectionContextEvidenceCount(entry?.evidence_count) }
       : {}),
@@ -2558,15 +2566,18 @@ export function buildGovernanceSelectionContext(
   comparedEffectiveForceScore,
 ) {
   const normalizedBasis = trimString(basis);
+  const includeCheckpointId = normalizedBasis === 'governance_prefer_effective_force';
   const preferred = selectionContextEntry(
     preferredWorkflow,
     preferredPolicy,
     preferredEffectiveForceScore,
+    { includeCheckpointId },
   );
   const compared = selectionContextEntry(
     comparedWorkflow,
     comparedPolicy,
     comparedEffectiveForceScore,
+    { includeCheckpointId },
   );
 
   if (!normalizedBasis || !preferred || !compared) {
@@ -2813,6 +2824,7 @@ function describeGovernanceSelectionContextEntry(entry) {
   const effectiveForce = Number.isFinite(entry.effective_force_score)
     ? entry.effective_force_score
     : 'n/a';
+  const checkpointId = trimString(entry?.checkpoint_id);
   const divergenceScore = selectionContextBranchMetricScore(entry?.divergence_score);
   const composabilityScore = selectionContextBranchMetricScore(entry?.composability_score);
   const lineageDepth = selectionContextBranchMetricScore(entry?.lineage_depth);
@@ -2830,6 +2842,7 @@ function describeGovernanceSelectionContextEntry(entry) {
     `policy: ${policy}`,
     `governance_pressure_score: ${governancePressure}`,
     `effective_force_score: ${effectiveForce}`,
+    ...(checkpointId ? [`checkpoint_id: ${checkpointId}`] : []),
     ...branchMetricLabels,
   ].join(' | ');
 }

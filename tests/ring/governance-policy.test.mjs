@@ -765,12 +765,14 @@ describe('governance policy', () => {
       effectiveForceByTemplate: new Map([
         ['wf-strong-force-template', {
           effectiveForceScore: 19,
+          checkpointId: 'cp-strong-force-mainline',
           lineageDepth: 5,
           divergenceScore: 1,
           composabilityScore: 3,
         }],
         ['wf-weaker-force-template', {
           effectiveForceScore: 13,
+          checkpointId: 'cp-weaker-force-mainline',
           lineageDepth: 2,
           divergenceScore: 3,
           composabilityScore: 0,
@@ -797,6 +799,7 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 19,
+        checkpoint_id: 'cp-strong-force-mainline',
         lineage_depth: 5,
         divergence_score: 1,
         composability_score: 3,
@@ -807,6 +810,7 @@ describe('governance policy', () => {
         policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
         governance_pressure_score: 1228,
         effective_force_score: 13,
+        checkpoint_id: 'cp-weaker-force-mainline',
         lineage_depth: 2,
         divergence_score: 3,
         composability_score: 0,
