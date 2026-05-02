@@ -259,6 +259,38 @@ function buildWorkflowRunDoc() {
   };
 }
 
+function buildEffectiveForceSelectionContext() {
+  return {
+    basis: 'governance_prefer_effective_force',
+    preferred: {
+      workflow_id: 'wf-1-test',
+      workflow_name: 'Governed Workflow',
+      policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+      governance_pressure_score: 1228,
+      effective_force_score: 25,
+      checkpoint_id: 'cp-governed-preferred',
+      evidence_count: 3,
+      replay_status: 'requested',
+      lineage_depth: 5,
+      divergence_score: 1,
+      composability_score: 3,
+    },
+    compared: {
+      workflow_id: 'wf-2-test',
+      workflow_name: 'Comparison Workflow',
+      policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
+      governance_pressure_score: 1228,
+      effective_force_score: 0,
+      checkpoint_id: 'cp-governed-compared',
+      evidence_count: 0,
+      replay_status: 'idle',
+      lineage_depth: 2,
+      divergence_score: 4,
+      composability_score: 0,
+    },
+  };
+}
+
 function buildGovernedSessionDoc({ selectionContext = null } = {}) {
   const doc = {
     id: 's2-governed',
@@ -295,35 +327,7 @@ function buildGovernedSessionDoc({ selectionContext = null } = {}) {
             task_name: 'Governed task',
             workflow_template_id: 'wf-1-test',
             workflow_name: 'Governed Workflow',
-            selection_context: selectionContext ?? {
-              basis: 'governance_prefer_effective_force',
-              preferred: {
-                workflow_id: 'wf-1-test',
-                workflow_name: 'Governed Workflow',
-                policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
-                governance_pressure_score: 1228,
-                effective_force_score: 25,
-                checkpoint_id: 'cp-governed-preferred',
-                evidence_count: 3,
-                replay_status: 'requested',
-                lineage_depth: 5,
-                divergence_score: 1,
-                composability_score: 3,
-              },
-              compared: {
-                workflow_id: 'wf-2-test',
-                workflow_name: 'Comparison Workflow',
-                policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
-                governance_pressure_score: 1228,
-                effective_force_score: 0,
-                checkpoint_id: 'cp-governed-compared',
-                evidence_count: 0,
-                replay_status: 'idle',
-                lineage_depth: 2,
-                divergence_score: 4,
-                composability_score: 0,
-              },
-            },
+            selection_context: selectionContext ?? buildEffectiveForceSelectionContext(),
           },
         ],
       },
@@ -855,6 +859,31 @@ describe('validator', async () => {
       doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.replay_status = 'paused';
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
+    });
+
+    it('rejects compared-side effective-force metrics that violate the governed session schema', () => {
+      const cases = [
+        ['negative divergence score', (selectionContext) => {
+          selectionContext.compared.divergence_score = -1;
+        }],
+        ['negative lineage depth', (selectionContext) => {
+          selectionContext.compared.lineage_depth = -1;
+        }],
+        ['negative evidence count', (selectionContext) => {
+          selectionContext.compared.evidence_count = -1;
+        }],
+        ['unknown replay status', (selectionContext) => {
+          selectionContext.compared.replay_status = 'paused';
+        }],
+      ];
+
+      for (const [label, mutate] of cases) {
+        const selectionContext = buildEffectiveForceSelectionContext();
+        mutate(selectionContext);
+        const doc = buildGovernedSessionDoc({ selectionContext });
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${label}`);
+      }
     });
 
     it('rejects compared-side policy-carryover metrics that violate the governed session schema', () => {
