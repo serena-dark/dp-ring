@@ -861,6 +861,36 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank preferred-side checkpoint ids across governed selection-context bases', () => {
+      const cases = [
+        ['governance_prefer_effective_force', buildEffectiveForceSelectionContext],
+        ['governance_minimize_policy_carryover', buildPolicyCarryoverSelectionContext],
+      ];
+
+      for (const [basis, buildSelectionContext] of cases) {
+        const selectionContext = buildSelectionContext();
+        selectionContext.preferred.checkpoint_id = '   ';
+        const doc = buildGovernedSessionDoc({ selectionContext });
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${basis}`);
+      }
+    });
+
+    it('rejects blank compared-side checkpoint ids across governed selection-context bases', () => {
+      const cases = [
+        ['governance_prefer_effective_force', buildEffectiveForceSelectionContext],
+        ['governance_minimize_policy_carryover', buildPolicyCarryoverSelectionContext],
+      ];
+
+      for (const [basis, buildSelectionContext] of cases) {
+        const selectionContext = buildSelectionContext();
+        selectionContext.compared.checkpoint_id = '';
+        const doc = buildGovernedSessionDoc({ selectionContext });
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${basis}`);
+      }
+    });
+
     it('rejects negative preferred-side composability scores across governed selection-context bases', () => {
       const cases = [
         ['governance_prefer_effective_force', buildEffectiveForceSelectionContext],
