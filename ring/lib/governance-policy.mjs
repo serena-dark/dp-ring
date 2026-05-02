@@ -1001,7 +1001,7 @@ function selectionContextEffectiveForceState(value) {
   };
 }
 
-function selectionContextEntry(workflow, policy, effectiveForceState, { includeCheckpointId = false } = {}) {
+function selectionContextEntry(workflow, policy, effectiveForceState) {
   const workflowId = trimString(workflow?.id);
   if (!workflowId) {
     return null;
@@ -1017,7 +1017,7 @@ function selectionContextEntry(workflow, policy, effectiveForceState, { includeC
       ? governancePressureScore
       : null,
     effective_force_score: metricState.effective_force_score,
-    ...(includeCheckpointId && metricState.checkpoint_id
+    ...(metricState.checkpoint_id
       ? { checkpoint_id: metricState.checkpoint_id }
       : {}),
     ...(metricState.evidence_count !== null
@@ -2566,18 +2566,15 @@ export function buildGovernanceSelectionContext(
   comparedEffectiveForceScore,
 ) {
   const normalizedBasis = trimString(basis);
-  const includeCheckpointId = normalizedBasis === 'governance_prefer_effective_force';
   const preferred = selectionContextEntry(
     preferredWorkflow,
     preferredPolicy,
     preferredEffectiveForceScore,
-    { includeCheckpointId },
   );
   const compared = selectionContextEntry(
     comparedWorkflow,
     comparedPolicy,
     comparedEffectiveForceScore,
-    { includeCheckpointId },
   );
 
   if (!normalizedBasis || !preferred || !compared) {
