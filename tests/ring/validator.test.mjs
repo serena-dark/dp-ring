@@ -861,6 +861,21 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects negative preferred-side composability scores across governed selection-context bases', () => {
+      const cases = [
+        ['governance_prefer_effective_force', buildEffectiveForceSelectionContext],
+        ['governance_minimize_policy_carryover', buildPolicyCarryoverSelectionContext],
+      ];
+
+      for (const [basis, buildSelectionContext] of cases) {
+        const selectionContext = buildSelectionContext();
+        selectionContext.preferred.composability_score = -1;
+        const doc = buildGovernedSessionDoc({ selectionContext });
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${basis}`);
+      }
+    });
+
     it('rejects compared-side effective-force metrics that violate the governed session schema', () => {
       const cases = [
         ['negative divergence score', (selectionContext) => {
@@ -871,6 +886,9 @@ describe('validator', async () => {
         }],
         ['negative evidence count', (selectionContext) => {
           selectionContext.compared.evidence_count = -1;
+        }],
+        ['negative composability score', (selectionContext) => {
+          selectionContext.compared.composability_score = -1;
         }],
         ['unknown replay status', (selectionContext) => {
           selectionContext.compared.replay_status = 'paused';
@@ -896,6 +914,9 @@ describe('validator', async () => {
         }],
         ['negative evidence count', (selectionContext) => {
           selectionContext.compared.evidence_count = -1;
+        }],
+        ['negative composability score', (selectionContext) => {
+          selectionContext.compared.composability_score = -1;
         }],
         ['unknown replay status', (selectionContext) => {
           selectionContext.compared.replay_status = 'paused';
