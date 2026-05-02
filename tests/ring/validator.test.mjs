@@ -362,6 +362,38 @@ function buildGovernedSessionDoc({ selectionContext = null } = {}) {
   return doc;
 }
 
+function buildPolicyCarryoverSelectionContext() {
+  return {
+    basis: 'governance_minimize_policy_carryover',
+    preferred: {
+      workflow_id: 'wf-roomier-test',
+      workflow_name: 'Roomier Workflow',
+      policy: 'balanced workflow_tightness, normal oversight, branch_budget=2',
+      governance_pressure_score: 218,
+      effective_force_score: 6,
+      checkpoint_id: 'cp-roomier-template',
+      evidence_count: 1,
+      replay_status: 'idle',
+      lineage_depth: 2,
+      divergence_score: 0,
+      composability_score: 0,
+    },
+    compared: {
+      workflow_id: 'wf-tight-test',
+      workflow_name: 'Tighter Workflow',
+      policy: 'tight workflow_tightness, strong oversight, branch_budget=0',
+      governance_pressure_score: 1228,
+      effective_force_score: 6,
+      checkpoint_id: 'cp-tight-template',
+      evidence_count: 1,
+      replay_status: 'idle',
+      lineage_depth: 2,
+      divergence_score: 0,
+      composability_score: 0,
+    },
+  };
+}
+
 describe('validator', async () => {
   const validator = await createValidator(ringDir);
 
@@ -401,35 +433,7 @@ describe('validator', async () => {
 
     it('accepts a governed session selection context for governance_minimize_policy_carryover with checkpoint ids', () => {
       const doc = buildGovernedSessionDoc({
-        selectionContext: {
-          basis: 'governance_minimize_policy_carryover',
-          preferred: {
-            workflow_id: 'wf-roomier-test',
-            workflow_name: 'Roomier Workflow',
-            policy: 'balanced workflow_tightness, normal oversight, branch_budget=2',
-            governance_pressure_score: 218,
-            effective_force_score: 6,
-            checkpoint_id: 'cp-roomier-template',
-            evidence_count: 1,
-            replay_status: 'idle',
-            lineage_depth: 2,
-            divergence_score: 0,
-            composability_score: 0,
-          },
-          compared: {
-            workflow_id: 'wf-tight-test',
-            workflow_name: 'Tighter Workflow',
-            policy: 'tight workflow_tightness, strong oversight, branch_budget=0',
-            governance_pressure_score: 1228,
-            effective_force_score: 6,
-            checkpoint_id: 'cp-tight-template',
-            evidence_count: 1,
-            replay_status: 'idle',
-            lineage_depth: 2,
-            divergence_score: 0,
-            composability_score: 0,
-          },
-        },
+        selectionContext: buildPolicyCarryoverSelectionContext(),
       });
       assert.equal(
         doc.data.context_injected.governance_selection_contexts[0].selection_context.basis,
@@ -851,6 +855,31 @@ describe('validator', async () => {
       doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.replay_status = 'paused';
       const { valid } = validator.validate('session', doc);
       assert.equal(valid, false);
+    });
+
+    it('rejects compared-side policy-carryover metrics that violate the governed session schema', () => {
+      const cases = [
+        ['negative divergence score', (selectionContext) => {
+          selectionContext.compared.divergence_score = -1;
+        }],
+        ['negative lineage depth', (selectionContext) => {
+          selectionContext.compared.lineage_depth = -1;
+        }],
+        ['negative evidence count', (selectionContext) => {
+          selectionContext.compared.evidence_count = -1;
+        }],
+        ['unknown replay status', (selectionContext) => {
+          selectionContext.compared.replay_status = 'paused';
+        }],
+      ];
+
+      for (const [label, mutate] of cases) {
+        const selectionContext = buildPolicyCarryoverSelectionContext();
+        mutate(selectionContext);
+        const doc = buildGovernedSessionDoc({ selectionContext });
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${label}`);
+      }
     });
 
     it('rejects a governed session selection context when task linkage is missing', () => {
