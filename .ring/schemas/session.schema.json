@@ -161,7 +161,7 @@
                     "type": "string",
                     "pattern": "^(warm_semantic_lineage|checkpoint_[a-z0-9_]+)$"
                   },
-                  "checkpoint_id": { "type": ["string", "null"] },
+                  "checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                   "adoption_status": {
                     "enum": [null, "candidate", "mainline", "discarded", "synthesized", "archived"]
                   },

@@ -833,6 +833,21 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank blocked-reuse checkpoint ids across governed session hold reasons', () => {
+      const cases = [
+        ['warm_semantic_lineage', '   '],
+        ['checkpoint_branch_budget_exhausted', ''],
+      ];
+
+      for (const [reason, checkpointId] of cases) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.governance_context.blocked_reuse[0].reason = reason;
+        doc.data.governance_context.blocked_reuse[0].checkpoint_id = checkpointId;
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for ${reason}`);
+      }
+    });
+
     it('rejects a governed session selection context with a negative divergence score', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.context_injected.governance_selection_contexts[0].selection_context.preferred.divergence_score = -1;
