@@ -259,8 +259,8 @@ function buildWorkflowRunDoc() {
   };
 }
 
-function buildGovernedSessionDoc() {
-  return {
+function buildGovernedSessionDoc({ selectionContext = null } = {}) {
+  const doc = {
     id: 's2-governed',
     type: 'session',
     version: 1,
@@ -295,7 +295,7 @@ function buildGovernedSessionDoc() {
             task_name: 'Governed task',
             workflow_template_id: 'wf-1-test',
             workflow_name: 'Governed Workflow',
-            selection_context: {
+            selection_context: selectionContext ?? {
               basis: 'governance_prefer_effective_force',
               preferred: {
                 workflow_id: 'wf-1-test',
@@ -358,6 +358,8 @@ function buildGovernedSessionDoc() {
       ],
     },
   };
+
+  return doc;
 }
 
 describe('validator', async () => {
@@ -393,6 +395,46 @@ describe('validator', async () => {
 
     it('accepts a valid governed session context', () => {
       const doc = buildGovernedSessionDoc();
+      const { valid, errors } = validator.validate('session', doc);
+      assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('accepts a governed session selection context for governance_minimize_policy_carryover with checkpoint ids', () => {
+      const doc = buildGovernedSessionDoc({
+        selectionContext: {
+          basis: 'governance_minimize_policy_carryover',
+          preferred: {
+            workflow_id: 'wf-roomier-test',
+            workflow_name: 'Roomier Workflow',
+            policy: 'balanced workflow_tightness, normal oversight, branch_budget=2',
+            governance_pressure_score: 218,
+            effective_force_score: 6,
+            checkpoint_id: 'cp-roomier-template',
+            evidence_count: 1,
+            replay_status: 'idle',
+            lineage_depth: 2,
+            divergence_score: 0,
+            composability_score: 0,
+          },
+          compared: {
+            workflow_id: 'wf-tight-test',
+            workflow_name: 'Tighter Workflow',
+            policy: 'tight workflow_tightness, strong oversight, branch_budget=0',
+            governance_pressure_score: 1228,
+            effective_force_score: 6,
+            checkpoint_id: 'cp-tight-template',
+            evidence_count: 1,
+            replay_status: 'idle',
+            lineage_depth: 2,
+            divergence_score: 0,
+            composability_score: 0,
+          },
+        },
+      });
+      assert.equal(
+        doc.data.context_injected.governance_selection_contexts[0].selection_context.basis,
+        'governance_minimize_policy_carryover',
+      );
       const { valid, errors } = validator.validate('session', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
