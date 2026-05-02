@@ -969,10 +969,20 @@ function selectionContextBranchMetricScore(score) {
   return nonNegativeInteger(score);
 }
 
+function selectionContextEvidenceCount(value) {
+  return nonNegativeInteger(value);
+}
+
+function selectionContextReplayStatus(status) {
+  return trimString(status);
+}
+
 function selectionContextEffectiveForceState(value) {
   if (value && typeof value === 'object') {
     return {
       effective_force_score: normalizeEffectiveForceScore(value?.effectiveForceScore ?? value?.effective_force_score),
+      evidence_count: selectionContextEvidenceCount(value?.evidenceCount ?? value?.evidence_count),
+      replay_status: selectionContextReplayStatus(value?.replayStatus ?? value?.replay_status),
       lineage_depth: selectionContextBranchMetricScore(value?.lineageDepth ?? value?.lineage_depth),
       divergence_score: selectionContextBranchMetricScore(value?.divergenceScore ?? value?.divergence_score),
       composability_score: selectionContextBranchMetricScore(value?.composabilityScore ?? value?.composability_score),
@@ -981,6 +991,8 @@ function selectionContextEffectiveForceState(value) {
 
   return {
     effective_force_score: normalizeEffectiveForceScore(value),
+    evidence_count: null,
+    replay_status: null,
     lineage_depth: null,
     divergence_score: null,
     composability_score: null,
@@ -1003,6 +1015,12 @@ function selectionContextEntry(workflow, policy, effectiveForceState) {
       ? governancePressureScore
       : null,
     effective_force_score: metricState.effective_force_score,
+    ...(metricState.evidence_count !== null
+      ? { evidence_count: metricState.evidence_count }
+      : {}),
+    ...(metricState.replay_status
+      ? { replay_status: metricState.replay_status }
+      : {}),
     ...(metricState.lineage_depth !== null
       ? { lineage_depth: metricState.lineage_depth }
       : {}),
@@ -1030,6 +1048,12 @@ function normalizeGovernanceSelectionContextEntry(entry) {
       ? entry.governance_pressure_score
       : null,
     effective_force_score: normalizeEffectiveForceScore(entry?.effective_force_score),
+    ...(selectionContextEvidenceCount(entry?.evidence_count) !== null
+      ? { evidence_count: selectionContextEvidenceCount(entry?.evidence_count) }
+      : {}),
+    ...(selectionContextReplayStatus(entry?.replay_status)
+      ? { replay_status: selectionContextReplayStatus(entry?.replay_status) }
+      : {}),
     ...(selectionContextBranchMetricScore(entry?.lineage_depth) !== null
       ? { lineage_depth: selectionContextBranchMetricScore(entry?.lineage_depth) }
       : {}),
@@ -2792,7 +2816,11 @@ function describeGovernanceSelectionContextEntry(entry) {
   const divergenceScore = selectionContextBranchMetricScore(entry?.divergence_score);
   const composabilityScore = selectionContextBranchMetricScore(entry?.composability_score);
   const lineageDepth = selectionContextBranchMetricScore(entry?.lineage_depth);
+  const evidenceCount = selectionContextEvidenceCount(entry?.evidence_count);
+  const replayStatus = selectionContextReplayStatus(entry?.replay_status);
   const branchMetricLabels = [
+    evidenceCount !== null && evidenceCount > 0 ? `evidence_count: ${evidenceCount}` : null,
+    replayStatus && replayStatus !== 'idle' ? `replay_status: ${replayStatus}` : null,
     lineageDepth !== null ? `lineage_depth: ${lineageDepth}` : null,
     divergenceScore !== null ? `divergence_score: ${divergenceScore}` : null,
     composabilityScore !== null ? `composability_score: ${composabilityScore}` : null,

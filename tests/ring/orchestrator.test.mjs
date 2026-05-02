@@ -3975,7 +3975,7 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         scaffold,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| evidence_count: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         scaffold,
@@ -3988,7 +3988,7 @@ Split milestone prerequisites into ready and blocked sets.
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| evidence_count: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         retried.workflow_preparation.dispatch.packet.body,
@@ -4073,7 +4073,7 @@ ${workflowPlan}
       assert.equal(finalizedDocumentationTask?.parent_decision_note, replanningDecisionNote);
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,
-        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
+        /preferred: wf-guidance-docs-high-force-policy-carryover \(Guidance Docs High Force Policy Carryover\) \| policy: tight workflow_tightness, strong oversight, branch_budget=1 \| governance_pressure_score: \d+ \| effective_force_score: \d+ \| evidence_count: \d+ \| lineage_depth: \d+ \| divergence_score: \d+ \| composability_score: \d+/,
       );
       assert.match(
         finalized.session_dispatch.dispatch.packet.body,

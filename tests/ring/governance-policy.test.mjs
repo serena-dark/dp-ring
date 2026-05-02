@@ -580,7 +580,12 @@ describe('governance policy', () => {
           branch_budget: 3,
           governance_pressure_score: 1206,
         },
-        { effectiveForceScore: 14, lineageDepth: 4 },
+        {
+          effectiveForceScore: 14,
+          evidenceCount: 2,
+          replayStatus: 'requested',
+          lineageDepth: 4,
+        },
         { id: 'wf-tight-template', data: { name: 'Tight Template' } },
         {
           constrained: true,
@@ -589,7 +594,12 @@ describe('governance policy', () => {
           branch_budget: 1,
           governance_pressure_score: 1228,
         },
-        { effectiveForceScore: Number.NaN, lineageDepth: 2 },
+        {
+          effectiveForceScore: Number.NaN,
+          evidenceCount: 0,
+          replayStatus: 'idle',
+          lineageDepth: 2,
+        },
       ),
       {
         basis: 'governance_minimize_policy_carryover',
@@ -599,6 +609,8 @@ describe('governance policy', () => {
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          evidence_count: 2,
+          replay_status: 'requested',
           lineage_depth: 4,
         },
         compared: {
@@ -607,6 +619,8 @@ describe('governance policy', () => {
           policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
           governance_pressure_score: 1228,
           effective_force_score: 0,
+          evidence_count: 0,
+          replay_status: 'idle',
           lineage_depth: 2,
         },
       },
@@ -824,6 +838,8 @@ describe('governance policy', () => {
           policy: ' branch_budget=3 ',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          evidence_count: 2,
+          replay_status: ' requested ',
           lineage_depth: 4,
         },
         compared: {
@@ -832,6 +848,8 @@ describe('governance policy', () => {
           policy: ' tight workflow_tightness, strong oversight, branch_budget=1 ',
           governance_pressure_score: 1228,
           effective_force_score: Number.NaN,
+          evidence_count: 0,
+          replay_status: ' idle ',
           lineage_depth: 2,
         },
       },
@@ -878,6 +896,8 @@ describe('governance policy', () => {
           policy: 'branch_budget=3',
           governance_pressure_score: 1206,
           effective_force_score: 14,
+          evidence_count: 2,
+          replay_status: 'requested',
           lineage_depth: 4,
         },
         compared: {
@@ -886,6 +906,8 @@ describe('governance policy', () => {
           policy: 'tight workflow_tightness, strong oversight, branch_budget=1',
           governance_pressure_score: 1228,
           effective_force_score: 0,
+          evidence_count: 0,
+          replay_status: 'idle',
           lineage_depth: 2,
         },
       },
@@ -5174,7 +5196,12 @@ describe('governance policy', () => {
         branch_budget: 1,
         governance_pressure_score: 1228,
       },
-      { effectiveForceScore: 27, lineageDepth: 5 },
+      {
+        effectiveForceScore: 27,
+        evidenceCount: 4,
+        replayStatus: 'replaying',
+        lineageDepth: 5,
+      },
       { id: 'wf-low-force', data: { name: 'Low Force Template' } },
       {
         constrained: true,
@@ -5183,12 +5210,17 @@ describe('governance policy', () => {
         branch_budget: 1,
         governance_pressure_score: 1228,
       },
-      { effectiveForceScore: 12, lineageDepth: 2 },
+      {
+        effectiveForceScore: 12,
+        evidenceCount: 0,
+        replayStatus: 'idle',
+        lineageDepth: 2,
+      },
     );
 
     assert.equal(
       describeGovernanceSelectionContext(selectionContext),
-      'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-high-force (High Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 27 | lineage_depth: 5 | compared: wf-low-force (Low Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 12 | lineage_depth: 2',
+      'basis: governance_prefer_effective_force (preferred the stronger checkpoint effective force after governance cost tied) | preferred: wf-high-force (High Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 27 | evidence_count: 4 | replay_status: replaying | lineage_depth: 5 | compared: wf-low-force (Low Force Template) | policy: tight workflow_tightness, strong oversight, branch_budget=1 | governance_pressure_score: 1228 | effective_force_score: 12 | lineage_depth: 2',
     );
     assert.equal(describeGovernanceSelectionContext(null), 'none');
   });
