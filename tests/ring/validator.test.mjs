@@ -1002,6 +1002,17 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank governed session selection-context linkage fields', () => {
+      const cases = ['task_id', 'workflow_template_id', 'workflow_name'];
+
+      for (const field of cases) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.context_injected.governance_selection_contexts[0][field] = '   ';
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for blank ${field}`);
+      }
+    });
+
     it('rejects a session replanning handoff with a blank parent decision note', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.context_injected.replanning_handoffs[0].parent_decision_note = '   ';

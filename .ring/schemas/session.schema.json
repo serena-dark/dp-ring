@@ -62,10 +62,10 @@
                 "additionalProperties": false,
                 "required": ["task_id", "workflow_template_id", "workflow_name", "selection_context"],
                 "properties": {
-                  "task_id": { "type": "string" },
+                  "task_id": { "type": "string", "pattern": "\\S" },
                   "task_name": { "type": ["string", "null"] },
-                  "workflow_template_id": { "type": "string" },
-                  "workflow_name": { "type": "string" },
+                  "workflow_template_id": { "type": "string", "pattern": "\\S" },
+                  "workflow_name": { "type": "string", "pattern": "\\S" },
                   "selection_context": {
                     "type": "object",
                     "additionalProperties": false,
