@@ -1033,6 +1033,24 @@ describe('validator', async () => {
       assert.equal(valid, true, `Expected valid with null task_name labels but got errors: ${JSON.stringify(errors)}`);
     });
 
+    it('rejects blank governed session workflow_template ids while allowing null', () => {
+      const nullDoc = buildGovernedSessionDoc();
+      nullDoc.data.context_injected.workflow_template = null;
+      const nullResult = validator.validate('session', nullDoc);
+      assert.equal(
+        nullResult.valid,
+        true,
+        `Expected valid with null workflow_template but got errors: ${JSON.stringify(nullResult.errors)}`,
+      );
+
+      for (const value of ['', '   ']) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.context_injected.workflow_template = value;
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for blank workflow_template=${JSON.stringify(value)}`);
+      }
+    });
+
     it('rejects blank governed session task_name labels across governance metadata', () => {
       const cases = [
         ['replanning_handoffs[0].task_name', (doc, value) => {
