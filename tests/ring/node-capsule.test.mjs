@@ -44,6 +44,27 @@ describe('node capsule', () => {
     assert.deepEqual(state.journal, []);
   });
 
+  it('normalizes blank nullable node identity and replay actor fields to null', () => {
+    const state = createEmptyCapsuleState({
+      node_id: '   ',
+      replay: {
+        requested_by: '   ',
+      },
+    });
+
+    assert.equal(state.node_id, null);
+    assert.equal(state.replay.requested_by, null);
+
+    const requested = requestReplay(state, {
+      now: '2026-04-17T14:00:00.000Z',
+      requested_by: '   ',
+      reason: 'operator requested replay',
+    });
+
+    assert.equal(requested.replay.requested_by, null);
+    assert.equal(requested.journal.at(-1).requested_by, null);
+  });
+
   it('acquires, renews, and expires leases with holder ownership checks', () => {
     const initial = createEmptyCapsuleState({ node_id: 'node-lease' });
     const acquired = acquireLease(initial, 'worker-a', {

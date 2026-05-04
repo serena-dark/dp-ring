@@ -134,7 +134,7 @@
             "capsule_state"
           ],
           "properties": {
-            "node_id": { "type": ["string", "null"] },
+            "node_id": { "type": ["string", "null"], "pattern": "\\S" },
             "branch_id": { "type": "string", "minLength": 1 },
             "active_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
             "checkpoint_ids": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
@@ -157,13 +157,13 @@
               ],
               "properties": {
                 "schema_version": { "type": "string", "minLength": 1 },
-                "node_id": { "type": ["string", "null"] },
+                "node_id": { "type": ["string", "null"], "pattern": "\\S" },
                 "lease": {
                   "type": "object",
                   "additionalProperties": false,
                   "required": ["holder", "expires_at", "acquired_at", "renewed_at", "released_at", "fence_token"],
                   "properties": {
-                    "holder": { "type": ["string", "null"] },
+                    "holder": { "type": ["string", "null"], "pattern": "\\S" },
                     "expires_at": { "type": ["string", "null"], "format": "date-time" },
                     "acquired_at": { "type": ["string", "null"], "format": "date-time" },
                     "renewed_at": { "type": ["string", "null"], "format": "date-time" },
@@ -203,7 +203,7 @@
                     "status": { "type": "string", "enum": ["idle", "requested", "replaying", "completed"] },
                     "requested_at": { "type": ["string", "null"], "format": "date-time" },
                     "completed_at": { "type": ["string", "null"], "format": "date-time" },
-                    "requested_by": { "type": ["string", "null"] },
+                    "requested_by": { "type": ["string", "null"], "pattern": "\\S" },
                     "reason": { "type": ["string", "null"] },
                     "source_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                     "target_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },

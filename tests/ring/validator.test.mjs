@@ -1436,10 +1436,14 @@ describe('validator', async () => {
 
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
+        ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],
         ['active_checkpoint_id', (doc, value) => { doc.data.node_execution.active_checkpoint_id = value; }],
         ['checkpoint_ids[0]', (doc, value) => { doc.data.node_execution.checkpoint_ids[0] = value; }],
         ['branch_event_ids[0]', (doc, value) => { doc.data.node_execution.branch_event_ids[0] = value; }],
+        ['capsule_state.node_id', (doc, value) => { doc.data.node_execution.capsule_state.node_id = value; }],
+        ['capsule_state.lease.holder', (doc, value) => { doc.data.node_execution.capsule_state.lease.holder = value; }],
         ['capsule_state.current_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.current_checkpoint_id = value; }],
+        ['replay.requested_by', (doc, value) => { doc.data.node_execution.capsule_state.replay.requested_by = value; }],
         ['replay.source_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.source_checkpoint_id = value; }],
         ['replay.target_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.target_checkpoint_id = value; }],
         ['replay.journal_state.last_applied_entry_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.last_applied_entry_id = value; }],

@@ -76,6 +76,14 @@ function mergeEvidenceRefs(existingRefs, incomingRefs) {
   return normalizeEvidenceRefs([...(existingRefs ?? []), ...normalizeEvidenceRefs(incomingRefs)]);
 }
 
+function normalizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return value ?? null;
+  }
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
 function normalizeJournalState(state = {}) {
   const base = clone(state ?? {});
   return {
@@ -94,11 +102,11 @@ function normalizeReplayState(state = {}) {
     status: 'idle',
     requested_at: null,
     completed_at: null,
-    requested_by: null,
     reason: null,
     source_checkpoint_id: null,
     target_checkpoint_id: null,
     ...base,
+    requested_by: normalizeNullableString(base.requested_by),
     cursor: clone(base.cursor ?? null),
     journal_state: normalizeJournalState(base.journal_state),
   };
@@ -137,7 +145,7 @@ export function createEmptyCapsuleState({
 } = {}) {
   return {
     schema_version: CAPSULE_SCHEMA_VERSION,
-    node_id,
+    node_id: normalizeNullableString(node_id),
     lease: {
       holder: null,
       expires_at: null,
