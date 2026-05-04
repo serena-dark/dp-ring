@@ -1069,8 +1069,11 @@ describe('validator', async () => {
       }
     });
 
-    it('rejects blank session linkage ids in task_ids and workflow_run_ids', () => {
+    it('rejects blank session linkage ids in milestone_ids, task_ids, and workflow_run_ids', () => {
       const cases = [
+        ['milestone_ids', (doc, value) => {
+          doc.data.milestone_ids = ['r1m1-test', value];
+        }],
         ['task_ids', (doc, value) => {
           doc.data.task_ids = ['t1-test', value];
         }],
