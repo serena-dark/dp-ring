@@ -1024,6 +1024,38 @@ describe('validator', async () => {
       }
     });
 
+    it('accepts null governed session task_name labels when task labels are absent', () => {
+      const doc = buildGovernedSessionDoc();
+      doc.data.context_injected.replanning_handoffs[0].task_name = null;
+      doc.data.context_injected.governance_selection_contexts[0].task_name = null;
+      doc.data.governance_context.blocked_reuse[0].task_name = null;
+      const { valid, errors } = validator.validate('session', doc);
+      assert.equal(valid, true, `Expected valid with null task_name labels but got errors: ${JSON.stringify(errors)}`);
+    });
+
+    it('rejects blank governed session task_name labels across governance metadata', () => {
+      const cases = [
+        ['replanning_handoffs[0].task_name', (doc, value) => {
+          doc.data.context_injected.replanning_handoffs[0].task_name = value;
+        }],
+        ['governance_selection_contexts[0].task_name', (doc, value) => {
+          doc.data.context_injected.governance_selection_contexts[0].task_name = value;
+        }],
+        ['governance_context.blocked_reuse[0].task_name', (doc, value) => {
+          doc.data.governance_context.blocked_reuse[0].task_name = value;
+        }],
+      ];
+
+      for (const [label, mutate] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildGovernedSessionDoc();
+          mutate(doc, value);
+          const { valid } = validator.validate('session', doc);
+          assert.equal(valid, false, `Expected invalid for blank ${label}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects blank preferred/compared workflow provenance labels in governed session selection context', () => {
       const variants = [
         ['effective-force', () => buildEffectiveForceSelectionContext()],

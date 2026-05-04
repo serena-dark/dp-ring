@@ -48,7 +48,7 @@
                 "required": ["task_id", "parent_task_id", "parent_decision_note"],
                 "properties": {
                   "task_id": { "type": "string", "pattern": "\\S" },
-                  "task_name": { "type": ["string", "null"] },
+                  "task_name": { "type": ["string", "null"], "pattern": "\\S" },
                   "parent_task_id": { "type": "string", "pattern": "\\S" },
                   "parent_decision_note": { "type": "string", "pattern": "\\S" }
                 }
@@ -63,7 +63,7 @@
                 "required": ["task_id", "workflow_template_id", "workflow_name", "selection_context"],
                 "properties": {
                   "task_id": { "type": "string", "pattern": "\\S" },
-                  "task_name": { "type": ["string", "null"] },
+                  "task_name": { "type": ["string", "null"], "pattern": "\\S" },
                   "workflow_template_id": { "type": "string", "pattern": "\\S" },
                   "workflow_name": { "type": "string", "pattern": "\\S" },
                   "selection_context": {
@@ -154,7 +154,7 @@
                 "required": ["task_id", "workflow_template_id", "workflow_name", "reason", "detail"],
                 "properties": {
                   "task_id": { "type": "string", "pattern": "\\S" },
-                  "task_name": { "type": ["string", "null"] },
+                  "task_name": { "type": ["string", "null"], "pattern": "\\S" },
                   "workflow_template_id": { "type": "string", "pattern": "\\S" },
                   "workflow_name": { "type": "string", "pattern": "\\S" },
                   "reason": {
