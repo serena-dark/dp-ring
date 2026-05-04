@@ -168,7 +168,7 @@
                   "branch_budget": { "type": ["integer", "null"], "minimum": 0 },
                   "workflow_tightness": { "enum": [null, "loose", "balanced", "tight"] },
                   "oversight_strength": { "enum": [null, "weak", "normal", "strong"] },
-                  "detail": { "type": "string" }
+                  "detail": { "type": "string", "pattern": "\\S" }
                 }
               }
             }

@@ -851,6 +851,17 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank blocked-reuse detail strings in governed session context', () => {
+      const cases = ['', '   '];
+
+      for (const detail of cases) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.governance_context.blocked_reuse[0].detail = detail;
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for detail=${JSON.stringify(detail)}`);
+      }
+    });
+
     it('rejects blank blocked-reuse checkpoint ids across governed session hold reasons', () => {
       const cases = [
         ['warm_semantic_lineage', '   '],
