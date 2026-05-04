@@ -1020,6 +1020,17 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank session replanning handoff linkage fields', () => {
+      const cases = ['task_id', 'parent_task_id'];
+
+      for (const field of cases) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.context_injected.replanning_handoffs[0][field] = '   ';
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for blank ${field}`);
+      }
+    });
+
     it('rejects a task with invalid id prefix', () => {
       const doc = {
         id: 'bad-prefix', type: 'task', version: 1,

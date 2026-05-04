@@ -47,9 +47,9 @@
                 "additionalProperties": false,
                 "required": ["task_id", "parent_task_id", "parent_decision_note"],
                 "properties": {
-                  "task_id": { "type": "string" },
+                  "task_id": { "type": "string", "pattern": "\\S" },
                   "task_name": { "type": ["string", "null"] },
-                  "parent_task_id": { "type": "string" },
+                  "parent_task_id": { "type": "string", "pattern": "\\S" },
                   "parent_decision_note": { "type": "string", "pattern": "\\S" }
                 }
               },
