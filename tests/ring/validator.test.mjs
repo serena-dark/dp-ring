@@ -1069,6 +1069,31 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects negative governed session registry ranks while allowing null', () => {
+      const nullDoc = buildGovernedSessionDoc();
+      nullDoc.data.context_injected.registry_rank_at_selection = null;
+      const nullResult = validator.validate('session', nullDoc);
+      assert.equal(
+        nullResult.valid,
+        true,
+        `Expected valid with null registry_rank_at_selection but got errors: ${JSON.stringify(nullResult.errors)}`,
+      );
+
+      const zeroDoc = buildGovernedSessionDoc();
+      zeroDoc.data.context_injected.registry_rank_at_selection = 0;
+      const zeroResult = validator.validate('session', zeroDoc);
+      assert.equal(
+        zeroResult.valid,
+        true,
+        `Expected valid with registry_rank_at_selection=0 but got errors: ${JSON.stringify(zeroResult.errors)}`,
+      );
+
+      const invalidDoc = buildGovernedSessionDoc();
+      invalidDoc.data.context_injected.registry_rank_at_selection = -1;
+      const { valid } = validator.validate('session', invalidDoc);
+      assert.equal(valid, false, 'Expected invalid for negative registry_rank_at_selection');
+    });
+
     it('rejects blank governed session task_name labels across governance metadata', () => {
       const cases = [
         ['replanning_handoffs[0].task_name', (doc, value) => {

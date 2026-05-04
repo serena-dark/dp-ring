@@ -39,7 +39,7 @@
           "properties": {
             "workflow_template":          { "type": ["string", "null"], "pattern": "\\S" },
             "distillations_applied":      { "type": "array", "items": { "type": "string", "pattern": "\\S" }, "default": [] },
-            "registry_rank_at_selection": { "type": ["integer", "null"] },
+            "registry_rank_at_selection": { "type": ["integer", "null"], "minimum": 0 },
             "replanning_handoffs": {
               "type": "array",
               "items": {
