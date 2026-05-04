@@ -1013,6 +1013,26 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank preferred/compared workflow provenance labels in governed session selection context', () => {
+      const variants = [
+        ['effective-force', () => buildEffectiveForceSelectionContext()],
+        ['policy-carryover', () => buildPolicyCarryoverSelectionContext()],
+      ];
+      const sides = ['preferred', 'compared'];
+      const fields = ['workflow_id', 'workflow_name', 'policy'];
+
+      for (const [variantLabel, buildSelectionContext] of variants) {
+        for (const side of sides) {
+          for (const field of fields) {
+            const doc = buildGovernedSessionDoc({ selectionContext: buildSelectionContext() });
+            doc.data.context_injected.governance_selection_contexts[0].selection_context[side][field] = '   ';
+            const { valid } = validator.validate('session', doc);
+            assert.equal(valid, false, `Expected invalid for ${variantLabel} ${side}.${field}`);
+          }
+        }
+      }
+    });
+
     it('rejects a session replanning handoff with a blank parent decision note', () => {
       const doc = buildGovernedSessionDoc();
       doc.data.context_injected.replanning_handoffs[0].parent_decision_note = '   ';
