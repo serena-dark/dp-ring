@@ -1051,6 +1051,24 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank governed session distillation ids while allowing an empty applied list', () => {
+      const emptyDoc = buildGovernedSessionDoc();
+      emptyDoc.data.context_injected.distillations_applied = [];
+      const emptyResult = validator.validate('session', emptyDoc);
+      assert.equal(
+        emptyResult.valid,
+        true,
+        `Expected valid with an empty distillations_applied list but got errors: ${JSON.stringify(emptyResult.errors)}`,
+      );
+
+      for (const value of ['', '   ']) {
+        const doc = buildGovernedSessionDoc();
+        doc.data.context_injected.distillations_applied = ['dist-1', value];
+        const { valid } = validator.validate('session', doc);
+        assert.equal(valid, false, `Expected invalid for blank distillation id=${JSON.stringify(value)}`);
+      }
+    });
+
     it('rejects blank governed session task_name labels across governance metadata', () => {
       const cases = [
         ['replanning_handoffs[0].task_name', (doc, value) => {
