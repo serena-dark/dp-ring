@@ -136,9 +136,9 @@
           "properties": {
             "node_id": { "type": ["string", "null"] },
             "branch_id": { "type": "string", "minLength": 1 },
-            "active_checkpoint_id": { "type": ["string", "null"] },
-            "checkpoint_ids": { "type": "array", "items": { "type": "string" } },
-            "branch_event_ids": { "type": "array", "items": { "type": "string" } },
+            "active_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
+            "checkpoint_ids": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
+            "branch_event_ids": { "type": "array", "items": { "type": "string", "pattern": "\\S" } },
             "capsule_state": {
               "type": "object",
               "additionalProperties": false,
@@ -181,7 +181,7 @@
                   }
                 },
                 "runtime_status": { "type": "string", "minLength": 1 },
-                "current_checkpoint_id": { "type": ["string", "null"] },
+                "current_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                 "last_checkpoint_at": { "type": ["string", "null"], "format": "date-time" },
                 "last_evidence_at": { "type": ["string", "null"], "format": "date-time" },
                 "last_accepted_evidence_refs": { "type": "array", "items": { "type": ["object", "string"] } },
@@ -205,8 +205,8 @@
                     "completed_at": { "type": ["string", "null"], "format": "date-time" },
                     "requested_by": { "type": ["string", "null"] },
                     "reason": { "type": ["string", "null"] },
-                    "source_checkpoint_id": { "type": ["string", "null"] },
-                    "target_checkpoint_id": { "type": ["string", "null"] },
+                    "source_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
+                    "target_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                     "cursor": { "type": ["object", "string", "null"] },
                     "journal_state": {
                       "type": "object",
@@ -214,8 +214,8 @@
                       "required": ["mode", "last_applied_entry_id", "pending_entry_ids"],
                       "properties": {
                         "mode": { "type": "string", "minLength": 1 },
-                        "last_applied_entry_id": { "type": ["string", "null"] },
-                        "pending_entry_ids": { "type": "array", "items": { "type": "string" } }
+                        "last_applied_entry_id": { "type": ["string", "null"], "pattern": "\\S" },
+                        "pending_entry_ids": { "type": "array", "items": { "type": "string", "pattern": "\\S" } }
                       }
                     }
                   }

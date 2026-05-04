@@ -1434,6 +1434,28 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
+      const cases = [
+        ['active_checkpoint_id', (doc, value) => { doc.data.node_execution.active_checkpoint_id = value; }],
+        ['checkpoint_ids[0]', (doc, value) => { doc.data.node_execution.checkpoint_ids[0] = value; }],
+        ['branch_event_ids[0]', (doc, value) => { doc.data.node_execution.branch_event_ids[0] = value; }],
+        ['capsule_state.current_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.current_checkpoint_id = value; }],
+        ['replay.source_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.source_checkpoint_id = value; }],
+        ['replay.target_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.target_checkpoint_id = value; }],
+        ['replay.journal_state.last_applied_entry_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.last_applied_entry_id = value; }],
+        ['replay.journal_state.pending_entry_ids[0]', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.pending_entry_ids[0] = value; }],
+      ];
+
+      for (const [field, assign] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildWorkflowRunDoc();
+          assign(doc, value);
+          const { valid } = validator.validate('workflow-run', doc);
+          assert.equal(valid, false, `Expected invalid for ${field}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects a workflow-run report with an invalid replanning status', () => {
       const doc = buildWorkflowRunDoc();
       doc.data.reports[0].outputs.replanning_status = 'ready';
