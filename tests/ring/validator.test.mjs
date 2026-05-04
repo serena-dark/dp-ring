@@ -1069,6 +1069,26 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank session linkage ids in task_ids and workflow_run_ids', () => {
+      const cases = [
+        ['task_ids', (doc, value) => {
+          doc.data.task_ids = ['t1-test', value];
+        }],
+        ['workflow_run_ids', (doc, value) => {
+          doc.data.workflow_run_ids = ['run-1-test', value];
+        }],
+      ];
+
+      for (const [label, mutate] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildGovernedSessionDoc();
+          mutate(doc, value);
+          const { valid } = validator.validate('session', doc);
+          assert.equal(valid, false, `Expected invalid for ${label} containing ${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects negative governed session registry ranks while allowing null', () => {
       const nullDoc = buildGovernedSessionDoc();
       nullDoc.data.context_injected.registry_rank_at_selection = null;
