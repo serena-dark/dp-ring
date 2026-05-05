@@ -254,7 +254,7 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
           'external-worker',
         ),
         worker_id: workerId,
-        note: payload.note ?? null,
+        note: trimString(payload.note),
         commit_sha: payload.commit_sha != null ? String(payload.commit_sha).trim() : null,
         outputs:
           payload.outputs && typeof payload.outputs === 'object' && !Array.isArray(payload.outputs)
@@ -308,14 +308,13 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
         'external-worker',
       ),
       worker_id: workerId,
-      note:
-        payload.note ??
-        (rawStatus && typeof rawStatus === 'object'
-          ? rawStatus.message ?? rawStatus.detail ?? null
-          : null) ??
-        task.message ??
-        (typeof metadata.note === 'string' ? metadata.note : null) ??
-        null,
+      note: firstTrimmedString(
+        payload.note,
+        rawStatus && typeof rawStatus === 'object' ? rawStatus.message : null,
+        rawStatus && typeof rawStatus === 'object' ? rawStatus.detail : null,
+        task.message,
+        typeof metadata.note === 'string' ? metadata.note : null,
+      ),
       commit_sha: commitSha,
       outputs,
       judge_agent_id: metadata.judge_agent_id ?? payload.judge_agent_id ?? null,
