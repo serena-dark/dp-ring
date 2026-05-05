@@ -1476,6 +1476,22 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run report provenance fields', () => {
+      const cases = [
+        ['reports[0].worker_id', (doc, value) => { doc.data.reports[0].worker_id = value; }],
+        ['reports[0].protocol', (doc, value) => { doc.data.reports[0].protocol = value; }],
+      ];
+
+      for (const [field, assign] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildWorkflowRunDoc();
+          assign(doc, value);
+          const { valid } = validator.validate('workflow-run', doc);
+          assert.equal(valid, false, `Expected invalid for ${field}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects a workflow-run report with an invalid replanning status', () => {
       const doc = buildWorkflowRunDoc();
       doc.data.reports[0].outputs.replanning_status = 'ready';
