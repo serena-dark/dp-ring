@@ -255,7 +255,7 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
         ),
         worker_id: workerId,
         note: trimString(payload.note),
-        commit_sha: payload.commit_sha != null ? String(payload.commit_sha).trim() : null,
+        commit_sha: trimString(payload.commit_sha),
         outputs:
           payload.outputs && typeof payload.outputs === 'object' && !Array.isArray(payload.outputs)
             ? clone(payload.outputs)
@@ -289,7 +289,7 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
     (typeof metadata.commit_sha === 'string' && metadata.commit_sha.trim()
       ? metadata.commit_sha.trim()
       : null) ??
-    (payload.commit_sha != null ? String(payload.commit_sha).trim() : null);
+    trimString(payload.commit_sha);
   const workerId = firstTrimmedString(
     payload.worker && typeof payload.worker === 'object' ? payload.worker.id : null,
     typeof metadata.worker_id === 'string' ? metadata.worker_id : null,
@@ -2278,8 +2278,7 @@ export function createSessionRunner(
       actor: normalized.report.actor ?? worker.display_name ?? worker.id,
       step_id: steps[stepIndex]?.step_id ?? null,
       note: normalized.report.note ?? null,
-      commit_sha:
-        normalized.report.commit_sha != null ? String(normalized.report.commit_sha).trim() : null,
+      commit_sha: trimString(normalized.report.commit_sha),
       worker_id: worker.id,
       protocol: normalized.protocol,
       authenticated: true,

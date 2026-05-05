@@ -2258,6 +2258,167 @@ describe('session runner', async () => {
     assert.equal(judgedTask.status, 'completed');
   });
 
+  it('normalizes blank native commit sha strings to null', async () => {
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-native-blank-commit-sha',
+      payload: {
+        goal: {
+          title: 'Workflow Run Native Blank Commit Sha',
+          description: 'Blank native workflow-run commit_sha fields should normalize to null instead of persisting empty report values.',
+          acceptance_criteria: ['Native blank commit_sha strings normalize to null'],
+        },
+        environment: {
+          project_id: 'runner-native-blank-commit-sha-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['NATIVE_BLANK_COMMIT_SHA.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-native-blank-commit-sha-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-native-blank-commit-sha',
+            required: true,
+            inline_data: '{"stage":"native-blank-commit-sha"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const runId = session.data.workflow_run_ids[0];
+    const workflowRun = await ring.read('workflow-run', runId);
+    const payload = {
+      status: 'completed',
+      actor: 'worker-agent',
+      note: 'Native blank commit shas should normalize to null.',
+      commit_sha: '   ',
+    };
+
+    const reported = await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      payload,
+      signedHeaders(workflowRun, payload),
+    );
+
+    assert.equal(reported.workflow_run.status, 'running');
+    assert.equal(reported.workflow_run.data.reports.at(-1)?.commit_sha, null);
+    assert.equal(reported.task.status, 'in_progress');
+  });
+
+  it('normalizes blank A2A commit sha strings to null', async () => {
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-a2a-blank-commit-sha',
+      payload: {
+        goal: {
+          title: 'Workflow Run A2A Blank Commit Sha',
+          description: 'Blank A2A workflow-run commit_sha fields should normalize to null instead of persisting empty report values.',
+          acceptance_criteria: ['A2A blank commit_sha strings normalize to null'],
+        },
+        environment: {
+          project_id: 'runner-a2a-blank-commit-sha-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['A2A_BLANK_COMMIT_SHA.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-a2a-blank-commit-sha-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-a2a-blank-commit-sha',
+            required: true,
+            inline_data: '{"stage":"a2a-blank-commit-sha"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const runId = session.data.workflow_run_ids[0];
+    const workflowRun = await ring.read('workflow-run', runId);
+    const a2aReady = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...workflowRun.data.callback,
+          accepted_protocols: [
+            ...new Set([...(workflowRun.data.callback.accepted_protocols ?? []), 'a2a.task-status.v1']),
+          ],
+          allowed_worker_ids: [
+            ...new Set([...(workflowRun.data.callback.allowed_worker_ids ?? []), 'a2a-worker']),
+          ],
+        },
+      },
+    });
+    assert.equal(a2aReady.ok, true, JSON.stringify(a2aReady.errors));
+
+    const a2aWorkflowRun = await ring.read('workflow-run', runId);
+    const payload = {
+      protocol: 'a2a.task-status.v1',
+      worker: {
+        id: 'a2a-worker',
+        display_name: 'A2A Bridge Worker',
+      },
+      commit_sha: '   ',
+      task: {
+        id: runId,
+        kind: 'workflow-run',
+        status: {
+          state: 'completed',
+          message: 'A2A blank commit shas should normalize to null.',
+        },
+        metadata: {
+          judge_agent_id: 'task-judge',
+          outputs: {
+            artifact_path: 'A2A_BLANK_COMMIT_SHA.md',
+          },
+        },
+      },
+    };
+
+    const reported = await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      payload,
+      signedHeaders(a2aWorkflowRun, payload, {
+        workerId: 'a2a-worker',
+        includeKeyVersion: true,
+      }),
+    );
+
+    assert.equal(reported.workflow_run.status, 'running');
+    assert.equal(reported.workflow_run.data.reports.at(-1)?.commit_sha, null);
+    assert.equal(reported.task.status, 'in_progress');
+  });
+
   it('normalizes blank A2A step ids to the current workflow step', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
