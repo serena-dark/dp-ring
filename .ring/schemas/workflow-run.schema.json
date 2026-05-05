@@ -59,9 +59,9 @@
           ],
           "properties": {
             "auth_scheme": { "type": "string", "enum": ["bearer"] },
-            "report_url": { "type": ["string", "null"] },
-            "token": { "type": ["string", "null"] },
-            "signing_secret": { "type": ["string", "null"] },
+            "report_url": { "type": ["string", "null"], "pattern": "\\S" },
+            "token": { "type": ["string", "null"], "pattern": "\\S" },
+            "signing_secret": { "type": ["string", "null"], "pattern": "\\S" },
             "signature_algorithm": { "type": "string", "enum": ["hmac-sha256"] },
             "key_version": { "type": "integer", "minimum": 1 },
             "status": {

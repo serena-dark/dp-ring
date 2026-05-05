@@ -2174,6 +2174,45 @@ describe('session runner', async () => {
     assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
   });
 
+  it('normalizes blank workflow-run callback report_url strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      report_url: '   ',
+      token: 'runner-token',
+      signing_secret: 'runner-secret',
+    });
+
+    assert.equal(normalized.report_url, null);
+    assert.equal(normalized.token, 'runner-token');
+    assert.equal(normalized.signing_secret, 'runner-secret');
+  });
+
+  it('normalizes blank workflow-run callback token strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      report_url: 'https://example.test/report',
+      token: '   ',
+      signing_secret: 'runner-secret',
+    });
+
+    assert.equal(normalized.report_url, 'https://example.test/report');
+    assert.equal(normalized.token, null);
+    assert.equal(normalized.signing_secret, 'runner-secret');
+  });
+
+  it('normalizes blank workflow-run callback signing_secret strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      report_url: 'https://example.test/report',
+      token: 'runner-token',
+      signing_secret: '   ',
+    });
+
+    assert.equal(normalized.report_url, 'https://example.test/report');
+    assert.equal(normalized.token, 'runner-token');
+    assert.equal(normalized.signing_secret, null);
+  });
+
   it('normalizes blank workflow-run callback packet_path strings to null', () => {
     const normalized = normalizeWorkflowRunCallbackState({
       status: 'active',

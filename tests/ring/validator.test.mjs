@@ -1460,6 +1460,23 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run callback transport fields', () => {
+      const cases = [
+        ['callback.report_url', (doc, value) => { doc.data.callback.report_url = value; }],
+        ['callback.token', (doc, value) => { doc.data.callback.token = value; }],
+        ['callback.signing_secret', (doc, value) => { doc.data.callback.signing_secret = value; }],
+      ];
+
+      for (const [field, assign] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildWorkflowRunDoc();
+          assign(doc, value);
+          const { valid } = validator.validate('workflow-run', doc);
+          assert.equal(valid, false, `Expected invalid for ${field}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects blank workflow-run callback provenance fields', () => {
       const cases = [
         ['callback.packet_path', (doc, value) => { doc.data.callback.packet_path = value; }],

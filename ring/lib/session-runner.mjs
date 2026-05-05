@@ -379,6 +379,9 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
   return {
     ...defaults,
     ...state,
+    report_url: trimString(state.report_url),
+    token: trimString(state.token),
+    signing_secret: trimString(state.signing_secret),
     packet_path: trimString(state.packet_path),
     allowed_worker_ids: Array.isArray(state.allowed_worker_ids)
       ? uniqueStrings(state.allowed_worker_ids)
