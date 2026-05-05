@@ -2136,6 +2136,128 @@ describe('session runner', async () => {
     assert.equal(judgedTask.status, 'completed');
   });
 
+  it('normalizes blank A2A step ids to the current workflow step', async () => {
+    const bundle = await ring.orchestrator.submitDispatchBundle({
+      bundle_protocol: 'ring.goal.v1',
+      bundle_version: '1',
+      artifact_transport: 'inline',
+      submitted_by: 'session-runner-a2a-blank-step-id',
+      payload: {
+        goal: {
+          title: 'Workflow Run A2A Blank Step Id',
+          description: 'Blank A2A step ids should fall back to the current workflow step instead of breaking report ingestion.',
+          acceptance_criteria: ['A2A blank step ids fall back to the current step'],
+        },
+        environment: {
+          project_id: 'runner-a2a-blank-step-id-project',
+          repo_root: tempDir,
+          target_scope: {
+            level: 'file',
+            include_paths: ['A2A_BLANK_STEP.md'],
+            exclude_paths: [],
+          },
+          constraints: {
+            must_build: false,
+            must_cleanup: false,
+            merge_policy: 'judge_then_merge',
+          },
+        },
+        materials: [
+          {
+            material_id: 'runner-a2a-blank-step-id-material',
+            kind: 'brief',
+            format: 'json',
+            mount_to: 'workspace/runner-a2a-blank-step-id',
+            required: true,
+            inline_data: '{"stage":"a2a-blank-step-id"}',
+          },
+        ],
+      },
+    });
+
+    await ring.orchestrator.tick();
+    const launched = await ring.orchestrator.readDispatchBundle(bundle.id);
+    const sessionId = launched.batching.session_id;
+    const session = await ring.read('session', sessionId);
+    const taskId = session.data.task_ids[0];
+    const runId = session.data.workflow_run_ids[0];
+
+    await writeFile(join(tempDir, 'A2A_BLANK_STEP.md'), '# Session Runner A2A Blank Step Id\n', 'utf-8');
+    await run('git', ['add', 'A2A_BLANK_STEP.md'], tempDir);
+    await run('git', ['commit', '-m', 'runner a2a blank step id update'], tempDir);
+    const commitSha = (await run('git', ['rev-parse', 'HEAD'], tempDir)).stdout.trim();
+    const workflowRun = await ring.read('workflow-run', runId);
+    const a2aReady = await ring.update('workflow-run', runId, {
+      data: {
+        callback: {
+          ...workflowRun.data.callback,
+          accepted_protocols: [
+            ...new Set([...(workflowRun.data.callback.accepted_protocols ?? []), 'a2a.task-status.v1']),
+          ],
+          allowed_worker_ids: [
+            ...new Set([...(workflowRun.data.callback.allowed_worker_ids ?? []), 'a2a-worker']),
+          ],
+        },
+      },
+    });
+    assert.equal(a2aReady.ok, true, JSON.stringify(a2aReady.errors));
+    const a2aWorkflowRun = await ring.read('workflow-run', runId);
+    const currentStepId = a2aWorkflowRun.data.steps[a2aWorkflowRun.data.current_step_index].step_id;
+    const payload = {
+      protocol: 'a2a.task-status.v1',
+      worker: {
+        id: 'a2a-worker',
+        display_name: 'A2A Bridge Worker',
+      },
+      task: {
+        id: runId,
+        kind: 'workflow-run',
+        status: {
+          state: 'completed',
+          message: 'A2A execution finished.',
+        },
+        artifacts: [
+          {
+            kind: 'git_commit',
+            uri: `git+commit://${commitSha}`,
+          },
+        ],
+        metadata: {
+          step_id: '   ',
+          judge_agent_id: 'task-judge',
+          outputs: {
+            artifact_path: 'A2A_BLANK_STEP.md',
+          },
+        },
+      },
+    };
+
+    const reported = await ring.sessionRunner.reportWorkflowRun(
+      runId,
+      payload,
+      signedHeaders(a2aWorkflowRun, payload, {
+        workerId: 'a2a-worker',
+        includeKeyVersion: true,
+      }),
+    );
+
+    assert.equal(reported.workflow_run.status, 'completed');
+    assert.equal(reported.task.status, 'in_progress');
+
+    const completedRun = await ring.read('workflow-run', runId);
+    assert.equal(completedRun.data.reports.at(-1)?.actor, 'A2A Bridge Worker');
+    assert.equal(completedRun.data.reports.at(-1)?.worker_id, 'a2a-worker');
+    assert.equal(completedRun.data.reports.at(-1)?.protocol, 'a2a.task-status.v1');
+    assert.equal(completedRun.data.reports.at(-1)?.step_id, currentStepId);
+
+    const judgedTask = await ring.taskExecution.judge(taskId, {
+      verdict: 'approved',
+      judge_agent_id: 'task-judge',
+      note: 'Blank A2A step ids now fall back to the current workflow step.',
+    });
+    assert.equal(judgedTask.status, 'completed');
+  });
+
   it('rejects callbacks from workers that are not registered', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',

@@ -98,7 +98,7 @@
               "at": { "type": "string", "format": "date-time" },
               "status": { "type": "string" },
               "actor": { "type": "string", "pattern": "\\S" },
-              "step_id": { "type": ["string", "null"] },
+              "step_id": { "type": ["string", "null"], "pattern": "\\S" },
               "note": { "type": ["string", "null"] },
               "commit_sha": { "type": ["string", "null"] },
               "worker_id": { "type": ["string", "null"], "pattern": "\\S" },

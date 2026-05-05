@@ -246,7 +246,7 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
       protocol: RING_REPORT_PROTOCOL,
       report: {
         status: mapWorkerReportStatus(payload.status),
-        step_id: payload.step_id ?? null,
+        step_id: trimString(payload.step_id),
         actor: firstTrimmedString(
           payload.actor,
           payload.worker_id,
@@ -300,7 +300,7 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
     protocol: transportProtocol ?? A2A_REPORT_PROTOCOL,
     report: {
       status: mappedStatus,
-      step_id: metadata.step_id ?? task.step_id ?? payload.step_id ?? null,
+      step_id: firstTrimmedString(metadata.step_id, task.step_id, payload.step_id),
       actor: firstTrimmedString(
         payload.worker && typeof payload.worker === 'object' ? payload.worker.display_name : null,
         workerId,
