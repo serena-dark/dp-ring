@@ -80,7 +80,7 @@
             "retry_backoff_ms": { "type": "integer", "minimum": 1 },
             "signature_ttl_ms": { "type": "integer", "minimum": 1 },
             "timeout_at": { "type": ["string", "null"], "format": "date-time" },
-            "packet_path": { "type": ["string", "null"] },
+            "packet_path": { "type": ["string", "null"], "pattern": "\\S" },
             "allowed_worker_ids": { "type": "array", "items": { "type": "string" } },
             "accepted_protocols": { "type": "array", "items": { "type": "string" } },
             "last_worker_id": { "type": ["string", "null"], "pattern": "\\S" },

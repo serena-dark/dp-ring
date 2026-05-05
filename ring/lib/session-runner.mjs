@@ -378,6 +378,7 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
   return {
     ...emptyCallbackState(config),
     ...state,
+    packet_path: trimString(state.packet_path),
     last_error: trimString(state.last_error),
   };
 }

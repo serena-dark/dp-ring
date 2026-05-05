@@ -1462,6 +1462,7 @@ describe('validator', async () => {
 
     it('rejects blank workflow-run callback provenance fields', () => {
       const cases = [
+        ['callback.packet_path', (doc, value) => { doc.data.callback.packet_path = value; }],
         ['callback.last_worker_id', (doc, value) => { doc.data.callback.last_worker_id = value; }],
         ['callback.last_protocol', (doc, value) => { doc.data.callback.last_protocol = value; }],
         ['callback.last_error', (doc, value) => { doc.data.callback.last_error = value; }],

@@ -2150,6 +2150,19 @@ describe('session runner', async () => {
     assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
   });
 
+  it('normalizes blank workflow-run callback packet_path strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      packet_path: '   ',
+      last_worker_id: 'worker-agent',
+      last_protocol: 'ring.workflow-run-report.v1',
+    });
+
+    assert.equal(normalized.packet_path, null);
+    assert.equal(normalized.last_worker_id, 'worker-agent');
+    assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
+  });
+
   it('normalizes blank A2A note strings to null', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',
