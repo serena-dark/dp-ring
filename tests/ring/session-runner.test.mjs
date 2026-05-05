@@ -2163,6 +2163,21 @@ describe('session runner', async () => {
     assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
   });
 
+  it('drops blank workflow-run callback worker and protocol list entries during normalization', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      allowed_worker_ids: ['worker-agent', '', '   ', 'a2a-worker'],
+      accepted_protocols: ['ring.workflow-run-report.v1', '', '   ', 'a2a.task-status.v1'],
+      last_worker_id: 'worker-agent',
+      last_protocol: 'ring.workflow-run-report.v1',
+    });
+
+    assert.deepEqual(normalized.allowed_worker_ids, ['worker-agent', 'a2a-worker']);
+    assert.deepEqual(normalized.accepted_protocols, ['ring.workflow-run-report.v1', 'a2a.task-status.v1']);
+    assert.equal(normalized.last_worker_id, 'worker-agent');
+    assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
+  });
+
   it('normalizes blank A2A note strings to null', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',

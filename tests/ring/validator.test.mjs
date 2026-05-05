@@ -1478,6 +1478,22 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run callback worker and protocol list entries', () => {
+      const cases = [
+        ['callback.allowed_worker_ids[1]', (doc, value) => { doc.data.callback.allowed_worker_ids = ['worker-1', value]; }],
+        ['callback.accepted_protocols[1]', (doc, value) => { doc.data.callback.accepted_protocols = ['ring.workflow-run-report.v1', value]; }],
+      ];
+
+      for (const [field, assign] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildWorkflowRunDoc();
+          assign(doc, value);
+          const { valid } = validator.validate('workflow-run', doc);
+          assert.equal(valid, false, `Expected invalid for ${field}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects blank workflow-run report provenance fields', () => {
       const cases = [
         ['reports[0].worker_id', (doc, value) => { doc.data.reports[0].worker_id = value; }],

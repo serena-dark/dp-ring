@@ -375,10 +375,17 @@ function emptyCallbackState(config = DEFAULT_RUNNER_CONFIG) {
 
 export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAULT_RUNNER_CONFIG) {
   const state = callback && typeof callback === 'object' ? clone(callback) : {};
+  const defaults = emptyCallbackState(config);
   return {
-    ...emptyCallbackState(config),
+    ...defaults,
     ...state,
     packet_path: trimString(state.packet_path),
+    allowed_worker_ids: Array.isArray(state.allowed_worker_ids)
+      ? uniqueStrings(state.allowed_worker_ids)
+      : clone(defaults.allowed_worker_ids),
+    accepted_protocols: Array.isArray(state.accepted_protocols)
+      ? uniqueStrings(state.accepted_protocols)
+      : clone(defaults.accepted_protocols),
     last_error: trimString(state.last_error),
   };
 }
