@@ -2137,6 +2137,30 @@ describe('session runner', async () => {
     assert.equal(judgedTask.status, 'completed');
   });
 
+  it('normalizes blank workflow-run callback last_worker_id strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      last_worker_id: '   ',
+      last_protocol: 'ring.workflow-run-report.v1',
+      last_error: null,
+    });
+
+    assert.equal(normalized.last_worker_id, null);
+    assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
+  });
+
+  it('normalizes blank workflow-run callback last_protocol strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      last_worker_id: 'worker-agent',
+      last_protocol: '   ',
+      last_error: null,
+    });
+
+    assert.equal(normalized.last_protocol, null);
+    assert.equal(normalized.last_worker_id, 'worker-agent');
+  });
+
   it('normalizes blank workflow-run callback last_error strings to null', () => {
     const normalized = normalizeWorkflowRunCallbackState({
       status: 'active',

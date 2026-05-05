@@ -386,6 +386,8 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
     accepted_protocols: Array.isArray(state.accepted_protocols)
       ? uniqueStrings(state.accepted_protocols)
       : clone(defaults.accepted_protocols),
+    last_worker_id: trimString(state.last_worker_id),
+    last_protocol: trimString(state.last_protocol),
     last_error: trimString(state.last_error),
   };
 }
