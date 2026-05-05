@@ -83,8 +83,8 @@
             "packet_path": { "type": ["string", "null"] },
             "allowed_worker_ids": { "type": "array", "items": { "type": "string" } },
             "accepted_protocols": { "type": "array", "items": { "type": "string" } },
-            "last_worker_id": { "type": ["string", "null"] },
-            "last_protocol": { "type": ["string", "null"] },
+            "last_worker_id": { "type": ["string", "null"], "pattern": "\\S" },
+            "last_protocol": { "type": ["string", "null"], "pattern": "\\S" },
             "last_error": { "type": ["string", "null"] }
           }
         },
