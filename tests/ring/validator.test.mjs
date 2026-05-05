@@ -1464,6 +1464,7 @@ describe('validator', async () => {
       const cases = [
         ['callback.last_worker_id', (doc, value) => { doc.data.callback.last_worker_id = value; }],
         ['callback.last_protocol', (doc, value) => { doc.data.callback.last_protocol = value; }],
+        ['callback.last_error', (doc, value) => { doc.data.callback.last_error = value; }],
       ];
 
       for (const [field, assign] of cases) {

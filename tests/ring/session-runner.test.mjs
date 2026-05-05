@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
 import { createCheckpoint } from '../../ring/lib/checkpoint-tree.mjs';
 import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
+import { normalizeWorkflowRunCallbackState } from '../../ring/lib/session-runner.mjs';
 import { signedWorkflowRunHeaders } from '../../ring/lib/workflow-run-callback.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -2134,6 +2135,19 @@ describe('session runner', async () => {
       note: 'Blank A2A display names now fall back to worker ids.',
     });
     assert.equal(judgedTask.status, 'completed');
+  });
+
+  it('normalizes blank workflow-run callback last_error strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      last_worker_id: 'worker-agent',
+      last_protocol: 'ring.workflow-run-report.v1',
+      last_error: '   ',
+    });
+
+    assert.equal(normalized.last_error, null);
+    assert.equal(normalized.last_worker_id, 'worker-agent');
+    assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
   });
 
   it('normalizes blank A2A note strings to null', async () => {

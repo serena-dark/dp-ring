@@ -373,6 +373,15 @@ function emptyCallbackState(config = DEFAULT_RUNNER_CONFIG) {
   };
 }
 
+export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAULT_RUNNER_CONFIG) {
+  const state = callback && typeof callback === 'object' ? clone(callback) : {};
+  return {
+    ...emptyCallbackState(config),
+    ...state,
+    last_error: trimString(state.last_error),
+  };
+}
+
 function appendRunReport(run, report) {
   return {
     ...run,
@@ -1026,7 +1035,13 @@ export function createSessionRunner(
 
   async function writeWorkflowRun(run, nextStatus = null) {
     const patch = {
-      data: run.data,
+      data: {
+        ...run.data,
+        callback:
+          run.data?.callback == null
+            ? run.data?.callback ?? null
+            : normalizeWorkflowRunCallbackState(run.data.callback),
+      },
     };
     if (nextStatus) {
       patch.status = nextStatus;

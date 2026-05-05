@@ -85,7 +85,7 @@
             "accepted_protocols": { "type": "array", "items": { "type": "string" } },
             "last_worker_id": { "type": ["string", "null"], "pattern": "\\S" },
             "last_protocol": { "type": ["string", "null"], "pattern": "\\S" },
-            "last_error": { "type": ["string", "null"] }
+            "last_error": { "type": ["string", "null"], "pattern": "\\S" }
           }
         },
         "reports": {
