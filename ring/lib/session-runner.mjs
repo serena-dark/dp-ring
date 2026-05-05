@@ -81,6 +81,16 @@ function trimString(value) {
   return trimmed || null;
 }
 
+function firstTrimmedString(...values) {
+  for (const value of values) {
+    const trimmed = trimString(value);
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
 function governanceLinkageFields(source = {}) {
   return {
     publication_root_id: trimString(source?.publication_root_id),
@@ -227,18 +237,23 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
     (payload.task && typeof payload.task === 'object');
 
   if (!looksA2A) {
+    const workerId = firstTrimmedString(
+      payload.worker_id,
+      headerValue(meta.headers, 'x-ring-worker-id'),
+      payload.actor,
+    );
     return {
       protocol: RING_REPORT_PROTOCOL,
       report: {
         status: mapWorkerReportStatus(payload.status),
         step_id: payload.step_id ?? null,
-        actor: String(payload.actor ?? payload.worker_id ?? headerValue(meta.headers, 'x-ring-worker-id') ?? 'external-worker'),
-        worker_id: String(
-          payload.worker_id ??
-            headerValue(meta.headers, 'x-ring-worker-id') ??
-            payload.actor ??
-            '',
-        ).trim() || null,
+        actor: firstTrimmedString(
+          payload.actor,
+          payload.worker_id,
+          headerValue(meta.headers, 'x-ring-worker-id'),
+          'external-worker',
+        ),
+        worker_id: workerId,
         note: payload.note ?? null,
         commit_sha: payload.commit_sha != null ? String(payload.commit_sha).trim() : null,
         outputs:
@@ -275,26 +290,24 @@ function normalizeWorkerReport(payload = {}, meta = {}) {
       ? metadata.commit_sha.trim()
       : null) ??
     (payload.commit_sha != null ? String(payload.commit_sha).trim() : null);
-  const workerId =
-    (payload.worker && typeof payload.worker === 'object' && typeof payload.worker.id === 'string'
-      ? payload.worker.id
-      : null) ??
-    (typeof metadata.worker_id === 'string' ? metadata.worker_id : null) ??
-    headerValue(meta.headers, 'x-ring-worker-id') ??
-    (typeof payload.actor === 'string' ? payload.actor : null);
+  const workerId = firstTrimmedString(
+    payload.worker && typeof payload.worker === 'object' ? payload.worker.id : null,
+    typeof metadata.worker_id === 'string' ? metadata.worker_id : null,
+    headerValue(meta.headers, 'x-ring-worker-id'),
+    typeof payload.actor === 'string' ? payload.actor : null,
+  );
   return {
     protocol: transportProtocol ?? A2A_REPORT_PROTOCOL,
     report: {
       status: mappedStatus,
       step_id: metadata.step_id ?? task.step_id ?? payload.step_id ?? null,
-      actor:
-        (payload.worker && typeof payload.worker === 'object' && typeof payload.worker.display_name === 'string'
-          ? payload.worker.display_name
-          : null) ??
-        workerId ??
-        (typeof metadata.actor === 'string' ? metadata.actor : null) ??
+      actor: firstTrimmedString(
+        payload.worker && typeof payload.worker === 'object' ? payload.worker.display_name : null,
+        workerId,
+        typeof metadata.actor === 'string' ? metadata.actor : null,
         'external-worker',
-      worker_id: typeof workerId === 'string' && workerId.trim() ? workerId.trim() : null,
+      ),
+      worker_id: workerId,
       note:
         payload.note ??
         (rawStatus && typeof rawStatus === 'object'

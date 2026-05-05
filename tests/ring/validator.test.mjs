@@ -1492,6 +1492,15 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run report actor values', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.data.reports[0].actor = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for reports[0].actor=${JSON.stringify(value)}`);
+      }
+    });
+
     it('rejects a workflow-run report with an invalid replanning status', () => {
       const doc = buildWorkflowRunDoc();
       doc.data.reports[0].outputs.replanning_status = 'ready';
