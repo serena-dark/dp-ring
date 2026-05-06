@@ -2241,6 +2241,29 @@ describe('session runner', async () => {
     assert.equal(normalized.last_protocol, 'ring.workflow-run-report.v1');
   });
 
+  it('normalizes blank workflow-run callback timestamp strings to null', () => {
+    const normalized = normalizeWorkflowRunCallbackState({
+      status: 'active',
+      issued_at: '   ',
+      prepared_at: '',
+      last_report_at: '  ',
+      last_retry_at: '\t',
+      last_rotated_at: '\n',
+      next_retry_at: ' \n ',
+      timeout_at: ' \t ',
+      packet_path: '.ring/orchestrator/runner/sessions/s1-test/run-1-test.json',
+    });
+
+    assert.equal(normalized.issued_at, null);
+    assert.equal(normalized.prepared_at, null);
+    assert.equal(normalized.last_report_at, null);
+    assert.equal(normalized.last_retry_at, null);
+    assert.equal(normalized.last_rotated_at, null);
+    assert.equal(normalized.next_retry_at, null);
+    assert.equal(normalized.timeout_at, null);
+    assert.equal(normalized.packet_path, '.ring/orchestrator/runner/sessions/s1-test/run-1-test.json');
+  });
+
   it('normalizes blank A2A note strings to null', async () => {
     const bundle = await ring.orchestrator.submitDispatchBundle({
       bundle_protocol: 'ring.goal.v1',

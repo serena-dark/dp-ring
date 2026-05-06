@@ -382,6 +382,13 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
     report_url: trimString(state.report_url),
     token: trimString(state.token),
     signing_secret: trimString(state.signing_secret),
+    issued_at: trimString(state.issued_at),
+    prepared_at: trimString(state.prepared_at),
+    last_report_at: trimString(state.last_report_at),
+    last_retry_at: trimString(state.last_retry_at),
+    last_rotated_at: trimString(state.last_rotated_at),
+    next_retry_at: trimString(state.next_retry_at),
+    timeout_at: trimString(state.timeout_at),
     packet_path: trimString(state.packet_path),
     allowed_worker_ids: Array.isArray(state.allowed_worker_ids)
       ? uniqueStrings(state.allowed_worker_ids)
