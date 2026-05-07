@@ -23,9 +23,9 @@
       "required": ["workflow_template_id", "workflow_template_version", "task_id", "steps", "current_step_index", "callback", "reports", "node_execution"],
       "additionalProperties": false,
       "properties": {
-        "workflow_template_id":      { "type": "string" },
+        "workflow_template_id":      { "type": "string", "pattern": "\\S" },
         "workflow_template_version": { "type": "integer", "minimum": 1 },
-        "task_id":                   { "type": "string" },
+        "task_id":                   { "type": "string", "pattern": "\\S" },
         "current_step_index":        { "type": "integer", "minimum": 0 },
         "callback": {
           "type": "object",

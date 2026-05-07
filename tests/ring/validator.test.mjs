@@ -1527,6 +1527,22 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run top-level linkage identifiers', () => {
+      const cases = [
+        ['workflow_template_id', (doc, value) => { doc.data.workflow_template_id = value; }],
+        ['task_id', (doc, value) => { doc.data.task_id = value; }],
+      ];
+
+      for (const [label, apply] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildWorkflowRunDoc();
+          apply(doc, value);
+          const { valid } = validator.validate('workflow-run', doc);
+          assert.equal(valid, false, `Expected invalid for ${label}=${JSON.stringify(value)}`);
+        }
+      }
+    });
+
     it('rejects blank workflow-run report actor values', () => {
       for (const value of ['', '   ']) {
         const doc = buildWorkflowRunDoc();
