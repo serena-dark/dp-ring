@@ -2137,6 +2137,53 @@ describe('session runner', async () => {
     assert.equal(judgedTask.status, 'completed');
   });
 
+  it('normalizes blank workflow-run step timestamps before preparation fallback persists them', async () => {
+    const workflowResult = await ring.create('workflow', {
+      id: 'wf-runner-blank-step-timestamps',
+      status: 'active',
+      created_by: 'session-runner-test',
+      data: {
+        name: 'Runner Blank Step Timestamps',
+        description: 'Whitespace-only workflow-run step timestamps should normalize before preparation fallback logic persists the prepared run.',
+        applicable_to: ['runner-step-timestamp-normalization'],
+        steps: [
+          { id: 'inspect', name: 'Inspect', description: 'Inspect the scoped change.' },
+          { id: 'execute', name: 'Execute', description: 'Execute the scoped change.' },
+        ],
+      },
+    });
+    assert.equal(workflowResult.ok, true, JSON.stringify(workflowResult.errors));
+    const workflow = workflowResult.artifact;
+
+    const fixture = await createPreparingTaskFixture(
+      ring,
+      tempDir,
+      'Blank workflow-run step timestamps',
+      workflow,
+    );
+    const { sessionId, runId } = await createRedispatchSession(ring, fixture.task, workflow);
+    const runPath = join(tempDir, '.ring', 'workflow-runs', `${runId}.json`);
+    const corruptedRun = await ring.read('workflow-run', runId);
+    corruptedRun.data.steps[0].started_at = '   ';
+    corruptedRun.data.steps[0].ended_at = '\n';
+    corruptedRun.data.steps[1].started_at = '\t';
+    corruptedRun.data.steps[1].ended_at = '  ';
+    await writeFile(runPath, JSON.stringify(corruptedRun, null, 2) + '\n', 'utf-8');
+
+    await ring.sessionRunner.tick();
+
+    const preparedSession = await ring.read('session', sessionId);
+    const preparedRun = await ring.read('workflow-run', runId);
+    assert.equal(preparedSession.status, 'executing');
+    assert.equal(preparedRun.status, 'running');
+    assert.equal(preparedRun.data.steps[0].status, 'completed');
+    assert.equal(preparedRun.data.steps[1].status, 'running');
+    assert.match(preparedRun.data.steps[0].started_at ?? '', /T/);
+    assert.equal(preparedRun.data.steps[0].started_at, preparedRun.data.steps[0].ended_at);
+    assert.match(preparedRun.data.steps[1].started_at ?? '', /T/);
+    assert.equal(preparedRun.data.steps[1].ended_at, null);
+  });
+
   it('normalizes blank workflow-run callback last_worker_id strings to null', () => {
     const normalized = normalizeWorkflowRunCallbackState({
       status: 'active',

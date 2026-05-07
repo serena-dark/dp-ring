@@ -402,6 +402,22 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
   };
 }
 
+function normalizeWorkflowRunStepState(step = {}) {
+  const state = step && typeof step === 'object' && !Array.isArray(step) ? clone(step) : {};
+  return {
+    ...state,
+    started_at: state.started_at == null ? null : trimString(state.started_at),
+    ended_at: state.ended_at == null ? null : trimString(state.ended_at),
+  };
+}
+
+function normalizeWorkflowRunStepsState(steps = []) {
+  if (!Array.isArray(steps)) {
+    return [];
+  }
+  return steps.map((step) => normalizeWorkflowRunStepState(step));
+}
+
 function appendRunReport(run, report) {
   return {
     ...run,
@@ -1061,6 +1077,7 @@ export function createSessionRunner(
           run.data?.callback == null
             ? run.data?.callback ?? null
             : normalizeWorkflowRunCallbackState(run.data.callback),
+        steps: normalizeWorkflowRunStepsState(run.data?.steps ?? []),
       },
     };
     if (nextStatus) {
@@ -1560,7 +1577,7 @@ export function createSessionRunner(
         workflow,
         bundle,
       );
-      const steps = clone(run.data.steps ?? []);
+      const steps = normalizeWorkflowRunStepsState(run.data.steps ?? []);
       nextRun.data.callback.packet_path = executionPacket.packet_path;
       const nodeBinding = await bindWorkflowRunNodeExecution(
         session,
@@ -1973,7 +1990,7 @@ export function createSessionRunner(
       }
 
       const stepIndex = Math.min(run.data.current_step_index ?? 0, (run.data.steps ?? []).length - 1);
-      const steps = clone(run.data.steps ?? []);
+      const steps = normalizeWorkflowRunStepsState(run.data.steps ?? []);
       const hasLineage = hasSemanticTimeoutLineage(run);
       const canBlindRetry = callback.retry_count < callback.max_retries && !hasLineage;
       const detail = canBlindRetry
@@ -2265,7 +2282,7 @@ export function createSessionRunner(
       );
     }
     const worker = verifyWorkerIdentity(run, normalized, await orchestrator.getWorkers());
-    const steps = clone(run.data.steps ?? []);
+    const steps = normalizeWorkflowRunStepsState(run.data.steps ?? []);
     if (steps.length === 0) {
       throw new WorkflowRunReportError(`Workflow run ${runId} has no steps.`, 409);
     }
