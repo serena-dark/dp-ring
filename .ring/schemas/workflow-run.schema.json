@@ -243,7 +243,7 @@
             "required": ["step_id", "status"],
             "additionalProperties": false,
             "properties": {
-              "step_id":    { "type": "string" },
+              "step_id":    { "type": "string", "pattern": "\\S" },
               "status":     { "type": "string", "enum": ["pending", "running", "completed", "failed", "skipped"] },
               "started_at": { "type": ["string", "null"], "format": "date-time" },
               "ended_at":   { "type": ["string", "null"], "format": "date-time" },

@@ -2184,6 +2184,20 @@ describe('session runner', async () => {
     assert.equal(preparedRun.data.steps[1].ended_at, null);
   });
 
+  it('normalizes blank workflow-run step ids to null', () => {
+    const normalized = normalizeWorkflowRunStepState({
+      step_id: '   ',
+      status: 'pending',
+      started_at: null,
+      ended_at: null,
+      outputs: {},
+      notes: null,
+    });
+
+    assert.equal(normalized.step_id, null);
+    assert.equal(normalized.status, 'pending');
+  });
+
   it('normalizes blank workflow-run callback last_worker_id strings to null', () => {
     const normalized = normalizeWorkflowRunCallbackState({
       status: 'active',
