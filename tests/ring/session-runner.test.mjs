@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { createRing } from '../../ring/index.mjs';
 import { createCheckpoint } from '../../ring/lib/checkpoint-tree.mjs';
 import { createEmptyCapsuleState } from '../../ring/lib/node-capsule.mjs';
-import { normalizeWorkflowRunCallbackState } from '../../ring/lib/session-runner.mjs';
+import { normalizeWorkflowRunCallbackState, normalizeWorkflowRunStepState } from '../../ring/lib/session-runner.mjs';
 import { signedWorkflowRunHeaders } from '../../ring/lib/workflow-run-callback.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -2309,6 +2309,20 @@ describe('session runner', async () => {
     assert.equal(normalized.next_retry_at, null);
     assert.equal(normalized.timeout_at, null);
     assert.equal(normalized.packet_path, '.ring/orchestrator/runner/sessions/s1-test/run-1-test.json');
+  });
+
+  it('normalizes blank workflow-run step notes to null', () => {
+    const normalized = normalizeWorkflowRunStepState({
+      step_id: 'execute',
+      status: 'running',
+      started_at: '2026-05-07T00:00:00Z',
+      ended_at: null,
+      outputs: {},
+      notes: '   ',
+    });
+
+    assert.equal(normalized.step_id, 'execute');
+    assert.equal(normalized.notes, null);
   });
 
   it('normalizes blank A2A note strings to null', async () => {

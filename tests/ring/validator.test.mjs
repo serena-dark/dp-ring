@@ -1554,6 +1554,15 @@ describe('validator', async () => {
       }
     });
 
+    it('rejects blank workflow-run step note values', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.data.steps[0].notes = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for steps[0].notes=${JSON.stringify(value)}`);
+      }
+    });
+
     it('rejects blank workflow-run report commit sha values', () => {
       for (const value of ['', '   ']) {
         const doc = buildWorkflowRunDoc();

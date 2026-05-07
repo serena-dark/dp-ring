@@ -402,12 +402,13 @@ export function normalizeWorkflowRunCallbackState(callback = {}, config = DEFAUL
   };
 }
 
-function normalizeWorkflowRunStepState(step = {}) {
+export function normalizeWorkflowRunStepState(step = {}) {
   const state = step && typeof step === 'object' && !Array.isArray(step) ? clone(step) : {};
   return {
     ...state,
     started_at: state.started_at == null ? null : trimString(state.started_at),
     ended_at: state.ended_at == null ? null : trimString(state.ended_at),
+    notes: state.notes == null ? null : trimString(state.notes),
   };
 }
 
