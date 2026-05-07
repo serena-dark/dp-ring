@@ -1434,6 +1434,20 @@ describe('validator', async () => {
       assert.equal(valid, false);
     });
 
+    it('rejects blank workflow-run session linkage while allowing omission', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.session_id = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for workflow-run.session_id=${JSON.stringify(value)}`);
+      }
+
+      const doc = buildWorkflowRunDoc();
+      delete doc.session_id;
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, true);
+    });
+
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
         ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],
