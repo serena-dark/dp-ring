@@ -1448,6 +1448,20 @@ describe('validator', async () => {
       assert.equal(valid, true);
     });
 
+    it('rejects blank workflow-run created_by provenance while preserving valid provenance', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.created_by = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for workflow-run.created_by=${JSON.stringify(value)}`);
+      }
+
+      const doc = buildWorkflowRunDoc();
+      doc.created_by = 'session-runner';
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, true);
+    });
+
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
         ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],
