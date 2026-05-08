@@ -1462,6 +1462,20 @@ describe('validator', async () => {
       assert.equal(valid, true);
     });
 
+    it('rejects blank workflow-run capsule schema_version while preserving valid capsule state', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.data.node_execution.capsule_state.schema_version = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for workflow-run.capsule_state.schema_version=${JSON.stringify(value)}`);
+      }
+
+      const doc = buildWorkflowRunDoc();
+      doc.data.node_execution.capsule_state.schema_version = 'ring.node-capsule.v1';
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, true);
+    });
+
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
         ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],

@@ -156,7 +156,7 @@
                 "journal"
               ],
               "properties": {
-                "schema_version": { "type": "string", "minLength": 1 },
+                "schema_version": { "type": "string", "pattern": "\\S" },
                 "node_id": { "type": ["string", "null"], "pattern": "\\S" },
                 "lease": {
                   "type": "object",
