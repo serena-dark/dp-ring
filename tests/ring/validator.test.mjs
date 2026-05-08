@@ -1476,6 +1476,20 @@ describe('validator', async () => {
       assert.equal(valid, true);
     });
 
+    it('rejects blank workflow-run capsule runtime_status while preserving valid capsule state', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.data.node_execution.capsule_state.runtime_status = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for workflow-run.capsule_state.runtime_status=${JSON.stringify(value)}`);
+      }
+
+      const doc = buildWorkflowRunDoc();
+      doc.data.node_execution.capsule_state.runtime_status = 'leased';
+      const { valid } = validator.validate('workflow-run', doc);
+      assert.equal(valid, true);
+    });
+
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
         ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],
