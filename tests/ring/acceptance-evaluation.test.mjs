@@ -80,6 +80,39 @@ function buildAcceptanceEvaluationDoc() {
   };
 }
 
+function buildSettledAcceptanceEvaluationDoc() {
+  const doc = clone(buildAcceptanceEvaluationDoc());
+  doc.status = 'settled';
+  doc.data.open_response_duties = [];
+  doc.data.moves.push({
+    id: 'amv-2-settle',
+    sequence: 2,
+    occurred_at: '2026-05-08T00:10:00Z',
+    actor: 'reviewer-agent',
+    locution: 'settle',
+    target_refs: [
+      {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+    ],
+    basis_refs: [],
+    antecedent_move_ids: ['amv-1-challenge'],
+    note: 'All public response duties are resolved; settlement records its move basis.',
+  });
+  doc.data.settlement_projection = {
+    outcome: 'accepted',
+    settled_at: '2026-05-08T00:10:00Z',
+    basis_move_ids: ['amv-1-challenge', 'amv-2-settle'],
+    open_response_duties_resolved: true,
+    note: 'Settlement is grounded in append-only move history.',
+  };
+  doc.data.current_commitments[0].state = 'settled';
+  doc.data.current_commitments[0].source_move_id = 'amv-2-settle';
+  return doc;
+}
+
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -93,6 +126,11 @@ describe('acceptance evaluation schema', async () => {
 
   it('accepts the baseline response-duty evaluation envelope', () => {
     const validation = validator.validate('acceptance-evaluation', buildAcceptanceEvaluationDoc());
+    assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
+  it('accepts settled evaluations whose settlement basis references append-only moves', () => {
+    const validation = validator.validate('acceptance-evaluation', buildSettledAcceptanceEvaluationDoc());
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
   });
 
@@ -141,5 +179,14 @@ describe('acceptance evaluation schema', async () => {
     const validation = validator.validate('acceptance-evaluation', doc);
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /open_response_duties|open_response_duties_resolved/);
+  });
+
+  it('rejects settlement basis ids that do not reference append-only moves', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.settlement_projection.basis_move_ids.push('amv-missing');
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /basis_move_ids.*amv-missing/);
   });
 });

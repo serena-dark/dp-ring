@@ -8,6 +8,11 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { validateAcceptanceEvaluationReferences } from './acceptance-evaluation.mjs';
+
+const semanticValidators = new Map([
+  ['acceptance-evaluation', validateAcceptanceEvaluationReferences],
+]);
 
 /**
  * Build a Validator bound to a .ring root directory.
@@ -54,7 +59,16 @@ export async function createValidator(ringDir) {
     }
 
     const valid = check(data);
-    return { valid, errors: valid ? null : [...check.errors] };
+    if (!valid) {
+      return { valid: false, errors: [...check.errors] };
+    }
+
+    const semanticValidator = semanticValidators.get(normalised);
+    if (!semanticValidator) {
+      return { valid: true, errors: null };
+    }
+
+    return semanticValidator(data);
   }
 
   /**
