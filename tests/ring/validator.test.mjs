@@ -259,6 +259,62 @@ function buildWorkflowRunDoc() {
   };
 }
 
+function buildCheckpointDoc() {
+  return {
+    id: 'cp-root',
+    type: 'checkpoint',
+    version: 1,
+    created_at: '2026-04-17T00:00:00Z',
+    updated_at: '2026-04-17T00:00:00Z',
+    created_by: 'test',
+    session_id: null,
+    status: 'candidate',
+    data: {
+      parent_checkpoint_id: null,
+      publication_root_id: 'pr-checkpoint-root',
+      validation_report_id: 'vrpt-checkpoint-root',
+      trace_id: 'trace-checkpoint-root',
+      span_id: 'span-checkpoint-root',
+      parent_span_id: 'span-checkpoint-parent',
+      branch_id: 'main',
+      node_id: 'n1-router',
+      scope_ref: { kind: 'task', id: 't1-test', path: 'docs/tasks/t1-test/t1-test.md' },
+      policy_snapshot: {
+        workflow_tightness: 'balanced',
+        oversight_strength: 'normal',
+        branch_budget: null,
+        notes: null,
+      },
+      execution_cursor: {
+        phase: 'dispatch',
+        step_id: 'dispatch-1',
+        ordinal: 0,
+      },
+      evidence_refs: [
+        { kind: 'summary', ref: 'docs/tasks/reviews/t1.md', digest: null },
+      ],
+      publication_statements: [],
+      adoption_status: 'candidate',
+      replay_state: {
+        status: 'idle',
+        requested_at: null,
+        completed_at: null,
+        requested_by: null,
+        reason: null,
+        source_checkpoint_id: null,
+        target_checkpoint_id: null,
+        cursor: null,
+        journal_state: {
+          mode: 'semantic',
+          last_applied_entry_id: null,
+          pending_entry_ids: [],
+        },
+      },
+      synthesis_inputs: [],
+    },
+  };
+}
+
 function buildEffectiveForceSelectionContext() {
   return {
     basis: 'governance_prefer_effective_force',
@@ -677,54 +733,7 @@ describe('validator', async () => {
     });
 
     it('accepts a valid checkpoint', () => {
-      const doc = {
-        id: 'cp-root', type: 'checkpoint', version: 1,
-        created_at: '2026-04-17T00:00:00Z', updated_at: '2026-04-17T00:00:00Z',
-        created_by: 'test', session_id: null, status: 'candidate',
-        data: {
-          parent_checkpoint_id: null,
-          publication_root_id: 'pr-checkpoint-root',
-          validation_report_id: 'vrpt-checkpoint-root',
-          trace_id: 'trace-checkpoint-root',
-          span_id: 'span-checkpoint-root',
-          parent_span_id: 'span-checkpoint-parent',
-          branch_id: 'main',
-          node_id: 'n1-router',
-          scope_ref: { kind: 'task', id: 't1-test', path: 'docs/tasks/t1-test/t1-test.md' },
-          policy_snapshot: {
-            workflow_tightness: 'balanced',
-            oversight_strength: 'normal',
-            branch_budget: null,
-            notes: null,
-          },
-          execution_cursor: {
-            phase: 'dispatch',
-            step_id: 'dispatch-1',
-            ordinal: 0,
-          },
-          evidence_refs: [
-            { kind: 'summary', ref: 'docs/tasks/reviews/t1.md', digest: null },
-          ],
-          publication_statements: [],
-          adoption_status: 'candidate',
-          replay_state: {
-            status: 'idle',
-            requested_at: null,
-            completed_at: null,
-            requested_by: null,
-            reason: null,
-            source_checkpoint_id: null,
-            target_checkpoint_id: null,
-            cursor: null,
-            journal_state: {
-              mode: 'semantic',
-              last_applied_entry_id: null,
-              pending_entry_ids: [],
-            },
-          },
-          synthesis_inputs: [],
-        },
-      };
+      const doc = buildCheckpointDoc();
       const { valid, errors } = validator.validate('checkpoint', doc);
       assert.equal(valid, true, `Expected valid but got errors: ${JSON.stringify(errors)}`);
     });
@@ -1425,6 +1434,37 @@ describe('validator', async () => {
       };
       const { valid } = validator.validate('evaluation', doc);
       assert.equal(valid, false);
+    });
+
+    it('rejects blank checkpoint replay lineage identifiers while preserving nullable root replay state', () => {
+      const cases = [
+        ['replay_state.requested_by', (doc, value) => { doc.data.replay_state.requested_by = value; }],
+        ['replay_state.reason', (doc, value) => { doc.data.replay_state.reason = value; }],
+        ['replay_state.source_checkpoint_id', (doc, value) => { doc.data.replay_state.source_checkpoint_id = value; }],
+        ['replay_state.target_checkpoint_id', (doc, value) => { doc.data.replay_state.target_checkpoint_id = value; }],
+        ['replay_state.journal_state.mode', (doc, value) => { doc.data.replay_state.journal_state.mode = value; }],
+        ['replay_state.journal_state.last_applied_entry_id', (doc, value) => { doc.data.replay_state.journal_state.last_applied_entry_id = value; }],
+        ['replay_state.journal_state.pending_entry_ids[0]', (doc, value) => { doc.data.replay_state.journal_state.pending_entry_ids = [value]; }],
+      ];
+
+      for (const [field, assign] of cases) {
+        for (const value of ['', '   ']) {
+          const doc = buildCheckpointDoc();
+          assign(doc, value);
+          const { valid } = validator.validate('checkpoint', doc);
+          assert.equal(valid, false, `Expected invalid for checkpoint.${field}=${JSON.stringify(value)}`);
+        }
+      }
+
+      const doc = buildCheckpointDoc();
+      doc.data.replay_state.requested_by = null;
+      doc.data.replay_state.reason = null;
+      doc.data.replay_state.source_checkpoint_id = null;
+      doc.data.replay_state.target_checkpoint_id = null;
+      doc.data.replay_state.journal_state.last_applied_entry_id = null;
+      doc.data.replay_state.journal_state.pending_entry_ids = [];
+      const { valid } = validator.validate('checkpoint', doc);
+      assert.equal(valid, true);
     });
 
     it('rejects a workflow-run without node execution capsule state', () => {
