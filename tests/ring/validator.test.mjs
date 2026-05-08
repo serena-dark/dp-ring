@@ -1490,6 +1490,23 @@ describe('validator', async () => {
       assert.equal(valid, true);
     });
 
+    it('rejects blank workflow-run replay reasons while preserving nullable or meaningful reasons', () => {
+      for (const value of ['', '   ']) {
+        const doc = buildWorkflowRunDoc();
+        doc.data.node_execution.capsule_state.replay.reason = value;
+        const { valid } = validator.validate('workflow-run', doc);
+        assert.equal(valid, false, `Expected invalid for workflow-run.capsule_state.replay.reason=${JSON.stringify(value)}`);
+      }
+
+      const nullable = buildWorkflowRunDoc();
+      nullable.data.node_execution.capsule_state.replay.reason = null;
+      assert.equal(validator.validate('workflow-run', nullable).valid, true);
+
+      const meaningful = buildWorkflowRunDoc();
+      meaningful.data.node_execution.capsule_state.replay.reason = 'semantic replay requested after warm timeout lineage';
+      assert.equal(validator.validate('workflow-run', meaningful).valid, true);
+    });
+
     it('rejects blank workflow-run lineage identifiers across node execution and replay state', () => {
       const cases = [
         ['node_execution.node_id', (doc, value) => { doc.data.node_execution.node_id = value; }],

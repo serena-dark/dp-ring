@@ -204,7 +204,7 @@
                     "requested_at": { "type": ["string", "null"], "format": "date-time" },
                     "completed_at": { "type": ["string", "null"], "format": "date-time" },
                     "requested_by": { "type": ["string", "null"], "pattern": "\\S" },
-                    "reason": { "type": ["string", "null"] },
+                    "reason": { "type": ["string", "null"], "pattern": "\\S" },
                     "source_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                     "target_checkpoint_id": { "type": ["string", "null"], "pattern": "\\S" },
                     "cursor": { "type": ["object", "string", "null"] },

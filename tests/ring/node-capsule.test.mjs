@@ -65,6 +65,34 @@ describe('node capsule', () => {
     assert.equal(requested.journal.at(-1).requested_by, null);
   });
 
+  it('normalizes blank replay reasons to null while preserving meaningful replay rationale', () => {
+    const state = createEmptyCapsuleState({
+      replay: {
+        reason: '   ',
+      },
+    });
+
+    assert.equal(state.replay.reason, null);
+
+    const requested = requestReplay(state, {
+      now: '2026-04-17T14:00:00.000Z',
+      requested_by: 'session-runner',
+      reason: '   ',
+    });
+
+    assert.equal(requested.replay.reason, null);
+    assert.equal(requested.journal.at(-1).reason, null);
+
+    const meaningful = requestReplay(state, {
+      now: '2026-04-17T14:01:00.000Z',
+      requested_by: 'session-runner',
+      reason: 'warm timeout lineage requested semantic replay',
+    });
+
+    assert.equal(meaningful.replay.reason, 'warm timeout lineage requested semantic replay');
+    assert.equal(meaningful.journal.at(-1).reason, 'warm timeout lineage requested semantic replay');
+  });
+
   it('acquires, renews, and expires leases with holder ownership checks', () => {
     const initial = createEmptyCapsuleState({ node_id: 'node-lease' });
     const acquired = acquireLease(initial, 'worker-a', {

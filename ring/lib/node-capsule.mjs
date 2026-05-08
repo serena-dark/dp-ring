@@ -102,11 +102,11 @@ function normalizeReplayState(state = {}) {
     status: 'idle',
     requested_at: null,
     completed_at: null,
-    reason: null,
     source_checkpoint_id: null,
     target_checkpoint_id: null,
     ...base,
     requested_by: normalizeNullableString(base.requested_by),
+    reason: normalizeNullableString(base.reason),
     cursor: clone(base.cursor ?? null),
     journal_state: normalizeJournalState(base.journal_state),
   };
