@@ -65,6 +65,46 @@ describe('node capsule', () => {
     assert.equal(requested.journal.at(-1).requested_by, null);
   });
 
+  it('normalizes blank checkpoint lineage ids to null before persistence', () => {
+    const state = createEmptyCapsuleState({
+      node_id: 'node-replay-lineage',
+      current_checkpoint_id: '   ',
+      replay: {
+        source_checkpoint_id: '   ',
+        target_checkpoint_id: '',
+      },
+    });
+
+    assert.equal(state.current_checkpoint_id, null);
+    assert.equal(state.replay.source_checkpoint_id, null);
+    assert.equal(state.replay.target_checkpoint_id, null);
+
+    const requested = requestReplay(createEmptyCapsuleState({
+      node_id: 'node-replay-lineage',
+      current_checkpoint_id: 'cp-current',
+    }), {
+      now: '2026-04-17T14:00:00.000Z',
+      requested_by: 'session-runner',
+      reason: 'resume semantic replay',
+      source_checkpoint_id: '   ',
+      target_checkpoint_id: '',
+    });
+
+    assert.equal(requested.replay.source_checkpoint_id, null);
+    assert.equal(requested.replay.target_checkpoint_id, null);
+    assert.equal(requested.journal.at(-1).source_checkpoint_id, null);
+    assert.equal(requested.journal.at(-1).target_checkpoint_id, null);
+
+    const completed = completeReplay(requested, {
+      now: '2026-04-17T14:01:00.000Z',
+      checkpoint_id: '   ',
+    });
+
+    assert.equal(completed.current_checkpoint_id, null);
+    assert.equal(completed.replay.target_checkpoint_id, null);
+    assert.equal(completed.journal.at(-1).checkpoint_id, null);
+  });
+
   it('normalizes blank replay reasons to null while preserving meaningful replay rationale', () => {
     const state = createEmptyCapsuleState({
       replay: {

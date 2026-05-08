@@ -107,11 +107,11 @@ function normalizeReplayState(state = {}) {
     status: 'idle',
     requested_at: null,
     completed_at: null,
-    source_checkpoint_id: null,
-    target_checkpoint_id: null,
     ...base,
     requested_by: normalizeNullableString(base.requested_by),
     reason: normalizeNullableString(base.reason),
+    source_checkpoint_id: normalizeNullableString(base.source_checkpoint_id),
+    target_checkpoint_id: normalizeNullableString(base.target_checkpoint_id),
     cursor: clone(base.cursor ?? null),
     journal_state: normalizeJournalState(base.journal_state),
   };
@@ -164,7 +164,7 @@ export function createEmptyCapsuleState({
       detail: null,
     },
     runtime_status,
-    current_checkpoint_id,
+    current_checkpoint_id: normalizeNullableString(current_checkpoint_id),
     last_checkpoint_at: null,
     last_evidence_at: null,
     last_accepted_evidence_refs: normalizeEvidenceRefs(last_accepted_evidence_refs),
@@ -410,7 +410,9 @@ export function completeReplay(state, options = {}) {
   }
 
   const timestamp = toIsoTimestamp(options.now ?? new Date());
-  const checkpointId = options.checkpoint_id ?? state.replay.target_checkpoint_id ?? state.current_checkpoint_id;
+  const checkpointId = normalizeNullableString(
+    options.checkpoint_id ?? state.replay.target_checkpoint_id ?? state.current_checkpoint_id,
+  );
   const nextReplay = normalizeReplayState({
     ...state.replay,
     status: 'completed',
