@@ -86,13 +86,18 @@ function normalizeNullableString(value) {
 
 function normalizeJournalState(state = {}) {
   const base = clone(state ?? {});
+  const mode = normalizeNullableString(base.mode);
+  const lastAppliedEntryId = normalizeNullableString(base.last_applied_entry_id);
+  const pendingEntryIds = Array.isArray(base.pending_entry_ids)
+    ? base.pending_entry_ids
+      .map((entryId) => normalizeNullableString(entryId))
+      .filter((entryId) => typeof entryId === 'string')
+    : [];
+
   return {
-    mode: 'semantic',
-    last_applied_entry_id: null,
-    ...base,
-    pending_entry_ids: Array.isArray(base.pending_entry_ids)
-      ? [...base.pending_entry_ids]
-      : [],
+    mode: typeof mode === 'string' ? mode : 'semantic',
+    last_applied_entry_id: typeof lastAppliedEntryId === 'string' ? lastAppliedEntryId : null,
+    pending_entry_ids: pendingEntryIds,
   };
 }
 

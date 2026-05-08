@@ -213,7 +213,7 @@
                       "additionalProperties": false,
                       "required": ["mode", "last_applied_entry_id", "pending_entry_ids"],
                       "properties": {
-                        "mode": { "type": "string", "minLength": 1 },
+                        "mode": { "type": "string", "pattern": "\\S" },
                         "last_applied_entry_id": { "type": ["string", "null"], "pattern": "\\S" },
                         "pending_entry_ids": { "type": "array", "items": { "type": "string", "pattern": "\\S" } }
                       }

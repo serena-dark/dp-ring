@@ -93,6 +93,41 @@ describe('node capsule', () => {
     assert.equal(meaningful.journal.at(-1).reason, 'warm timeout lineage requested semantic replay');
   });
 
+  it('normalizes blank replay journal state fields before persistence', () => {
+    const state = createEmptyCapsuleState({
+      replay: {
+        journal_state: {
+          mode: '   ',
+          last_applied_entry_id: '   ',
+          pending_entry_ids: ['journal-1', '   ', 'journal-2'],
+        },
+      },
+    });
+
+    assert.deepEqual(state.replay.journal_state, {
+      mode: 'semantic',
+      last_applied_entry_id: null,
+      pending_entry_ids: ['journal-1', 'journal-2'],
+    });
+
+    const requested = requestReplay(state, {
+      now: '2026-04-17T14:00:00.000Z',
+      requested_by: 'session-runner',
+      reason: 'resume semantic replay',
+      journal_state: {
+        mode: ' semantic-replay ',
+        last_applied_entry_id: ' journal-3 ',
+        pending_entry_ids: [' journal-4 ', '   '],
+      },
+    });
+
+    assert.deepEqual(requested.replay.journal_state, {
+      mode: 'semantic-replay',
+      last_applied_entry_id: 'journal-3',
+      pending_entry_ids: ['journal-4'],
+    });
+  });
+
   it('acquires, renews, and expires leases with holder ownership checks', () => {
     const initial = createEmptyCapsuleState({ node_id: 'node-lease' });
     const acquired = acquireLease(initial, 'worker-a', {

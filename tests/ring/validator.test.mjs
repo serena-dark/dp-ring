@@ -1520,6 +1520,7 @@ describe('validator', async () => {
         ['replay.requested_by', (doc, value) => { doc.data.node_execution.capsule_state.replay.requested_by = value; }],
         ['replay.source_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.source_checkpoint_id = value; }],
         ['replay.target_checkpoint_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.target_checkpoint_id = value; }],
+        ['replay.journal_state.mode', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.mode = value; }],
         ['replay.journal_state.last_applied_entry_id', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.last_applied_entry_id = value; }],
         ['replay.journal_state.pending_entry_ids[0]', (doc, value) => { doc.data.node_execution.capsule_state.replay.journal_state.pending_entry_ids[0] = value; }],
       ];
