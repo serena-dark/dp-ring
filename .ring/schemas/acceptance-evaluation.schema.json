@@ -1,0 +1,260 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "acceptance-evaluation.schema.json",
+  "title": "Acceptance Evaluation",
+  "description": "A publication-local acceptance protocol journal with append-only public moves, current commitments, open response duties, and terminal settlement projection under a baseline response-duty profile selector.",
+  "type": "object",
+  "required": ["id", "type", "version", "created_at", "updated_at", "created_by", "status", "data"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "pattern": "^aeval-" },
+    "type": { "const": "acceptance-evaluation" },
+    "version": { "type": "integer", "minimum": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "created_by": { "$ref": "#/definitions/non_blank_string" },
+    "session_id": { "type": ["string", "null"], "pattern": "\\S" },
+    "status": {
+      "type": "string",
+      "enum": ["open", "settled", "withdrawn", "superseded"]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publication_root_id",
+        "acceptance_profile_id",
+        "profile_snapshot",
+        "moves",
+        "current_commitments",
+        "open_response_duties",
+        "settlement_projection"
+      ],
+      "properties": {
+        "publication_root_id": { "type": "string", "pattern": "^pr-" },
+        "acceptance_profile_id": { "$ref": "#/definitions/non_blank_string" },
+        "profile_snapshot": { "$ref": "#/definitions/profile_snapshot" },
+        "moves": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/move_entry" }
+        },
+        "current_commitments": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/commitment_state" }
+        },
+        "open_response_duties": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/response_duty" }
+        },
+        "settlement_projection": {
+          "oneOf": [
+            { "$ref": "#/definitions/settlement_projection" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": { "const": "settled" }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["settlement_projection"],
+            "properties": {
+              "settlement_projection": { "$ref": "#/definitions/settlement_projection" }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "non_blank_string": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "json_pointer": {
+      "type": "string",
+      "pattern": "^(?:/(?:[^~/]|~0|~1)*)*$",
+      "description": "Singular JSON Pointer location. Selector/query languages are intentionally out of scope."
+    },
+    "rule_pointer": {
+      "type": "string",
+      "pattern": "^(?:#)?(?:/(?:[^~/]|~0|~1)*)*$",
+      "description": "Singular JSON Pointer or fragment-pointer location for a cited rule or protocol basis."
+    },
+    "profile_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_family", "closure_policy", "phase_model", "semantics_family"],
+      "properties": {
+        "protocol_family": { "type": "string", "enum": ["response_duty_v1"] },
+        "closure_policy": { "type": "string", "enum": ["all_response_duties_resolved"] },
+        "phase_model": { "type": ["string", "null"], "enum": ["single_phase", null] },
+        "semantics_family": {
+          "type": ["string", "null"],
+          "enum": [null],
+          "description": "Reserved for a later acceptance-semantics selector. Baseline v1 keeps semantics fixed/deferred."
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "public_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "id", "location"],
+      "properties": {
+        "artifact_type": {
+          "type": "string",
+          "enum": [
+            "publication-root",
+            "claim",
+            "assumption",
+            "contrary",
+            "support_relation",
+            "attack_relation",
+            "validation-result",
+            "validation-report",
+            "governance-statement"
+          ]
+        },
+        "id": { "$ref": "#/definitions/non_blank_string" },
+        "location": {
+          "oneOf": [
+            { "$ref": "#/definitions/json_pointer" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "rule_basis_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "rule_location"],
+      "properties": {
+        "rule_id": { "$ref": "#/definitions/non_blank_string" },
+        "rule_location": { "$ref": "#/definitions/rule_pointer" },
+        "source_ref": {
+          "oneOf": [
+            { "$ref": "#/definitions/public_ref" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "move_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sequence",
+        "occurred_at",
+        "actor",
+        "locution",
+        "target_refs",
+        "basis_refs",
+        "antecedent_move_ids"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^amv-" },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "actor": { "$ref": "#/definitions/non_blank_string" },
+        "locution": {
+          "type": "string",
+          "enum": [
+            "challenge",
+            "ask_grounds",
+            "justify",
+            "defend",
+            "counter",
+            "undercut",
+            "accept",
+            "refuse",
+            "withdraw",
+            "settle"
+          ]
+        },
+        "target_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/public_ref" }
+        },
+        "basis_refs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/rule_basis_ref" }
+        },
+        "antecedent_move_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^amv-" },
+          "uniqueItems": true
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "commitment_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "holder", "target_ref", "state", "source_move_id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^acmt-" },
+        "holder": { "$ref": "#/definitions/non_blank_string" },
+        "target_ref": { "$ref": "#/definitions/public_ref" },
+        "state": {
+          "type": "string",
+          "enum": ["proposed", "challenged", "defended", "accepted", "refused", "withdrawn", "settled"]
+        },
+        "source_move_id": { "type": "string", "pattern": "^amv-" }
+      }
+    },
+    "response_duty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "opened_by_move_id", "assigned_to", "duty_kind", "target_ref", "status"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^aduty-" },
+        "opened_by_move_id": { "type": "string", "pattern": "^amv-" },
+        "assigned_to": { "$ref": "#/definitions/non_blank_string" },
+        "duty_kind": {
+          "type": "string",
+          "enum": [
+            "justify_or_withdraw",
+            "defend_or_withdraw",
+            "accept_refuse_or_continue",
+            "settle_or_continue"
+          ]
+        },
+        "target_ref": { "$ref": "#/definitions/public_ref" },
+        "status": { "type": "string", "enum": ["open", "satisfied", "withdrawn", "expired"] },
+        "satisfied_by_move_id": { "type": ["string", "null"], "pattern": "^amv-" }
+      }
+    },
+    "settlement_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "settled_at", "basis_move_ids", "open_response_duties_resolved"],
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": ["accepted", "rejected", "contested", "withdrawn", "undecided"]
+        },
+        "settled_at": { "type": "string", "format": "date-time" },
+        "basis_move_ids": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^amv-" },
+          "uniqueItems": true
+        },
+        "open_response_duties_resolved": { "type": "boolean" },
+        "note": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
