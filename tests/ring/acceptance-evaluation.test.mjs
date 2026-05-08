@@ -189,4 +189,34 @@ describe('acceptance evaluation schema', async () => {
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /basis_move_ids.*amv-missing/);
   });
+
+  it('rejects commitment source move ids that do not reference append-only moves', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.current_commitments[0].source_move_id = 'amv-missing-commitment-source';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /source_move_id.*amv-missing-commitment-source/);
+  });
+
+  it('rejects response duty move ids that do not reference append-only moves', () => {
+    const doc = buildAcceptanceEvaluationDoc();
+    doc.data.open_response_duties[0].opened_by_move_id = 'amv-missing-duty-open';
+    doc.data.open_response_duties[0].status = 'satisfied';
+    doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-missing-duty-satisfied';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /opened_by_move_id.*amv-missing-duty-open/);
+    assert.match(JSON.stringify(validation.errors), /satisfied_by_move_id.*amv-missing-duty-satisfied/);
+  });
+
+  it('rejects antecedent move ids that do not reference append-only moves', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.moves[1].antecedent_move_ids.push('amv-missing-antecedent');
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /antecedent_move_ids.*amv-missing-antecedent/);
+  });
 });
