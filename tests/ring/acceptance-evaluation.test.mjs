@@ -126,4 +126,20 @@ describe('acceptance evaluation schema', async () => {
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /settlement_projection/);
   });
+
+  it('rejects settled evaluations that still expose unresolved response duties', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.status = 'settled';
+    doc.data.settlement_projection = {
+      outcome: 'accepted',
+      settled_at: '2026-05-08T00:10:00Z',
+      basis_move_ids: ['amv-1-challenge'],
+      open_response_duties_resolved: false,
+      note: 'This cannot settle while a response duty is still open.',
+    };
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /open_response_duties|open_response_duties_resolved/);
+  });
 });

@@ -67,9 +67,24 @@
         "properties": {
           "data": {
             "type": "object",
-            "required": ["settlement_projection"],
+            "required": ["settlement_projection", "open_response_duties"],
             "properties": {
-              "settlement_projection": { "$ref": "#/definitions/settlement_projection" }
+              "open_response_duties": {
+                "type": "array",
+                "maxItems": 0,
+                "description": "Settled acceptance evaluations cannot keep current open response-duty slots. Historical duties remain represented by append-only moves and settlement basis ids."
+              },
+              "settlement_projection": {
+                "allOf": [
+                  { "$ref": "#/definitions/settlement_projection" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "open_response_duties_resolved": { "const": true }
+                    }
+                  }
+                ]
+              }
             }
           }
         }
