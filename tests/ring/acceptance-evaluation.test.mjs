@@ -219,4 +219,33 @@ describe('acceptance evaluation schema', async () => {
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /antecedent_move_ids.*amv-missing-antecedent/);
   });
+
+  it('rejects duplicate move ids in the append-only acceptance history', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.moves[1].id = 'amv-1-challenge';
+    doc.data.current_commitments[0].source_move_id = 'amv-1-challenge';
+    doc.data.settlement_projection.basis_move_ids = ['amv-1-challenge'];
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /duplicate move id.*amv-1-challenge/);
+  });
+
+  it('rejects non-increasing move sequences in append-only order', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.moves[1].sequence = 1;
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /move sequence.*amv-2-settle/);
+  });
+
+  it('rejects antecedent references to later moves in the append-only history', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.moves[0].antecedent_move_ids = ['amv-2-settle'];
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /antecedent_move_ids.*amv-2-settle.*earlier/);
+  });
 });
