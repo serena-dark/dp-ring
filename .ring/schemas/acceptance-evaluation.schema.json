@@ -285,6 +285,11 @@
           "type": ["string", "null"],
           "enum": ["open", "satisfied", "withdrawn", "expired", null]
         },
+        "after_settlement_outcome": {
+          "type": ["string", "null"],
+          "enum": ["accepted", "rejected", "contested", "withdrawn", "undecided", null],
+          "description": "The settlement outcome projected by a settlement_projected scorekeeping transition."
+        },
         "note": { "type": ["string", "null"] }
       }
     },

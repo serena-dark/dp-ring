@@ -224,6 +224,7 @@ function buildSettledAcceptanceEvaluationDoc() {
         location: '/member_descriptors/0',
       },
       rule_id: 'response_duty_v1.settle.projects_closure',
+      after_settlement_outcome: 'accepted',
       note: 'Settlement projection is explicit scorekeeping derived from public moves.',
     },
   );
@@ -304,6 +305,45 @@ describe('acceptance evaluation schema', async () => {
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /commitment.*commitment_id/);
     assert.match(JSON.stringify(validation.errors), /response duty.*after_response_duty_status/);
+  });
+
+  it('requires settlement scorekeeping transitions to carry the projected outcome', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    const transition = doc.data.scorekeeping_transitions.find(
+      (item) => item.effect_kind === 'settlement_projected',
+    );
+    delete transition.after_settlement_outcome;
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(
+      JSON.stringify(validation.errors),
+      /settlement_projected.*after_settlement_outcome/,
+    );
+  });
+
+  it('rejects settlement projections that are not backed by matching scorekeeping transitions', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.scorekeeping_transitions = doc.data.scorekeeping_transitions.filter(
+      (item) => item.effect_kind !== 'settlement_projected',
+    );
+
+    const missingValidation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(missingValidation.valid, false);
+    assert.match(JSON.stringify(missingValidation.errors), /settlement projection.*backed/);
+
+    const mismatched = buildSettledAcceptanceEvaluationDoc();
+    const transition = mismatched.data.scorekeeping_transitions.find(
+      (item) => item.effect_kind === 'settlement_projected',
+    );
+    transition.after_settlement_outcome = 'rejected';
+
+    const mismatchValidation = validator.validate('acceptance-evaluation', mismatched);
+    assert.equal(mismatchValidation.valid, false);
+    assert.match(
+      JSON.stringify(mismatchValidation.errors),
+      /settlement projection outcome.*latest scorekeeping transition/,
+    );
   });
 
   it('rejects current commitments that are not backed by the latest scorekeeping transition', () => {

@@ -175,6 +175,8 @@ const responseDutyTransitionEffectKinds = new Set([
   'response_duty_expired',
 ]);
 
+const settlementTransitionEffectKinds = new Set(['settlement_projected']);
+
 function describeLocutions(locutions) {
   return [...locutions].join(' or ');
 }
@@ -380,6 +382,19 @@ function validateScorekeepingTransitionStateSlots(errors, transition, transition
       );
     }
   }
+
+  if (settlementTransitionEffectKinds.has(effectKind)) {
+    const afterOutcome = normalizedString(transition?.after_settlement_outcome);
+    if (!afterOutcome) {
+      errors.push(
+        semanticError(
+          `/data/scorekeeping_transitions/${transitionIndex}/after_settlement_outcome`,
+          `${effectKind} scorekeeping transitions require an after_settlement_outcome`,
+          { effect_kind: effectKind },
+        ),
+      );
+    }
+  }
 }
 
 function latestCommitmentTransition(commitment, scorekeepingTransitions, moveTimeline) {
@@ -565,6 +580,90 @@ function validateCurrentResponseDutyTransitionProjection(
   }
 }
 
+function latestSettlementProjectionTransition(settlement, scorekeepingTransitions, moveTimeline) {
+  const outcome = normalizedString(settlement?.outcome);
+  const basisMoveIds = new Set(
+    Array.isArray(settlement?.basis_move_ids)
+      ? settlement.basis_move_ids.map((value) => normalizedString(value)).filter(Boolean)
+      : [],
+  );
+  if (!outcome || basisMoveIds.size === 0) {
+    return null;
+  }
+
+  let latest = null;
+  scorekeepingTransitions.forEach((transition, transitionIndex) => {
+    const effectKind = normalizedString(transition?.effect_kind);
+    if (!settlementTransitionEffectKinds.has(effectKind)) {
+      return;
+    }
+
+    const moveId = normalizedString(transition?.move_id);
+    if (!moveId || !basisMoveIds.has(moveId) || !moveTimeline.indexById.has(moveId)) {
+      return;
+    }
+
+    const moveIndex = moveTimeline.indexById.get(moveId);
+    if (
+      latest == null ||
+      moveIndex > latest.moveIndex ||
+      (moveIndex === latest.moveIndex && transitionIndex > latest.transitionIndex)
+    ) {
+      latest = {
+        moveId,
+        moveIndex,
+        transitionIndex,
+        afterOutcome: normalizedString(transition?.after_settlement_outcome),
+      };
+    }
+  });
+
+  return latest;
+}
+
+function validateSettlementProjectionTransitionProjection(
+  errors,
+  settlement,
+  scorekeepingTransitions,
+  moveTimeline,
+) {
+  if (settlement == null || typeof settlement !== 'object' || Array.isArray(settlement)) {
+    return;
+  }
+
+  const outcome = normalizedString(settlement?.outcome);
+  if (!outcome) {
+    return;
+  }
+
+  const latest = latestSettlementProjectionTransition(settlement, scorekeepingTransitions, moveTimeline);
+  if (!latest) {
+    errors.push(
+      semanticError(
+        '/data/settlement_projection',
+        'settlement projection must be backed by a settlement scorekeeping transition whose move_id appears in basis_move_ids',
+        { outcome },
+      ),
+    );
+    return;
+  }
+
+  if (latest.afterOutcome !== outcome) {
+    errors.push(
+      semanticError(
+        '/data/settlement_projection/outcome',
+        'settlement projection outcome must match the latest scorekeeping transition for its settlement basis',
+        {
+          outcome,
+          latest_transition_index: latest.transitionIndex,
+          latest_transition_move_id: latest.moveId,
+          latest_transition_outcome: latest.afterOutcome,
+        },
+      ),
+    );
+  }
+}
+
 export function validateAcceptanceEvaluationReferences(doc) {
   const errors = [];
   const moveTimeline = moveTimelineState(doc);
@@ -652,6 +751,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
       'settlement basis_move_ids',
       collectMissingMoveIds(settlement.basis_move_ids, knownMoveIds),
     );
+    validateSettlementProjectionTransitionProjection(errors, settlement, scorekeepingTransitions, moveTimeline);
   }
 
   return { valid: errors.length === 0, errors: errors.length > 0 ? errors : null };
