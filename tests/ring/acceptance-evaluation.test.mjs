@@ -316,6 +316,16 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /current commitment.*latest scorekeeping transition/);
   });
 
+  it('rejects current response duties that are not backed by the latest scorekeeping transition', () => {
+    const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
+    doc.data.open_response_duties[0].status = 'open';
+    doc.data.open_response_duties[0].satisfied_by_move_id = null;
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /current response duty.*latest scorekeeping transition/);
+  });
+
   it('rejects open response duties that already carry a satisfaction move', () => {
     const doc = clone(buildAcceptanceEvaluationDoc());
     doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-1-challenge';

@@ -468,6 +468,103 @@ function validateCurrentCommitmentTransitionProjection(
   }
 }
 
+function latestResponseDutyTransition(duty, scorekeepingTransitions, moveTimeline) {
+  const dutyId = normalizedString(duty?.id);
+  const dutyTargetKey = publicRefKey(duty?.target_ref);
+  if (!dutyId || !dutyTargetKey) {
+    return null;
+  }
+
+  let latest = null;
+  scorekeepingTransitions.forEach((transition, transitionIndex) => {
+    const effectKind = normalizedString(transition?.effect_kind);
+    if (!responseDutyTransitionEffectKinds.has(effectKind)) {
+      return;
+    }
+    if (normalizedString(transition?.response_duty_id) !== dutyId) {
+      return;
+    }
+    if (publicRefKey(transition?.target_ref) !== dutyTargetKey) {
+      return;
+    }
+
+    const moveId = normalizedString(transition?.move_id);
+    if (!moveId || !moveTimeline.indexById.has(moveId)) {
+      return;
+    }
+    const moveIndex = moveTimeline.indexById.get(moveId);
+    if (
+      latest == null ||
+      moveIndex > latest.moveIndex ||
+      (moveIndex === latest.moveIndex && transitionIndex > latest.transitionIndex)
+    ) {
+      latest = {
+        moveId,
+        moveIndex,
+        transitionIndex,
+        afterStatus: normalizedString(transition?.after_response_duty_status),
+      };
+    }
+  });
+
+  return latest;
+}
+
+function responseDutyCurrentSourceMoveId(duty, status) {
+  if (status === 'open') {
+    return normalizedString(duty?.opened_by_move_id);
+  }
+  if (status === 'satisfied') {
+    return normalizedString(duty?.satisfied_by_move_id);
+  }
+  return null;
+}
+
+function validateCurrentResponseDutyTransitionProjection(
+  errors,
+  duty,
+  dutyIndex,
+  scorekeepingTransitions,
+  moveTimeline,
+) {
+  const dutyId = normalizedString(duty?.id);
+  const status = normalizedString(duty?.status);
+  if (!dutyId || !status || !publicRefKey(duty?.target_ref)) {
+    return;
+  }
+
+  const latest = latestResponseDutyTransition(duty, scorekeepingTransitions, moveTimeline);
+  if (!latest) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}`,
+        `current response duty ${dutyId} must be backed by a response duty scorekeeping transition`,
+        { response_duty_id: dutyId },
+      ),
+    );
+    return;
+  }
+
+  const sourceMoveId = responseDutyCurrentSourceMoveId(duty, status);
+  const sourceMatches = sourceMoveId == null || latest.moveId === sourceMoveId;
+  if (latest.afterStatus !== status || !sourceMatches) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}`,
+        `current response duty ${dutyId} must match the latest scorekeeping transition for its duty and target`,
+        {
+          response_duty_id: dutyId,
+          status,
+          source_move_id: sourceMoveId,
+          latest_transition_index: latest.transitionIndex,
+          latest_transition_move_id: latest.moveId,
+          latest_transition_status: latest.afterStatus,
+        },
+      ),
+    );
+  }
+}
+
 export function validateAcceptanceEvaluationReferences(doc) {
   const errors = [];
   const moveTimeline = moveTimelineState(doc);
@@ -527,6 +624,13 @@ export function validateAcceptanceEvaluationReferences(doc) {
     validateResponseDutyProtocolLocutions(errors, duty, dutyIndex, moveTimeline);
     validateResponseDutyTargetRefs(errors, duty, dutyIndex, moveTimeline);
     validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline);
+    validateCurrentResponseDutyTransitionProjection(
+      errors,
+      duty,
+      dutyIndex,
+      scorekeepingTransitions,
+      moveTimeline,
+    );
     pushMissingMoveReferenceError(
       errors,
       `/data/open_response_duties/${dutyIndex}/opened_by_move_id`,
