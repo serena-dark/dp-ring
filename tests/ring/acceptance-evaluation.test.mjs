@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { createValidator } from '../../ring/lib/validator.mjs';
 
 const ringDir = resolve(import.meta.dirname, '../../.ring');
+const baselineRuleBundleDigest = 'sha256:fe492cf1ca84978daaa66775ebe91b0b18d21b014976f869ef952313cd4e8ab8';
 
 function buildAcceptanceEvaluationDoc() {
   return {
@@ -19,6 +20,9 @@ function buildAcceptanceEvaluationDoc() {
       publication_root_id: 'pr-acceptance-cycle',
       acceptance_profile_id: 'acceptance-profile/baseline-response-duty-v1',
       profile_snapshot: {
+        profile_version: '1.0.0',
+        rule_bundle_id: 'acceptance-rule-bundle/response-duty-v1',
+        rule_bundle_digest: baselineRuleBundleDigest,
         protocol_family: 'response_duty_v1',
         closure_policy: 'all_response_duties_resolved',
         phase_model: 'single_phase',
@@ -38,6 +42,7 @@ function buildAcceptanceEvaluationDoc() {
               location: '/member_descriptors/0',
             },
           ],
+          applied_rule_ids: ['response_duty_v1.challenge.opens_justify_or_withdraw'],
           basis_refs: [
             {
               rule_id: 'runtime-safety-invariant',
@@ -95,6 +100,7 @@ function buildSatisfiedDutyAcceptanceEvaluationDoc() {
         location: '/member_descriptors/0',
       },
     ],
+    applied_rule_ids: ['response_duty_v1.justify.satisfies_justify_or_withdraw'],
     basis_refs: [
       {
         rule_id: 'runtime-safety-invariant',
@@ -128,6 +134,7 @@ function buildSettledAcceptanceEvaluationDoc() {
         location: '/member_descriptors/0',
       },
     ],
+    applied_rule_ids: ['response_duty_v1.settle.projects_closure'],
     basis_refs: [],
     antecedent_move_ids: ['amv-1-challenge', 'amv-2-justify'],
     note: 'All public response duties are resolved; settlement records its move basis.',
@@ -168,6 +175,25 @@ describe('acceptance evaluation schema', async () => {
   it('accepts response duties satisfied by a later public move', () => {
     const validation = validator.validate('acceptance-evaluation', buildSatisfiedDutyAcceptanceEvaluationDoc());
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
+  it('requires profile snapshots to pin a versioned rule bundle identity', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    delete doc.data.profile_snapshot.profile_version;
+    doc.data.profile_snapshot.rule_bundle_digest = 'sha256:not-a-digest';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /profile_version|rule_bundle_digest/);
+  });
+
+  it('requires each public move to record the profile rule ids it applied', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.moves[0].applied_rule_ids = [];
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /applied_rule_ids/);
   });
 
   it('rejects open response duties that already carry a satisfaction move', () => {

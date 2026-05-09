@@ -109,8 +109,29 @@
     "profile_snapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol_family", "closure_policy", "phase_model", "semantics_family"],
+      "required": [
+        "profile_version",
+        "rule_bundle_id",
+        "rule_bundle_digest",
+        "protocol_family",
+        "closure_policy",
+        "phase_model",
+        "semantics_family"
+      ],
       "properties": {
+        "profile_version": {
+          "$ref": "#/definitions/non_blank_string",
+          "description": "Version of the acceptance profile snapshot used to evaluate this public journal."
+        },
+        "rule_bundle_id": {
+          "$ref": "#/definitions/non_blank_string",
+          "description": "Stable identifier for the public protocol rule bundle that move applied_rule_ids are drawn from."
+        },
+        "rule_bundle_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Digest pinning the public protocol rule bundle so replay does not depend on hidden local validator assumptions."
+        },
         "protocol_family": { "type": "string", "enum": ["response_duty_v1"] },
         "closure_policy": { "type": "string", "enum": ["all_response_duties_resolved"] },
         "phase_model": { "type": ["string", "null"], "enum": ["single_phase", null] },
@@ -175,6 +196,7 @@
         "actor",
         "locution",
         "target_refs",
+        "applied_rule_ids",
         "basis_refs",
         "antecedent_move_ids"
       ],
@@ -202,6 +224,13 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/definitions/public_ref" }
+        },
+        "applied_rule_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Public protocol rule ids from profile_snapshot.rule_bundle_id applied by this move. This is governance-visible scorekeeping, not node-private tactic trace.",
+          "items": { "$ref": "#/definitions/non_blank_string" }
         },
         "basis_refs": {
           "type": "array",
