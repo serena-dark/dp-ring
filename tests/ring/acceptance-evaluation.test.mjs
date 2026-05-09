@@ -53,6 +53,36 @@ function buildAcceptanceEvaluationDoc() {
           note: 'Challenge opens a public support-or-withdraw burden for the claim.',
         },
       ],
+      scorekeeping_transitions: [
+        {
+          id: 'atrn-1-challenge-commitment',
+          move_id: 'amv-1-challenge',
+          effect_kind: 'commitment_updated',
+          target_ref: {
+            artifact_type: 'claim',
+            id: 'claim-runtime-safety',
+            location: '/member_descriptors/0',
+          },
+          rule_id: 'response_duty_v1.challenge.opens_justify_or_withdraw',
+          commitment_id: 'acmt-1-claim',
+          after_commitment_state: 'challenged',
+          note: 'Challenge updates the public commitment state for the claim.',
+        },
+        {
+          id: 'atrn-1-challenge-duty',
+          move_id: 'amv-1-challenge',
+          effect_kind: 'response_duty_opened',
+          target_ref: {
+            artifact_type: 'claim',
+            id: 'claim-runtime-safety',
+            location: '/member_descriptors/0',
+          },
+          rule_id: 'response_duty_v1.challenge.opens_justify_or_withdraw',
+          response_duty_id: 'aduty-1-support-or-withdraw',
+          after_response_duty_status: 'open',
+          note: 'Challenge opens a public justify-or-withdraw response duty.',
+        },
+      ],
       current_commitments: [
         {
           id: 'acmt-1-claim',
@@ -110,6 +140,36 @@ function buildSatisfiedDutyAcceptanceEvaluationDoc() {
     antecedent_move_ids: ['amv-1-challenge'],
     note: 'Executor supplies public grounds that satisfy the support-or-withdraw response duty.',
   });
+  doc.data.scorekeeping_transitions.push(
+    {
+      id: 'atrn-2-justify-commitment',
+      move_id: 'amv-2-justify',
+      effect_kind: 'commitment_updated',
+      target_ref: {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+      rule_id: 'response_duty_v1.justify.satisfies_justify_or_withdraw',
+      commitment_id: 'acmt-1-claim',
+      after_commitment_state: 'defended',
+      note: 'Justification defends the challenged public commitment.',
+    },
+    {
+      id: 'atrn-2-justify-duty',
+      move_id: 'amv-2-justify',
+      effect_kind: 'response_duty_satisfied',
+      target_ref: {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+      rule_id: 'response_duty_v1.justify.satisfies_justify_or_withdraw',
+      response_duty_id: 'aduty-1-support-or-withdraw',
+      after_response_duty_status: 'satisfied',
+      note: 'Justification satisfies the open response duty.',
+    },
+  );
   doc.data.current_commitments[0].state = 'defended';
   doc.data.current_commitments[0].source_move_id = 'amv-2-justify';
   doc.data.open_response_duties[0].status = 'satisfied';
@@ -139,6 +199,34 @@ function buildSettledAcceptanceEvaluationDoc() {
     antecedent_move_ids: ['amv-1-challenge', 'amv-2-justify'],
     note: 'All public response duties are resolved; settlement records its move basis.',
   });
+  doc.data.scorekeeping_transitions.push(
+    {
+      id: 'atrn-3-settle-commitment',
+      move_id: 'amv-3-settle',
+      effect_kind: 'commitment_updated',
+      target_ref: {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+      rule_id: 'response_duty_v1.settle.projects_closure',
+      commitment_id: 'acmt-1-claim',
+      after_commitment_state: 'settled',
+      note: 'Settlement projects the final public commitment state.',
+    },
+    {
+      id: 'atrn-3-settle-projection',
+      move_id: 'amv-3-settle',
+      effect_kind: 'settlement_projected',
+      target_ref: {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+      rule_id: 'response_duty_v1.settle.projects_closure',
+      note: 'Settlement projection is explicit scorekeeping derived from public moves.',
+    },
+  );
   doc.data.settlement_projection = {
     outcome: 'accepted',
     settled_at: '2026-05-08T00:10:00Z',
@@ -194,6 +282,28 @@ describe('acceptance evaluation schema', async () => {
     const validation = validator.validate('acceptance-evaluation', doc);
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /applied_rule_ids/);
+  });
+
+  it('requires scorekeeping transitions to reference append-only moves and applied rule ids', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.scorekeeping_transitions[0].move_id = 'amv-missing-transition';
+    doc.data.scorekeeping_transitions[1].rule_id = 'response_duty_v1.rule_not_applied';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /scorekeeping transition move_id.*amv-missing-transition/);
+    assert.match(JSON.stringify(validation.errors), /rule_id.*applied_rule_ids/);
+  });
+
+  it('requires scorekeeping transitions to carry the state slot they update', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    delete doc.data.scorekeeping_transitions[0].commitment_id;
+    delete doc.data.scorekeeping_transitions[1].after_response_duty_status;
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /commitment.*commitment_id/);
+    assert.match(JSON.stringify(validation.errors), /response duty.*after_response_duty_status/);
   });
 
   it('rejects open response duties that already carry a satisfaction move', () => {

@@ -26,6 +26,7 @@
         "acceptance_profile_id",
         "profile_snapshot",
         "moves",
+        "scorekeeping_transitions",
         "current_commitments",
         "open_response_duties",
         "settlement_projection"
@@ -37,6 +38,11 @@
         "moves": {
           "type": "array",
           "items": { "$ref": "#/definitions/move_entry" }
+        },
+        "scorekeeping_transitions": {
+          "type": "array",
+          "description": "Replay-visible public scorekeeping effects keyed by append-only moves. Current commitments, response duties, and settlement projection should be explainable from these transition records rather than hidden validator assumptions.",
+          "items": { "$ref": "#/definitions/scorekeeping_transition" }
         },
         "current_commitments": {
           "type": "array",
@@ -240,6 +246,44 @@
           "type": "array",
           "items": { "type": "string", "pattern": "^amv-" },
           "uniqueItems": true
+        },
+        "note": { "type": ["string", "null"] }
+      }
+    },
+    "scorekeeping_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "move_id", "effect_kind", "target_ref", "rule_id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^atrn-" },
+        "move_id": { "type": "string", "pattern": "^amv-" },
+        "effect_kind": {
+          "type": "string",
+          "enum": [
+            "commitment_opened",
+            "commitment_updated",
+            "commitment_closed",
+            "response_duty_opened",
+            "response_duty_satisfied",
+            "response_duty_withdrawn",
+            "response_duty_expired",
+            "settlement_projected"
+          ]
+        },
+        "target_ref": { "$ref": "#/definitions/public_ref" },
+        "rule_id": {
+          "$ref": "#/definitions/non_blank_string",
+          "description": "The public profile rule id from the source move's applied_rule_ids that produced this scorekeeping transition."
+        },
+        "commitment_id": { "type": ["string", "null"], "pattern": "^acmt-" },
+        "response_duty_id": { "type": ["string", "null"], "pattern": "^aduty-" },
+        "after_commitment_state": {
+          "type": ["string", "null"],
+          "enum": ["proposed", "challenged", "defended", "accepted", "refused", "withdrawn", "settled", null]
+        },
+        "after_response_duty_status": {
+          "type": ["string", "null"],
+          "enum": ["open", "satisfied", "withdrawn", "expired", null]
         },
         "note": { "type": ["string", "null"] }
       }

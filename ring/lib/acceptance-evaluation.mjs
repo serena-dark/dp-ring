@@ -162,6 +162,19 @@ const responseDutyProtocolRules = new Map([
   ],
 ]);
 
+const commitmentTransitionEffectKinds = new Set([
+  'commitment_opened',
+  'commitment_updated',
+  'commitment_closed',
+]);
+
+const responseDutyTransitionEffectKinds = new Set([
+  'response_duty_opened',
+  'response_duty_satisfied',
+  'response_duty_withdrawn',
+  'response_duty_expired',
+]);
+
 function describeLocutions(locutions) {
   return [...locutions].join(' or ');
 }
@@ -292,12 +305,92 @@ function validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline)
   }
 }
 
+function validateScorekeepingTransitionRuleBinding(errors, transition, transitionIndex, moveTimeline) {
+  const moveId = normalizedString(transition?.move_id);
+  const ruleId = normalizedString(transition?.rule_id);
+  if (!moveId || !ruleId) {
+    return;
+  }
+
+  const move = moveTimeline.moveById.get(moveId);
+  if (!move) {
+    return;
+  }
+
+  const appliedRuleIds = new Set(
+    Array.isArray(move.applied_rule_ids)
+      ? move.applied_rule_ids.map((value) => normalizedString(value)).filter(Boolean)
+      : [],
+  );
+  if (!appliedRuleIds.has(ruleId)) {
+    errors.push(
+      semanticError(
+        `/data/scorekeeping_transitions/${transitionIndex}/rule_id`,
+        `scorekeeping transition rule_id ${ruleId} must be listed in source move ${moveId} applied_rule_ids`,
+        { move_id: moveId, rule_id: ruleId, applied_rule_ids: [...appliedRuleIds] },
+      ),
+    );
+  }
+}
+
+function validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex) {
+  const effectKind = normalizedString(transition?.effect_kind);
+  if (commitmentTransitionEffectKinds.has(effectKind)) {
+    const commitmentId = normalizedString(transition?.commitment_id);
+    const afterState = normalizedString(transition?.after_commitment_state);
+    if (!commitmentId) {
+      errors.push(
+        semanticError(
+          `/data/scorekeeping_transitions/${transitionIndex}/commitment_id`,
+          `${effectKind} commitment scorekeeping transitions require a commitment_id`,
+          { effect_kind: effectKind },
+        ),
+      );
+    }
+    if (!afterState) {
+      errors.push(
+        semanticError(
+          `/data/scorekeeping_transitions/${transitionIndex}/after_commitment_state`,
+          `${effectKind} commitment scorekeeping transitions require an after_commitment_state`,
+          { effect_kind: effectKind },
+        ),
+      );
+    }
+  }
+
+  if (responseDutyTransitionEffectKinds.has(effectKind)) {
+    const dutyId = normalizedString(transition?.response_duty_id);
+    const afterStatus = normalizedString(transition?.after_response_duty_status);
+    if (!dutyId) {
+      errors.push(
+        semanticError(
+          `/data/scorekeeping_transitions/${transitionIndex}/response_duty_id`,
+          `${effectKind} response duty scorekeeping transitions require a response_duty_id`,
+          { effect_kind: effectKind },
+        ),
+      );
+    }
+    if (!afterStatus) {
+      errors.push(
+        semanticError(
+          `/data/scorekeeping_transitions/${transitionIndex}/after_response_duty_status`,
+          `${effectKind} response duty scorekeeping transitions require an after_response_duty_status`,
+          { effect_kind: effectKind },
+        ),
+      );
+    }
+  }
+}
+
 export function validateAcceptanceEvaluationReferences(doc) {
   const errors = [];
   const moveTimeline = moveTimelineState(doc);
   errors.push(...moveTimeline.errors);
   const knownMoveIds = moveTimeline.ids;
   const moves = Array.isArray(doc?.data?.moves) ? doc.data.moves : [];
+  const scorekeepingTransitions = Array.isArray(doc?.data?.scorekeeping_transitions)
+    ? doc.data.scorekeeping_transitions
+    : [];
   const commitments = Array.isArray(doc?.data?.current_commitments) ? doc.data.current_commitments : [];
   const responseDuties = Array.isArray(doc?.data?.open_response_duties) ? doc.data.open_response_duties : [];
   const settlement = doc?.data?.settlement_projection;
@@ -315,6 +408,17 @@ export function validateAcceptanceEvaluationReferences(doc) {
       antecedentPath,
       collectForwardMoveIds(move?.antecedent_move_ids, moveTimeline.indexById, moveIndex),
     );
+  });
+
+  scorekeepingTransitions.forEach((transition, transitionIndex) => {
+    pushMissingMoveReferenceError(
+      errors,
+      `/data/scorekeeping_transitions/${transitionIndex}/move_id`,
+      'scorekeeping transition move_id',
+      collectMissingMoveIds(transition?.move_id, knownMoveIds),
+    );
+    validateScorekeepingTransitionRuleBinding(errors, transition, transitionIndex, moveTimeline);
+    validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex);
   });
 
   commitments.forEach((commitment, commitmentIndex) => {
