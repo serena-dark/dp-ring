@@ -215,6 +215,24 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /justify_or_withdraw.*satisfied.*(?:justify|withdraw)/);
   });
 
+  it('rejects response duties whose target is not carried by their opening move', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.open_response_duties[0].target_ref.id = 'claim-unrelated-target';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /response duty target_ref.*opened_by_move_id/);
+  });
+
+  it('rejects response duties satisfied by a move that does not carry the duty target', () => {
+    const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
+    doc.data.moves[1].target_refs[0].id = 'claim-unrelated-satisfaction';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /satisfied_by_move_id.*target_ref/);
+  });
+
   it('rejects selector-style move targets and rule bases', () => {
     const doc = clone(buildAcceptanceEvaluationDoc());
     doc.data.moves[0].target_refs[0].location = '$.member_descriptors[0]';

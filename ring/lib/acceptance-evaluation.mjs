@@ -111,6 +111,33 @@ function collectForwardMoveIds(values, indexById, currentMoveIndex) {
   return forward;
 }
 
+function publicRefKey(ref) {
+  const artifactType = normalizedString(ref?.artifact_type);
+  const id = normalizedString(ref?.id);
+  let location;
+  if (ref?.location === null) {
+    location = null;
+  } else if (typeof ref?.location === 'string') {
+    location = ref.location.trim();
+  } else {
+    location = undefined;
+  }
+
+  if (!artifactType || !id || location === undefined) {
+    return null;
+  }
+
+  return JSON.stringify([artifactType, id, location]);
+}
+
+function moveCarriesPublicRef(move, ref) {
+  const targetKey = publicRefKey(ref);
+  if (!targetKey || !Array.isArray(move?.target_refs)) {
+    return false;
+  }
+  return move.target_refs.some((targetRef) => publicRefKey(targetRef) === targetKey);
+}
+
 function pushForwardAntecedentReferenceError(errors, instancePath, forward) {
   if (forward.length === 0) {
     return;
@@ -178,6 +205,37 @@ function validateResponseDutyProtocolLocutions(errors, duty, dutyIndex, moveTime
           satisfied_locution: satisfiedLocution,
           allowed_satisfaction_locutions: [...rule.satisfactionLocutions],
         },
+      ),
+    );
+  }
+}
+
+function validateResponseDutyTargetRefs(errors, duty, dutyIndex, moveTimeline) {
+  const dutyTargetKey = publicRefKey(duty?.target_ref);
+  if (!dutyTargetKey) {
+    return;
+  }
+
+  const openedByMoveId = normalizedString(duty?.opened_by_move_id);
+  const openedMove = openedByMoveId ? moveTimeline.moveById.get(openedByMoveId) : null;
+  if (openedMove && !moveCarriesPublicRef(openedMove, duty.target_ref)) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}/target_ref`,
+        `response duty target_ref must match a target_ref carried by opened_by_move_id ${openedByMoveId}`,
+        { opened_by_move_id: openedByMoveId, target_ref_key: dutyTargetKey },
+      ),
+    );
+  }
+
+  const satisfiedByMoveId = normalizedString(duty?.satisfied_by_move_id);
+  const satisfiedMove = satisfiedByMoveId ? moveTimeline.moveById.get(satisfiedByMoveId) : null;
+  if (satisfiedMove && !moveCarriesPublicRef(satisfiedMove, duty.target_ref)) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}/satisfied_by_move_id`,
+        `satisfied_by_move_id ${satisfiedByMoveId} must carry the response duty target_ref`,
+        { satisfied_by_move_id: satisfiedByMoveId, target_ref_key: dutyTargetKey },
       ),
     );
   }
@@ -270,6 +328,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
 
   responseDuties.forEach((duty, dutyIndex) => {
     validateResponseDutyProtocolLocutions(errors, duty, dutyIndex, moveTimeline);
+    validateResponseDutyTargetRefs(errors, duty, dutyIndex, moveTimeline);
     validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline);
     pushMissingMoveReferenceError(
       errors,
