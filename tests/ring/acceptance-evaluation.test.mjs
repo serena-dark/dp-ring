@@ -80,13 +80,44 @@ function buildAcceptanceEvaluationDoc() {
   };
 }
 
-function buildSettledAcceptanceEvaluationDoc() {
+function buildSatisfiedDutyAcceptanceEvaluationDoc() {
   const doc = clone(buildAcceptanceEvaluationDoc());
+  doc.data.moves.push({
+    id: 'amv-2-justify',
+    sequence: 2,
+    occurred_at: '2026-05-08T00:05:00Z',
+    actor: 'executor-agent',
+    locution: 'justify',
+    target_refs: [
+      {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+    ],
+    basis_refs: [
+      {
+        rule_id: 'runtime-safety-invariant',
+        rule_location: '#/properties/data/properties/node_execution',
+      },
+    ],
+    antecedent_move_ids: ['amv-1-challenge'],
+    note: 'Executor supplies public grounds that satisfy the support-or-withdraw response duty.',
+  });
+  doc.data.current_commitments[0].state = 'defended';
+  doc.data.current_commitments[0].source_move_id = 'amv-2-justify';
+  doc.data.open_response_duties[0].status = 'satisfied';
+  doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-2-justify';
+  return doc;
+}
+
+function buildSettledAcceptanceEvaluationDoc() {
+  const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
   doc.status = 'settled';
   doc.data.open_response_duties = [];
   doc.data.moves.push({
-    id: 'amv-2-settle',
-    sequence: 2,
+    id: 'amv-3-settle',
+    sequence: 3,
     occurred_at: '2026-05-08T00:10:00Z',
     actor: 'reviewer-agent',
     locution: 'settle',
@@ -98,18 +129,18 @@ function buildSettledAcceptanceEvaluationDoc() {
       },
     ],
     basis_refs: [],
-    antecedent_move_ids: ['amv-1-challenge'],
+    antecedent_move_ids: ['amv-1-challenge', 'amv-2-justify'],
     note: 'All public response duties are resolved; settlement records its move basis.',
   });
   doc.data.settlement_projection = {
     outcome: 'accepted',
     settled_at: '2026-05-08T00:10:00Z',
-    basis_move_ids: ['amv-1-challenge', 'amv-2-settle'],
+    basis_move_ids: ['amv-1-challenge', 'amv-2-justify', 'amv-3-settle'],
     open_response_duties_resolved: true,
     note: 'Settlement is grounded in append-only move history.',
   };
   doc.data.current_commitments[0].state = 'settled';
-  doc.data.current_commitments[0].source_move_id = 'amv-2-settle';
+  doc.data.current_commitments[0].source_move_id = 'amv-3-settle';
   return doc;
 }
 
@@ -132,6 +163,38 @@ describe('acceptance evaluation schema', async () => {
   it('accepts settled evaluations whose settlement basis references append-only moves', () => {
     const validation = validator.validate('acceptance-evaluation', buildSettledAcceptanceEvaluationDoc());
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
+  it('accepts response duties satisfied by a later public move', () => {
+    const validation = validator.validate('acceptance-evaluation', buildSatisfiedDutyAcceptanceEvaluationDoc());
+    assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
+  it('rejects open response duties that already carry a satisfaction move', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-1-challenge';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /open response duties.*satisfied_by_move_id/);
+  });
+
+  it('rejects satisfied response duties without a satisfaction move', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.open_response_duties[0].status = 'satisfied';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /satisfied response duties.*satisfied_by_move_id/);
+  });
+
+  it('rejects response duty satisfaction that does not follow the opening move', () => {
+    const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
+    doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-1-challenge';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /satisfied_by_move_id.*after opened_by_move_id/);
   });
 
   it('rejects selector-style move targets and rule bases', () => {
@@ -233,19 +296,19 @@ describe('acceptance evaluation schema', async () => {
 
   it('rejects non-increasing move sequences in append-only order', () => {
     const doc = buildSettledAcceptanceEvaluationDoc();
-    doc.data.moves[1].sequence = 1;
+    doc.data.moves[2].sequence = 2;
 
     const validation = validator.validate('acceptance-evaluation', doc);
     assert.equal(validation.valid, false);
-    assert.match(JSON.stringify(validation.errors), /move sequence.*amv-2-settle/);
+    assert.match(JSON.stringify(validation.errors), /move sequence.*amv-3-settle/);
   });
 
   it('rejects antecedent references to later moves in the append-only history', () => {
     const doc = buildSettledAcceptanceEvaluationDoc();
-    doc.data.moves[0].antecedent_move_ids = ['amv-2-settle'];
+    doc.data.moves[0].antecedent_move_ids = ['amv-3-settle'];
 
     const validation = validator.validate('acceptance-evaluation', doc);
     assert.equal(validation.valid, false);
-    assert.match(JSON.stringify(validation.errors), /antecedent_move_ids.*amv-2-settle.*earlier/);
+    assert.match(JSON.stringify(validation.errors), /antecedent_move_ids.*amv-3-settle.*earlier/);
   });
 });

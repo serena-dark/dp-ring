@@ -123,6 +123,57 @@ function pushForwardAntecedentReferenceError(errors, instancePath, forward) {
   );
 }
 
+function validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline) {
+  const status = normalizedString(duty?.status);
+  const openedByMoveId = normalizedString(duty?.opened_by_move_id);
+  const satisfiedByMoveId = normalizedString(duty?.satisfied_by_move_id);
+  const satisfiedPath = `/data/open_response_duties/${dutyIndex}/satisfied_by_move_id`;
+
+  if (status === 'open' && satisfiedByMoveId) {
+    errors.push(
+      semanticError(
+        satisfiedPath,
+        'open response duties cannot carry a satisfied_by_move_id before the duty is resolved',
+        { duty_status: status, satisfied_by_move_id: satisfiedByMoveId },
+      ),
+    );
+  }
+
+  if (status === 'satisfied' && !satisfiedByMoveId) {
+    errors.push(
+      semanticError(
+        satisfiedPath,
+        'satisfied response duties require a non-empty satisfied_by_move_id',
+        { duty_status: status },
+      ),
+    );
+  }
+
+  if (
+    openedByMoveId &&
+    satisfiedByMoveId &&
+    moveTimeline.indexById.has(openedByMoveId) &&
+    moveTimeline.indexById.has(satisfiedByMoveId)
+  ) {
+    const openedIndex = moveTimeline.indexById.get(openedByMoveId);
+    const satisfiedIndex = moveTimeline.indexById.get(satisfiedByMoveId);
+    if (satisfiedIndex <= openedIndex) {
+      errors.push(
+        semanticError(
+          satisfiedPath,
+          `satisfied_by_move_id ${satisfiedByMoveId} must reference a move after opened_by_move_id ${openedByMoveId}`,
+          {
+            opened_by_move_id: openedByMoveId,
+            opened_move_index: openedIndex,
+            satisfied_by_move_id: satisfiedByMoveId,
+            satisfied_move_index: satisfiedIndex,
+          },
+        ),
+      );
+    }
+  }
+}
+
 export function validateAcceptanceEvaluationReferences(doc) {
   const errors = [];
   const moveTimeline = moveTimelineState(doc);
@@ -158,6 +209,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
   });
 
   responseDuties.forEach((duty, dutyIndex) => {
+    validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline);
     pushMissingMoveReferenceError(
       errors,
       `/data/open_response_duties/${dutyIndex}/opened_by_move_id`,
