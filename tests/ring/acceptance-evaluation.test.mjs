@@ -197,6 +197,24 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /satisfied_by_move_id.*after opened_by_move_id/);
   });
 
+  it('rejects justify_or_withdraw duties opened by non-challenge locutions', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.moves[0].locution = 'settle';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /justify_or_withdraw.*opened.*(?:challenge|ask_grounds)/);
+  });
+
+  it('rejects justify_or_withdraw duties satisfied by non-justification locutions', () => {
+    const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
+    doc.data.moves[1].locution = 'accept';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /justify_or_withdraw.*satisfied.*(?:justify|withdraw)/);
+  });
+
   it('rejects selector-style move targets and rule bases', () => {
     const doc = clone(buildAcceptanceEvaluationDoc());
     doc.data.moves[0].target_refs[0].location = '$.member_descriptors[0]';

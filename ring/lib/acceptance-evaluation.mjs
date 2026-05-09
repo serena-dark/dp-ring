@@ -20,6 +20,7 @@ function moveTimelineState(doc) {
   const moves = Array.isArray(doc?.data?.moves) ? doc.data.moves : [];
   const ids = new Set();
   const indexById = new Map();
+  const moveById = new Map();
   const errors = [];
   let previousSequence = null;
 
@@ -37,6 +38,7 @@ function moveTimelineState(doc) {
       } else {
         ids.add(id);
         indexById.set(id, index);
+        moveById.set(id, move);
       }
     }
 
@@ -60,7 +62,7 @@ function moveTimelineState(doc) {
     }
   });
 
-  return { ids, indexById, errors };
+  return { ids, indexById, moveById, errors };
 }
 
 function collectMissingMoveIds(values, knownMoveIds) {
@@ -121,6 +123,64 @@ function pushForwardAntecedentReferenceError(errors, instancePath, forward) {
       { forward_move_ids: forward },
     ),
   );
+}
+
+const responseDutyProtocolRules = new Map([
+  [
+    'justify_or_withdraw',
+    {
+      openingLocutions: new Set(['challenge', 'ask_grounds']),
+      satisfactionLocutions: new Set(['justify', 'withdraw']),
+    },
+  ],
+]);
+
+function describeLocutions(locutions) {
+  return [...locutions].join(' or ');
+}
+
+function validateResponseDutyProtocolLocutions(errors, duty, dutyIndex, moveTimeline) {
+  const dutyKind = normalizedString(duty?.duty_kind);
+  const rule = responseDutyProtocolRules.get(dutyKind);
+  if (!rule) {
+    return;
+  }
+
+  const openedByMoveId = normalizedString(duty?.opened_by_move_id);
+  const openedMove = openedByMoveId ? moveTimeline.moveById.get(openedByMoveId) : null;
+  const openedLocution = normalizedString(openedMove?.locution);
+  if (openedLocution && !rule.openingLocutions.has(openedLocution)) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}/opened_by_move_id`,
+        `${dutyKind} response duties must be opened by ${describeLocutions(rule.openingLocutions)} locutions, not ${openedLocution}`,
+        {
+          duty_kind: dutyKind,
+          opened_by_move_id: openedByMoveId,
+          opened_locution: openedLocution,
+          allowed_opening_locutions: [...rule.openingLocutions],
+        },
+      ),
+    );
+  }
+
+  const satisfiedByMoveId = normalizedString(duty?.satisfied_by_move_id);
+  const satisfiedMove = satisfiedByMoveId ? moveTimeline.moveById.get(satisfiedByMoveId) : null;
+  const satisfiedLocution = normalizedString(satisfiedMove?.locution);
+  if (satisfiedLocution && !rule.satisfactionLocutions.has(satisfiedLocution)) {
+    errors.push(
+      semanticError(
+        `/data/open_response_duties/${dutyIndex}/satisfied_by_move_id`,
+        `${dutyKind} response duties must be satisfied by ${describeLocutions(rule.satisfactionLocutions)} locutions, not ${satisfiedLocution}`,
+        {
+          duty_kind: dutyKind,
+          satisfied_by_move_id: satisfiedByMoveId,
+          satisfied_locution: satisfiedLocution,
+          allowed_satisfaction_locutions: [...rule.satisfactionLocutions],
+        },
+      ),
+    );
+  }
 }
 
 function validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline) {
@@ -209,6 +269,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
   });
 
   responseDuties.forEach((duty, dutyIndex) => {
+    validateResponseDutyProtocolLocutions(errors, duty, dutyIndex, moveTimeline);
     validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline);
     pushMissingMoveReferenceError(
       errors,
