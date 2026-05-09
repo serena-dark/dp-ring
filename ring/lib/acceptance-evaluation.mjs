@@ -382,6 +382,92 @@ function validateScorekeepingTransitionStateSlots(errors, transition, transition
   }
 }
 
+function latestCommitmentTransition(commitment, scorekeepingTransitions, moveTimeline) {
+  const commitmentId = normalizedString(commitment?.id);
+  const commitmentTargetKey = publicRefKey(commitment?.target_ref);
+  if (!commitmentId || !commitmentTargetKey) {
+    return null;
+  }
+
+  let latest = null;
+  scorekeepingTransitions.forEach((transition, transitionIndex) => {
+    const effectKind = normalizedString(transition?.effect_kind);
+    if (!commitmentTransitionEffectKinds.has(effectKind)) {
+      return;
+    }
+    if (normalizedString(transition?.commitment_id) !== commitmentId) {
+      return;
+    }
+    if (publicRefKey(transition?.target_ref) !== commitmentTargetKey) {
+      return;
+    }
+
+    const moveId = normalizedString(transition?.move_id);
+    if (!moveId || !moveTimeline.indexById.has(moveId)) {
+      return;
+    }
+    const moveIndex = moveTimeline.indexById.get(moveId);
+    if (
+      latest == null ||
+      moveIndex > latest.moveIndex ||
+      (moveIndex === latest.moveIndex && transitionIndex > latest.transitionIndex)
+    ) {
+      latest = {
+        moveId,
+        moveIndex,
+        transitionIndex,
+        afterState: normalizedString(transition?.after_commitment_state),
+      };
+    }
+  });
+
+  return latest;
+}
+
+function validateCurrentCommitmentTransitionProjection(
+  errors,
+  commitment,
+  commitmentIndex,
+  scorekeepingTransitions,
+  moveTimeline,
+) {
+  const commitmentId = normalizedString(commitment?.id);
+  const state = normalizedString(commitment?.state);
+  const sourceMoveId = normalizedString(commitment?.source_move_id);
+  if (!commitmentId || !state || !sourceMoveId || !publicRefKey(commitment?.target_ref)) {
+    return;
+  }
+
+  const latest = latestCommitmentTransition(commitment, scorekeepingTransitions, moveTimeline);
+  if (!latest) {
+    errors.push(
+      semanticError(
+        `/data/current_commitments/${commitmentIndex}`,
+        `current commitment ${commitmentId} must be backed by a commitment scorekeeping transition`,
+        { commitment_id: commitmentId },
+      ),
+    );
+    return;
+  }
+
+  if (latest.afterState !== state || latest.moveId !== sourceMoveId) {
+    errors.push(
+      semanticError(
+        `/data/current_commitments/${commitmentIndex}`,
+        `current commitment ${commitmentId} must match the latest scorekeeping transition for its commitment and target`,
+        {
+          commitment_id: commitmentId,
+          state,
+          source_move_id: sourceMoveId,
+          latest_transition_index: latest.transitionIndex,
+          latest_transition_move_id: latest.moveId,
+          latest_transition_state: latest.afterState,
+        },
+      ),
+    );
+  }
+}
+
 export function validateAcceptanceEvaluationReferences(doc) {
   const errors = [];
   const moveTimeline = moveTimelineState(doc);
@@ -427,6 +513,13 @@ export function validateAcceptanceEvaluationReferences(doc) {
       `/data/current_commitments/${commitmentIndex}/source_move_id`,
       'source_move_id',
       collectMissingMoveIds(commitment?.source_move_id, knownMoveIds),
+    );
+    validateCurrentCommitmentTransitionProjection(
+      errors,
+      commitment,
+      commitmentIndex,
+      scorekeepingTransitions,
+      moveTimeline,
     );
   });
 
