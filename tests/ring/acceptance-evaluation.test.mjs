@@ -296,6 +296,16 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /rule_id.*applied_rule_ids/);
   });
 
+  it('requires scorekeeping transition targets to be carried by the source move', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.scorekeeping_transitions[0].target_ref.id = 'claim-unrelated-transition-target';
+    doc.data.current_commitments[0].target_ref.id = 'claim-unrelated-transition-target';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /scorekeeping transition target_ref.*source move/);
+  });
+
   it('requires scorekeeping transitions to carry the state slot they update', () => {
     const doc = clone(buildAcceptanceEvaluationDoc());
     delete doc.data.scorekeeping_transitions[0].commitment_id;

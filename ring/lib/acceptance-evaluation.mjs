@@ -335,6 +335,29 @@ function validateScorekeepingTransitionRuleBinding(errors, transition, transitio
   }
 }
 
+function validateScorekeepingTransitionTargetRef(errors, transition, transitionIndex, moveTimeline) {
+  const moveId = normalizedString(transition?.move_id);
+  const targetRefKey = publicRefKey(transition?.target_ref);
+  if (!moveId || !targetRefKey) {
+    return;
+  }
+
+  const move = moveTimeline.moveById.get(moveId);
+  if (!move) {
+    return;
+  }
+
+  if (!moveCarriesPublicRef(move, transition.target_ref)) {
+    errors.push(
+      semanticError(
+        `/data/scorekeeping_transitions/${transitionIndex}/target_ref`,
+        `scorekeeping transition target_ref must be carried by source move ${moveId}`,
+        { move_id: moveId, target_ref_key: targetRefKey },
+      ),
+    );
+  }
+}
+
 function validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex) {
   const effectKind = normalizedString(transition?.effect_kind);
   if (commitmentTransitionEffectKinds.has(effectKind)) {
@@ -700,6 +723,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
       collectMissingMoveIds(transition?.move_id, knownMoveIds),
     );
     validateScorekeepingTransitionRuleBinding(errors, transition, transitionIndex, moveTimeline);
+    validateScorekeepingTransitionTargetRef(errors, transition, transitionIndex, moveTimeline);
     validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex);
   });
 
