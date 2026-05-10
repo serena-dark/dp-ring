@@ -301,6 +301,16 @@ function validateResponseDutySatisfaction(errors, duty, dutyIndex, moveTimeline)
     );
   }
 
+  if (status === 'withdrawn' && !satisfiedByMoveId) {
+    errors.push(
+      semanticError(
+        satisfiedPath,
+        'withdrawn response duties require a non-empty satisfied_by_move_id',
+        { duty_status: status },
+      ),
+    );
+  }
+
   if (
     openedByMoveId &&
     satisfiedByMoveId &&
@@ -628,7 +638,7 @@ function responseDutyCurrentSourceMoveId(duty, status) {
   if (status === 'open') {
     return normalizedString(duty?.opened_by_move_id);
   }
-  if (status === 'satisfied') {
+  if (status === 'satisfied' || status === 'withdrawn') {
     return normalizedString(duty?.satisfied_by_move_id);
   }
   return null;

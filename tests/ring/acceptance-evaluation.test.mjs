@@ -480,6 +480,44 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /current response duty.*latest scorekeeping transition/);
   });
 
+  it('rejects withdrawn response duties that omit or stale their resolution move', () => {
+    const missingResolution = buildWithdrawnDutyAcceptanceEvaluationDoc();
+    delete missingResolution.data.open_response_duties[0].satisfied_by_move_id;
+
+    const missingValidation = validator.validate('acceptance-evaluation', missingResolution);
+    assert.equal(missingValidation.valid, false);
+    assert.match(JSON.stringify(missingValidation.errors), /withdrawn response duties.*satisfied_by_move_id/);
+
+    const staleResolution = buildWithdrawnDutyAcceptanceEvaluationDoc();
+    const targetRef = clone(staleResolution.data.open_response_duties[0].target_ref);
+    staleResolution.data.moves.push({
+      id: 'amv-3-withdraw-latest',
+      sequence: 3,
+      occurred_at: '2026-05-08T00:06:00Z',
+      actor: 'executor-agent',
+      locution: 'withdraw',
+      target_refs: [targetRef],
+      applied_rule_ids: ['response_duty_v1.withdraw.satisfies_justify_or_withdraw'],
+      basis_refs: [],
+      antecedent_move_ids: ['amv-2-withdraw'],
+      note: 'Executor reaffirms withdrawal under the public response-duty protocol.',
+    });
+    staleResolution.data.scorekeeping_transitions.push({
+      id: 'atrn-3-withdraw-duty',
+      move_id: 'amv-3-withdraw-latest',
+      effect_kind: 'response_duty_withdrawn',
+      target_ref: targetRef,
+      rule_id: 'response_duty_v1.withdraw.satisfies_justify_or_withdraw',
+      response_duty_id: 'aduty-1-support-or-withdraw',
+      after_response_duty_status: 'withdrawn',
+      note: 'Latest withdrawal transition supersedes the previous resolution source.',
+    });
+
+    const staleValidation = validator.validate('acceptance-evaluation', staleResolution);
+    assert.equal(staleValidation.valid, false);
+    assert.match(JSON.stringify(staleValidation.errors), /current response duty.*latest scorekeeping transition/);
+  });
+
   it('rejects open response duties that already carry a satisfaction move', () => {
     const doc = clone(buildAcceptanceEvaluationDoc());
     doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-1-challenge';
