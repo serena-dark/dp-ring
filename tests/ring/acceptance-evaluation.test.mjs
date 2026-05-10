@@ -177,6 +177,45 @@ function buildSatisfiedDutyAcceptanceEvaluationDoc() {
   return doc;
 }
 
+function buildWithdrawnDutyAcceptanceEvaluationDoc() {
+  const doc = clone(buildAcceptanceEvaluationDoc());
+  doc.data.moves.push({
+    id: 'amv-2-withdraw',
+    sequence: 2,
+    occurred_at: '2026-05-08T00:05:00Z',
+    actor: 'executor-agent',
+    locution: 'withdraw',
+    target_refs: [
+      {
+        artifact_type: 'claim',
+        id: 'claim-runtime-safety',
+        location: '/member_descriptors/0',
+      },
+    ],
+    applied_rule_ids: ['response_duty_v1.withdraw.satisfies_justify_or_withdraw'],
+    basis_refs: [],
+    antecedent_move_ids: ['amv-1-challenge'],
+    note: 'Executor withdraws the challenged public claim instead of justifying it.',
+  });
+  doc.data.scorekeeping_transitions.push({
+    id: 'atrn-2-withdraw-duty',
+    move_id: 'amv-2-withdraw',
+    effect_kind: 'response_duty_withdrawn',
+    target_ref: {
+      artifact_type: 'claim',
+      id: 'claim-runtime-safety',
+      location: '/member_descriptors/0',
+    },
+    rule_id: 'response_duty_v1.withdraw.satisfies_justify_or_withdraw',
+    response_duty_id: 'aduty-1-support-or-withdraw',
+    after_response_duty_status: 'withdrawn',
+    note: 'Withdraw explicitly closes the public response duty without supplying support.',
+  });
+  doc.data.open_response_duties[0].status = 'withdrawn';
+  doc.data.open_response_duties[0].satisfied_by_move_id = 'amv-2-withdraw';
+  return doc;
+}
+
 function buildSettledAcceptanceEvaluationDoc() {
   const doc = buildSatisfiedDutyAcceptanceEvaluationDoc();
   doc.status = 'settled';
@@ -263,6 +302,11 @@ describe('acceptance evaluation schema', async () => {
 
   it('accepts response duties satisfied by a later public move', () => {
     const validation = validator.validate('acceptance-evaluation', buildSatisfiedDutyAcceptanceEvaluationDoc());
+    assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
+  it('accepts response duties withdrawn by a later public move', () => {
+    const validation = validator.validate('acceptance-evaluation', buildWithdrawnDutyAcceptanceEvaluationDoc());
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
   });
 
@@ -405,6 +449,15 @@ describe('acceptance evaluation schema', async () => {
     const validation = validator.validate('acceptance-evaluation', doc);
     assert.equal(validation.valid, false);
     assert.match(JSON.stringify(validation.errors), /response_duty_opened.*open.*challenge or ask_grounds/);
+  });
+
+  it('rejects response duty withdrawn scorekeeping transitions whose source locution cannot withdraw duties', () => {
+    const doc = buildWithdrawnDutyAcceptanceEvaluationDoc();
+    doc.data.moves[1].locution = 'justify';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /response_duty_withdrawn.*withdraw/);
   });
 
   it('rejects current commitments that are not backed by the latest scorekeeping transition', () => {

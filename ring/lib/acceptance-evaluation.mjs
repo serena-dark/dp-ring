@@ -193,6 +193,7 @@ const commitmentStateSourceLocutionRules = new Map([
 const responseDutyStatusSourceLocutionRules = new Map([
   ['open', new Set(['challenge', 'ask_grounds'])],
   ['satisfied', new Set(['justify', 'withdraw'])],
+  ['withdrawn', new Set(['withdraw'])],
 ]);
 
 function describeLocutions(locutions) {
