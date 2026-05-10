@@ -190,6 +190,10 @@ const commitmentStateSourceLocutionRules = new Map([
   ['settled', new Set(['settle'])],
 ]);
 
+const responseDutyStatusSourceLocutionRules = new Map([
+  ['satisfied', new Set(['justify', 'withdraw'])],
+]);
+
 function describeLocutions(locutions) {
   return [...locutions].join(' or ');
 }
@@ -377,13 +381,21 @@ function scorekeepingTransitionSourceLocutionRule(transition) {
     const afterState = normalizedString(transition?.after_commitment_state);
     const allowedLocutions = commitmentStateSourceLocutionRules.get(afterState);
     if (allowedLocutions) {
-      return { allowedLocutions, projectedState: afterState };
+      return { allowedLocutions, projectedState: afterState, projectedSlot: 'commitments' };
+    }
+  }
+
+  if (responseDutyTransitionEffectKinds.has(effectKind)) {
+    const afterStatus = normalizedString(transition?.after_response_duty_status);
+    const allowedLocutions = responseDutyStatusSourceLocutionRules.get(afterStatus);
+    if (allowedLocutions) {
+      return { allowedLocutions, projectedState: afterStatus, projectedSlot: 'response duties' };
     }
   }
 
   const allowedLocutions = scorekeepingTransitionSourceLocutionRules.get(effectKind);
   if (allowedLocutions) {
-    return { allowedLocutions, projectedState: null };
+    return { allowedLocutions, projectedState: null, projectedSlot: null };
   }
 
   return null;
@@ -403,7 +415,9 @@ function validateScorekeepingTransitionSourceLocution(errors, transition, transi
     return;
   }
 
-  const projectedState = rule.projectedState ? ` projecting ${rule.projectedState} commitments` : '';
+  const projectedState = rule.projectedState
+    ? ` projecting ${rule.projectedState} ${rule.projectedSlot ?? 'state'}`
+    : '';
   errors.push(
     semanticError(
       `/data/scorekeeping_transitions/${transitionIndex}/move_id`,

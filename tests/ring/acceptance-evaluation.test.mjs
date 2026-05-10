@@ -379,6 +379,22 @@ describe('acceptance evaluation schema', async () => {
     assert.match(JSON.stringify(validation.errors), /commitment_updated.*challenged.*challenge/);
   });
 
+  it('rejects response duty scorekeeping transitions whose source locution cannot project the status', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    const transition = doc.data.scorekeeping_transitions.find(
+      (item) => item.id === 'atrn-2-justify-duty',
+    );
+    transition.move_id = 'amv-1-challenge';
+    transition.rule_id = 'response_duty_v1.challenge.opens_justify_or_withdraw';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(
+      JSON.stringify(validation.errors),
+      /response_duty_satisfied.*satisfied.*justify or withdraw/,
+    );
+  });
+
   it('rejects current commitments that are not backed by the latest scorekeeping transition', () => {
     const doc = buildSettledAcceptanceEvaluationDoc();
     doc.data.current_commitments[0].state = 'accepted';
