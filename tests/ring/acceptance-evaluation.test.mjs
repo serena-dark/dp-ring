@@ -356,6 +356,15 @@ describe('acceptance evaluation schema', async () => {
     );
   });
 
+  it('rejects settlement scorekeeping transitions whose source move is not a settlement locution', () => {
+    const doc = buildSettledAcceptanceEvaluationDoc();
+    doc.data.moves[2].locution = 'justify';
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /settlement_projected.*settle locution/);
+  });
+
   it('rejects current commitments that are not backed by the latest scorekeeping transition', () => {
     const doc = buildSettledAcceptanceEvaluationDoc();
     doc.data.current_commitments[0].state = 'accepted';

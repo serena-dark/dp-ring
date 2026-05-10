@@ -177,6 +177,10 @@ const responseDutyTransitionEffectKinds = new Set([
 
 const settlementTransitionEffectKinds = new Set(['settlement_projected']);
 
+const scorekeepingTransitionSourceLocutionRules = new Map([
+  ['settlement_projected', new Set(['settle'])],
+]);
+
 function describeLocutions(locutions) {
   return [...locutions].join(' or ');
 }
@@ -356,6 +360,29 @@ function validateScorekeepingTransitionTargetRef(errors, transition, transitionI
       ),
     );
   }
+}
+
+function validateScorekeepingTransitionSourceLocution(errors, transition, transitionIndex, moveTimeline) {
+  const effectKind = normalizedString(transition?.effect_kind);
+  const allowedLocutions = scorekeepingTransitionSourceLocutionRules.get(effectKind);
+  if (!allowedLocutions) {
+    return;
+  }
+
+  const moveId = normalizedString(transition?.move_id);
+  const move = moveId ? moveTimeline.moveById.get(moveId) : null;
+  const locution = normalizedString(move?.locution);
+  if (!locution || allowedLocutions.has(locution)) {
+    return;
+  }
+
+  errors.push(
+    semanticError(
+      `/data/scorekeeping_transitions/${transitionIndex}/move_id`,
+      `${effectKind} scorekeeping transitions require a ${describeLocutions(allowedLocutions)} locution source move, not ${locution}`,
+      { move_id: moveId, locution, allowed_locutions: [...allowedLocutions] },
+    ),
+  );
 }
 
 function validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex) {
@@ -724,6 +751,7 @@ export function validateAcceptanceEvaluationReferences(doc) {
     );
     validateScorekeepingTransitionRuleBinding(errors, transition, transitionIndex, moveTimeline);
     validateScorekeepingTransitionTargetRef(errors, transition, transitionIndex, moveTimeline);
+    validateScorekeepingTransitionSourceLocution(errors, transition, transitionIndex, moveTimeline);
     validateScorekeepingTransitionStateSlots(errors, transition, transitionIndex);
   });
 
