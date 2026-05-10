@@ -395,6 +395,18 @@ describe('acceptance evaluation schema', async () => {
     );
   });
 
+  it('rejects response duty opening scorekeeping transitions whose source locution cannot open duties', () => {
+    const doc = clone(buildAcceptanceEvaluationDoc());
+    doc.data.moves[0].locution = 'justify';
+    doc.data.scorekeeping_transitions[0].after_commitment_state = 'defended';
+    doc.data.current_commitments[0].state = 'defended';
+    doc.data.open_response_duties = [];
+
+    const validation = validator.validate('acceptance-evaluation', doc);
+    assert.equal(validation.valid, false);
+    assert.match(JSON.stringify(validation.errors), /response_duty_opened.*open.*challenge or ask_grounds/);
+  });
+
   it('rejects current commitments that are not backed by the latest scorekeeping transition', () => {
     const doc = buildSettledAcceptanceEvaluationDoc();
     doc.data.current_commitments[0].state = 'accepted';
